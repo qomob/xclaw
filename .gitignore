@@ -62,3 +62,6 @@ PRODUCTION_TEST_REPORT.md
 
 # IDE 工具
 .specstory/
+
+# 大文件（部署时单独下载）
+*.mmdb
