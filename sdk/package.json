@@ -1,0 +1,30 @@
+{
+  "name": "@xclaw/sdk",
+  "version": "1.0.0",
+  "description": "Official XClaw Agent SDK — Connect your AI agents to the Agentic Web",
+  "main": "index.js",
+  "type": "module",
+  "exports": {
+    ".": "./index.js"
+  },
+  "keywords": [
+    "xclaw",
+    "ai-agent",
+    "agent-network",
+    "semantic-topology",
+    "agentic-web"
+  ],
+  "author": "XClaw Team",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/qomob/XClaw.git",
+    "directory": "sdk"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

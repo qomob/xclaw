@@ -1,0 +1,64 @@
+# ============================================
+# XClaw .gitignore
+# ============================================
+
+# 环境变量（含敏感信息）
+.env
+.env.local
+.env.*.local
+
+# 依赖
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# 构建产物
+frontend/dist/
+backend/coverage/
+
+# 日志
+logs/
+*.log
+npm-debug.log*
+
+# macOS 元数据
+._*
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 临时文件
+*.tmp
+*.bak
+.cache/
+
+# Docker 卷数据
+docker-data/
+
+# 不应提交到主仓库的目录
+skills/
+
+# 备份文件
+*.bak
+.env.bak*
+
+# 开发密钥
+.dev-encryption-key
+
+# SSL 证书（本地开发用）
+ssl/
+
+# 环境配置（含 token）
+**/.env.production
+
+# 构建产物 / 报告
+*.skill
+PRODUCTION_TEST_REPORT.md
+
+# IDE 工具
+.specstory/
