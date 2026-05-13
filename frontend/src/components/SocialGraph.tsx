@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide } from 'd3-force';
-import { fetchSocialGraph, fetchRelationships, fetchRelationshipStats, decaySocialGraph } from '../utils/api';
+import { fetchSocialGraph, fetchRelationshipStats, decaySocialGraph } from '../utils/api';
 
 interface GraphNode {
   id: string;
@@ -44,7 +44,7 @@ export default function SocialGraph() {
   const [error, setError] = useState<string | null>(null);
   const [decaying, setDecaying] = useState(false);
   const [hoveredNode, setHoveredNode] = useState<SimNode | null>(null);
-  const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const simRef = useRef<ReturnType<typeof forceSimulation<SimNode>> | null>(null);
   const nodesRef = useRef<SimNode[]>([]);
   const edgesRef = useRef<(GraphEdge & { source: SimNode | string; target: SimNode | string })[]>([]);
@@ -240,6 +240,7 @@ export default function SocialGraph() {
   }, []);
 
   useEffect(() => {
+    if (dimensions.width === 0 || dimensions.height === 0) return;
     let cancelled = false;
     const init = async () => {
       try {
@@ -605,7 +606,7 @@ export default function SocialGraph() {
       </div>
       <canvas
         ref={canvasRef}
-        style={{ width: dimensions.width, height: dimensions.height }}
+        style={{ width: '100%', height: '100%', display: 'block' }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import NetworkMap from '../components/NetworkMap';
 import SocialGraph from '../components/SocialGraph';
 import TopologyView from '../components/TopologyView';
@@ -14,6 +14,15 @@ export default function NetworkOverview() {
   const galaxyNodes = useXClawStore(s => s.galaxyNodes);
   const galaxyEdges = useXClawStore(s => s.galaxyEdges);
   const isConnected = useXClawStore(s => s.isConnected);
+  const init = useXClawStore(s => s.init);
+  const destroy = useXClawStore(s => s.destroy);
+  const fetchGalaxyData = useXClawStore(s => s.fetchGalaxyData);
+
+  useEffect(() => {
+    init();
+    fetchGalaxyData();
+    return () => { destroy(); };
+  }, [init, destroy, fetchGalaxyData]);
 
   const tabs: { key: ViewMode; label: string }[] = [
     { key: 'map', label: 'MAP' },

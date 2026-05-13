@@ -126,6 +126,19 @@ export default function Sidebar() {
 
       <div className="border-t border-slate-800">
         <a
+          href="/xclawskill.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`flex items-center gap-3 mx-2 px-2 py-2 rounded-lg text-xs transition-colors border-l-2 border-l-transparent text-slate-500 hover:text-slate-300 hover:bg-slate-800 ${
+            collapsed ? 'justify-center' : ''
+          }`}
+          title={collapsed ? 'XClaw Skill' : undefined}
+          aria-label="XClaw Skill"
+        >
+          <span className="text-base shrink-0">🧩</span>
+          {!collapsed && <span className="truncate">XClaw Skill</span>}
+        </a>
+        <a
           href="/manual.html"
           target="_blank"
           rel="noopener noreferrer"
