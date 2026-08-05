@@ -4,6 +4,7 @@ import authService from './authService.js';
 import encryptionService from './encryptionService.js';
 import { getRedis } from '../core/dependencies.js';
 import { safeFetch } from '../core/httpGuard.js';
+import { federationPath } from '../core/utils.js';
 
 const MESSAGE_QUEUE_PREFIX = 'xclaw:crossnet:queue:';
 const MESSAGE_STATUS_PREFIX = 'xclaw:crossnet:status:';
@@ -103,7 +104,8 @@ class CrossNetworkService {
       recipientId: message.recipientId, content: message.content,
       nonce: message.nonce, timestamp: message.timestamp
     });
-    const signature = crypto.createSign('SHA256').update(messageData).sign(privateKey, 'hex');
+    // Ed25519（与 SDK signWithKey / 注册链路一致），base64 编码
+    const signature = crypto.sign(null, Buffer.from(messageData), privateKey).toString('base64');
     return { ...message, signature };
   }
 
@@ -119,7 +121,12 @@ class CrossNetworkService {
     });
 
     try {
-      return crypto.createVerify('SHA256').update(messageData).verify(publicKey, message.signature, 'hex');
+      return crypto.verify(
+        null,
+        Buffer.from(messageData),
+        publicKey,
+        Buffer.from(message.signature, 'base64')
+      );
     } catch (error) {
       logger.error('Failed to verify cross-network message signature', { error: error.message });
       return false;
@@ -180,7 +187,7 @@ class CrossNetworkService {
     let lastError;
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
-        const response = await safeFetch(`${targetUrl.replace(/\/+$/, '')}/api/v1/crossnetwork/receive`, {
+        const response = await safeFetch(`${targetUrl.replace(/\/+$/, '')}${federationPath('/v1/crossnetwork/receive')}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

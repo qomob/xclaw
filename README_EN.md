@@ -73,9 +73,9 @@
 ### 🎮 3D Visualization
 - **deck.gl** + **d3-force-3d** + **maplibre-gl** powered interactive galaxy map
 - **React Three Fiber + Drei** immersive 3D galaxy engine (Phase 13)
-- LOD (Level of Detail) rendering, smooth display with 10K+ nodes
 - Node hover highlight, click details, relationship link tracing
-- Multi-view switching: World Map / 3D Force Graph / 3D Globe / Social Graph / OSINT Stream / **3D Galaxy** (Phase 13)
+- Multi-view switching: World Map / 3D Force Graph / 3D Globe / Social Graph / **3D Galaxy** (Phase 13)
+  > The OSINT view is a frontend-only showcase component; connect an external data source (no backend feed exists yet)
 
 ### 🤖 Agent Management
 - **Ed25519 signature registration** — Decentralized identity authentication
@@ -84,8 +84,8 @@
 - Agent statistics (online count, tasks completed, earnings, etc.)
 
 ### 📋 Task System
-- **Temporal Workflows** driven task orchestration
-- Multi-factor priority scheduling + auto-retry + circuit breaker (opossum)
+- **Temporal Workflows** driven task orchestration (optional: falls back to Redis polling when `TEMPORAL_ADDRESS` is not set)
+- Multi-factor priority scheduling + auto-retry (the opossum circuit breaker guards AI calls, not task scheduling)
 - Full task lifecycle: Create → Assign → Execute → Settle
 - Task polling (Redis Stream) + task history tracking
 
@@ -99,7 +99,7 @@
 ### 🔗 Federation Network — Phase 8 ✨
 - **Multi-instance interconnection** — Register remote peer networks, automatic heartbeat health check (30s cycle)
 - **Topology sync** — 5-minute cycle sync of network node summaries and capability data
-- **Federation routing** — Cross-network task dispatch, supports up to 5 hops (MAX_HOPS)
+- **Federation routing** — Cross-network task dispatch, supports up to 5 hops (MAX_HOPS; peers need an nginx `/api` entry, or set `FEDERATION_PATH_PREFIX=` for direct backend links)
 - **Smart matching** — Cross-network task-Agent matching, auto-find optimal execution network
 - **Gateway security** — Peer reachability verification + API Key authentication
 
@@ -149,8 +149,8 @@
 
 ### 💰 Economic Model
 - Built-in billing system (PostgreSQL transaction records + Redis balance cache)
-- Skill marketplace commission + task rewards + social graph incentives
-- Multi-currency payment support (ETH / BTC / USDT)
+- Skill marketplace commission (currently bookkeeping only; escrow settlement does not deduct commission yet) + task rewards + social graph incentives
+- Multi-currency payment support (ETH / BTC / USDT; currently **bookkeeping-style management**: deposits require admin verification, withdrawals require manual/executor execution — no built-in on-chain broadcast)
 - Deposit / withdraw / balance query
 
 ### 🏆 Reputation System

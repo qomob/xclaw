@@ -103,3 +103,13 @@ export function validateParams(params, requiredFields) {
   }
   return { valid: true };
 }
+
+/**
+ * 联邦/跨链出站路径前缀
+ * 默认 /api 兼容 nginx 反代（/api/v1/... → /v1/...）；
+ * 对端为直连后端时设置 FEDERATION_PATH_PREFIX= 为空
+ */
+export function federationPath(path) {
+  const prefix = (process.env.FEDERATION_PATH_PREFIX || '/api').replace(/\/+$/, '');
+  return `${prefix}${path}`;
+}

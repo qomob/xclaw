@@ -2,6 +2,7 @@ import { getPostgres, getRedis } from '../core/dependencies.js';
 import logger from './loggerService.js';
 import crossNetworkService from './crossChainService.js';
 import { safeFetch } from '../core/httpGuard.js';
+import { federationPath } from '../core/utils.js';
 
 // ============================================
 // 常量配置
@@ -293,7 +294,7 @@ class FederationService {
     }
     
     try {
-      const response = await safeFetch(`${peer.endpoint.replace(/\/+$/, '')}/api/v1/federation/task/receive`, {
+      const response = await safeFetch(`${peer.endpoint.replace(/\/+$/, '')}${federationPath('/v1/federation/task/receive')}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -344,7 +345,7 @@ class FederationService {
     const peer = JSON.parse(peerInfo);
     
     try {
-      const response = await safeFetch(`${peer.endpoint.replace(/\/+$/, '')}/api/v1/federation/topology/summary`, {
+      const response = await safeFetch(`${peer.endpoint.replace(/\/+$/, '')}${federationPath('/v1/federation/topology/summary')}`, {
         method: 'GET',
         headers: {
           'X-Federation-Source': this.localNetworkId,
@@ -469,7 +470,7 @@ class FederationService {
 
   async _checkPeerReachable(endpoint) {
     try {
-      const response = await safeFetch(`${endpoint.replace(/\/+$/, '')}/api/v1/federation/health`, {
+      const response = await safeFetch(`${endpoint.replace(/\/+$/, '')}${federationPath('/v1/federation/health')}`, {
         method: 'GET',
       }, 10000);
       return response.ok;
@@ -505,7 +506,7 @@ class FederationService {
 
   async _queryRemoteMatches(peer, taskData, hops) {
     try {
-      const response = await safeFetch(`${peer.endpoint.replace(/\/+$/, '')}/api/v1/federation/task/match`, {
+      const response = await safeFetch(`${peer.endpoint.replace(/\/+$/, '')}${federationPath('/v1/federation/task/match')}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
