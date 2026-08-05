@@ -32,6 +32,11 @@ function getWsBaseUrl(): string {
 }
 const WS_BASE_URL = getWsBaseUrl();
 
+/** 确保 WebSocket 地址只包含一个 /ws 路径（VITE_WS_URL 可能已含 /ws） */
+function normalizeWsUrl(base: string): string {
+  return /\/ws\/?$/.test(base) ? base : `${base.replace(/\/+$/, '')}/ws`;
+}
+
 /**
  * 通用的 REST API 请求方法
  */
@@ -533,7 +538,7 @@ export class WebSocketManager {
   constructor(agentId: string, onMessage: (data: unknown) => void, onStatusChange: (connected: boolean) => void, token?: string) {
     // token 不放入 URL（避免进入访问日志/代理），改为连接后通过 auth 消息发送
     this.token = token;
-    this.url = `${WS_BASE_URL}/ws?agent_id=${encodeURIComponent(agentId)}`;
+    this.url = `${normalizeWsUrl(WS_BASE_URL)}?agent_id=${encodeURIComponent(agentId)}`;
     this.onMessage = onMessage;
     this.onStatusChange = onStatusChange;
   }
