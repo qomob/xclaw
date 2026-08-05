@@ -46,6 +46,7 @@ skills/
 # 备份文件
 *.bak
 .env.bak*
+database/backups/
 
 # 开发密钥
 .dev-encryption-key

@@ -9,9 +9,13 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const projectRoot = path.resolve(__dirname, '../../');
 
 // 加载环境变量
-dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
+dotenv.config({ path: path.join(projectRoot, '.env') });
 
 // 数据库连接信息
 const databaseUrl = process.env.DATABASE_URL;
@@ -28,8 +32,8 @@ const password = url.password;
 const host = url.hostname;
 const port = url.port || 5432;
 
-// 备份目录
-const backupDir = path.resolve(process.cwd(), '../../database/backups');
+// 备份目录（相对脚本位置，避免依赖运行目录）
+const backupDir = path.join(projectRoot, 'database/backups');
 if (!fs.existsSync(backupDir)) {
   fs.mkdirSync(backupDir, { recursive: true });
 }

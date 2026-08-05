@@ -1,6 +1,7 @@
 import os from 'os';
 import { getPostgres, getRedis } from '../core/dependencies.js';
 import logger from './loggerService.js';
+import alertManager from '../monitoring/alerts.js';
 
 /**
  * 系统监控服务 — 提供实时健康状态、性能指标和告警
@@ -225,7 +226,7 @@ class MonitorService {
           SELECT 
             date_trunc('hour', created_at) as time_bucket,
             COUNT(*) as events,
-            AVG(new_value - old_value) as avg_change
+            COALESCE(AVG(impact), 0) as avg_change
           FROM reputation_events
           WHERE created_at >= NOW() - INTERVAL '${hours} hours'
           GROUP BY date_trunc('hour', created_at)
@@ -331,7 +332,42 @@ class MonitorService {
       return (order[a.level] ?? 2) - (order[b.level] ?? 2);
     });
 
+    // 合并告警引擎触发并持久化的告警
+    try {
+      const fired = await alertManager.getAlerts(50);
+      const mapped = fired.map(a => ({
+        level: a.severity === 'high' ? 'critical' : a.severity,
+        type: a.rule,
+        message: a.message,
+        timestamp: new Date(a.timestamp).getTime(),
+      }));
+      alerts.push(...mapped);
+    } catch { /* skip */ }
+
     return { success: true, data: alerts };
+  }
+
+  /**
+   * 读取持久化指标快照历史
+   */
+  async getMetricsHistory(hours = 24, limit = 100) {
+    const pgPool = getPostgres();
+    try {
+      const result = await pgPool.query(
+        `SELECT online_nodes, total_nodes, task_total, task_completed, task_failed,
+                success_rate, ws_connections, memory_rss, cpu_usage, error_rate,
+                db_connections, avg_latency, created_at
+         FROM metrics_snapshots
+         WHERE created_at >= NOW() - INTERVAL '${parseInt(hours)} hours'
+         ORDER BY created_at ASC
+         LIMIT $1`,
+        [Math.min(Math.max(parseInt(limit) || 100, 1), 1000)]
+      );
+      return { success: true, data: result.rows };
+    } catch (error) {
+      logger.error('Failed to get metrics history', { error: error.message });
+      return { success: false, error: error.message };
+    }
   }
 
   // ==========================================

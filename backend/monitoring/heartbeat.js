@@ -18,9 +18,7 @@ export default class HeartbeatManager {
     this.startHeartbeatChecker();
   }
 
-  // 开始心跳检查
   startHeartbeatChecker() {
-    // 每 30 秒检查一次节点心跳
     this.heartbeatInterval = setInterval(async () => {
       await this.checkNodeHeartbeats();
     }, 30000);
@@ -28,30 +26,22 @@ export default class HeartbeatManager {
     logger.info('Heartbeat checker started');
   }
 
-  // 检查节点心跳
   async checkNodeHeartbeats() {
     const pgPool = await getPostgres();
     
     try {
-      // 获取所有节点
       const nodes = await pgPool.query(
         'SELECT node_id, last_heartbeat FROM nodes WHERE status = \'online\''
       );
 
       const now = new Date();
-      const timeoutThreshold = 60000; // 60秒超时
+      const timeoutThreshold = 60000;
 
       for (const node of nodes.rows) {
-        // 如果 agent 有活跃的 WS 连接，跳过心跳检查
-        if (this.wsConnections && this.wsConnections.has(node.node_id)) {
-          continue;
-        }
-
         const lastHeartbeat = new Date(node.last_heartbeat);
         const timeSinceHeartbeat = now - lastHeartbeat;
 
         if (timeSinceHeartbeat > timeoutThreshold) {
-          // 节点心跳超时，标记为离线
           await updateNodeStatus(node.node_id, 'offline');
           logger.info('Node marked offline due to heartbeat timeout', { nodeId: node.node_id });
         }

@@ -80,13 +80,56 @@ export default class MetricsManager {
 
   async init() {
     this.redisClient = await getRedis();
-    this._alertCheckInterval = setInterval(async () => {
+    this._snapshotInterval = setInterval(async () => {
       try {
-        const { default: alertManager } = await import('./alerts.js');
         const currentMetrics = await this.getMetrics();
-        await alertManager.checkAllMetrics(currentMetrics);
-      } catch (e) {}
-    }, parseInt(process.env.ALERT_CHECK_INTERVAL || '60000'));
+        await this.publishMetrics(currentMetrics);
+        await this.persistSnapshot(currentMetrics);
+      } catch (e) {
+        logger.error('Metrics snapshot failed', { error: e.message });
+      }
+    }, parseInt(process.env.METRICS_SNAPSHOT_INTERVAL || '60000'));
+  }
+
+  /**
+   * 发布最新指标到 Redis（供告警引擎与多实例读取）
+   */
+  async publishMetrics(metrics) {
+    try {
+      await this.redisClient.set('xclaw:metrics:latest', JSON.stringify(metrics), 'EX', 180);
+    } catch (_) {}
+  }
+
+  /**
+   * 持久化指标快照到 PostgreSQL（历史趋势）
+   */
+  async persistSnapshot(metrics) {
+    try {
+      const pgPool = getPostgres();
+      const errorRate = metrics.requests.total > 0 ? metrics.requests.error / metrics.requests.total : 0;
+      await pgPool.query(
+        `INSERT INTO metrics_snapshots
+          (online_nodes, total_nodes, task_total, task_completed, task_failed, success_rate,
+           ws_connections, memory_rss, cpu_usage, error_rate, db_connections, avg_latency, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())`,
+        [
+          metrics.nodes.online || 0,
+          metrics.nodes.total || 0,
+          metrics.tasks.total || 0,
+          metrics.tasks.completed || 0,
+          metrics.tasks.failed || 0,
+          metrics.tasks.success_rate || 0,
+          metrics.websocket.connections || 0,
+          metrics.memory.rss || 0,
+          metrics.cpu.usage || 0,
+          errorRate,
+          metrics.database.connections || 0,
+          metrics.latency.average || 0,
+        ]
+      );
+    } catch (err) {
+      logger.error('Metrics persist failed', { error: err.message });
+    }
   }
 
   // 更新节点指标
