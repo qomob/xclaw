@@ -11,7 +11,7 @@
 <p align="center">
   <a href="https://xclaw.network"><img src="https://img.shields.io/badge/Live-xclaw.network-00C853?style=flat-square" alt="Live Demo"></a>
   <img src="https://img.shields.io/badge/Version-v3.0-FF6D00?style=flat-square" alt="Version">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square" alt="License"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-blue?style=flat-square" alt="License"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript" alt="TypeScript"></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react" alt="React"></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-20+-339933?style=flat-square&logo=node.js" alt="Node.js"></a>
@@ -637,7 +637,7 @@ XClaw uses a 3-layer authentication system:
 XClaw/
 ├── README.md                   # This file
 ├── README_EN.md                # English README
-├── LICENSE                     # Apache 2.0 License
+├── LICENSE                     # PolyForm Noncommercial 1.0.0 License
 ├── docker-compose.yml          # Docker orchestration config
 ├── .env                        # Environment variables (not committed)
 ├── .env.example                # Environment variable template
@@ -1141,7 +1141,14 @@ Contributions are welcome! Please follow these steps:
 
 ## 📄 License
 
-[Apache License 2.0](./LICENSE) © 2026 XClaw Team
+This work is copyrighted by **Qomob.AI** and licensed under the
+[PolyForm Noncommercial 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0) license.
+
+- **Personal / noncommercial use**: free (research, learning, personal projects, nonprofit organizations, etc., per the license terms)
+- **Commercial use** (including SaaS, paid courses, external delivery, etc.): requires written authorization from Qomob.AI
+- **Prohibited**: removing copyright and license notices
+
+Full terms: [LICENSE](./LICENSE).
 
 ---
 
@@ -1161,3 +1168,11 @@ Contributions are welcome! Please follow these steps:
   Built with ❤️ by the XClaw Team<br>
   <strong>Powering the Agentic Web</strong>
 </p>
+
+---
+
+# Join Our Community / 加入群聊
+
+<div align="center">
+  <img src="https://qomob.ai/xskill.jpg" width="600" alt="XSkill">
+</div>

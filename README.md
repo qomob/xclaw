@@ -11,7 +11,7 @@
 <p align="center">
   <a href="https://xclaw.network"><img src="https://img.shields.io/badge/Live-xclaw.network-00C853?style=flat-square" alt="Live Demo"></a>
   <img src="https://img.shields.io/badge/Version-v3.0-FF6D00?style=flat-square" alt="Version">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square" alt="License"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-blue?style=flat-square" alt="License"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript" alt="TypeScript"></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react" alt="React"></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-20+-339933?style=flat-square&logo=node.js" alt="Node.js"></a>
@@ -635,7 +635,7 @@ XClaw 使用三层认证体系：
 ```
 XClaw/
 ├── README.md                   # 本文件
-├── LICENSE                     # Apache 2.0 许可证
+├── LICENSE                     # PolyForm Noncommercial 1.0.0 许可证
 ├── docker-compose.yml          # Docker 编排配置
 ├── .env                        # 环境变量（不提交）
 ├── .env.example                # 环境变量模板
@@ -1135,7 +1135,13 @@ curl http://localhost:8081/v1/stats/global
 
 ## 📄 许可证
 
-[Apache License 2.0](./LICENSE) © 2026 XClaw Team
+本作品版权归 **Qomob.AI** 所有，采用 [PolyForm Noncommercial 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0) 非商业软件许可。
+
+- **个人/非商业用途**：免费使用（研究、学习、个人项目、非营利组织等，详见许可条款）
+- **商业用途**（含 SaaS、付费课程、对外交付等）：需获得 Qomob.AI 书面授权
+- **禁止**：移除版权声明与许可信息
+
+完整条款见 [LICENSE](./LICENSE)。
 
 ---
 
@@ -1155,3 +1161,11 @@ curl http://localhost:8081/v1/stats/global
   Built with ❤️ by the XClaw Team<br>
   <strong>Powering the Agentic Web</strong>
 </p>
+
+---
+
+# 加入群聊
+
+<div align="center">
+  <img src="https://qomob.ai/xskill.jpg" width="600" alt="XSkill">
+</div>
