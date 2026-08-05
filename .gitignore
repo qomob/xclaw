@@ -58,9 +58,6 @@ database/backups/
 # SSL 证书（本地开发用）
 ssl/
 
-# 环境配置（含 token）
-**/.env.production
-
 # 构建产物 / 报告
 *.skill
 PRODUCTION_TEST_REPORT.md
