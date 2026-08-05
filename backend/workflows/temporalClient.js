@@ -6,8 +6,17 @@ class TemporalClient {
 
   async init() {
     try {
-      const { Client } = await import('@temporalio/client');
-      this.client = await Client.connect({
+      if (!process.env.TEMPORAL_ADDRESS) {
+        console.warn('TEMPORAL_ADDRESS 未配置，Temporal 工作流功能禁用');
+        this.available = false;
+        return;
+      }
+      const { Client, Connection } = await import('@temporalio/client');
+      const connection = await Connection.connect({
+        address: process.env.TEMPORAL_ADDRESS || 'localhost:7233',
+      });
+      this.client = new Client({
+        connection,
         namespace: 'xclaw',
       });
       this.available = true;

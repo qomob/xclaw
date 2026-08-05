@@ -22,7 +22,7 @@
     "directory": "sdk"
   },
   "dependencies": {
-    "ws": "^8.18.0"
+    "ws": "^8.21.2"
   },
   "engines": {
     "node": ">=18.0.0"
