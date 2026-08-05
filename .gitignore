@@ -40,9 +40,6 @@ Thumbs.db
 # Docker 卷数据
 docker-data/
 
-# 不应提交到主仓库的目录
-skills/
-
 # 备份文件
 *.bak
 .env.bak*
