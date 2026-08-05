@@ -727,6 +727,75 @@ def action_verify(client, **_kw):
     return ok("verify", data)
 
 
+def action_create_task(client, title=None, description=None, budget_min=None, budget_max=None,
+                       assignment_strategy=None, skill_id=None, deadline=None, **_kw):
+    """调用方创建市场任务（创建即冻结预算到托管）"""
+    if not title:
+        return fail("create-task", "title is required")
+    if not client._ensure_jwt():
+        return fail("create-task", "需要 API Key 换取 JWT（--api-key 或状态文件）")
+
+    body = {
+        "title": title,
+        "description": description or "",
+        "budget_min": float(budget_min) if budget_min is not None else None,
+        "budget_max": float(budget_max) if budget_max is not None else None,
+        "assignment_strategy": assignment_strategy or "auto",
+        "skill_id": skill_id,
+        "deadline": deadline,
+    }
+    body = {k: v for k, v in body.items() if v is not None}
+
+    resp = client.post("/v1/task-market/tasks", body=body)
+    if not resp.get("success"):
+        return fail("create-task", resp.get("error", "创建任务失败"))
+    data = resp.get("data", {})
+    return ok("create-task", {
+        "task_id": data.get("task_id"),
+        "escrow_amount": data.get("escrow_amount"),
+        "escrow_status": data.get("escrow_status"),
+    })
+
+
+def action_submit_bid(client, task_id=None, price=None, proposal=None, **_kw):
+    """执行方对任务出价竞标"""
+    if not task_id or price is None:
+        return fail("submit-bid", "task-id and price are required")
+    if not client._ensure_jwt():
+        return fail("submit-bid", "需要 API Key 换取 JWT（--api-key 或状态文件）")
+
+    resp = client.post(f"/v1/task-market/tasks/{task_id}/bids", body={
+        "proposed_price": float(price),
+        "proposal": proposal or "",
+    })
+    if not resp.get("success"):
+        return fail("submit-bid", resp.get("error", "出价失败"))
+    data = resp.get("data", {})
+    return ok("submit-bid", {
+        "task_id": task_id,
+        "bid_id": data.get("bid_id") or data.get("id"),
+        "proposed_price": float(price),
+    })
+
+
+def action_accept_bid(client, task_id=None, bid_id=None, **_kw):
+    """调用方接受竞标（按中标价调整托管并派活给执行方）"""
+    if not task_id or not bid_id:
+        return fail("accept-bid", "task-id and bid-id are required")
+    if not client._ensure_jwt():
+        return fail("accept-bid", "需要 API Key 换取 JWT（--api-key 或状态文件）")
+
+    resp = client.post(f"/v1/task-market/tasks/{task_id}/bids/{bid_id}/accept")
+    if not resp.get("success"):
+        return fail("accept-bid", resp.get("error", "接受竞标失败"))
+    data = resp.get("data", {})
+    return ok("accept-bid", {
+        "task_id": task_id,
+        "winner_id": data.get("winner_id"),
+        "price": data.get("price"),
+    })
+
+
 ACTIONS = {
     "register":          action_register,
     "heartbeat":         action_heartbeat,
@@ -744,6 +813,9 @@ ACTIONS = {
     "submit-result":     action_submit_result,
     "accept-result":     action_accept_result,
     "reject-result":     action_reject_result,
+    "create-task":       action_create_task,
+    "submit-bid":        action_submit_bid,
+    "accept-bid":        action_accept_bid,
     "verify":            action_verify,
     "daemon":            None,
 }
@@ -802,6 +874,17 @@ def main():
     parser.add_argument("--task-id", default=None, help="Task UUID (submit-result/accept-result/reject-result)")
     parser.add_argument("--result", default=None, help="Task result JSON string (submit-result)")
     parser.add_argument("--reason", default=None, help="Reject reason (reject-result)")
+    parser.add_argument("--title", default=None, help="Task title (create-task)")
+    parser.add_argument("--description", default=None, help="Task description (create-task)")
+    parser.add_argument("--budget-min", type=float, default=None, help="Minimum budget (create-task)")
+    parser.add_argument("--budget-max", type=float, default=None, help="Maximum budget (create-task, escrowed)")
+    parser.add_argument("--assignment-strategy", default=None,
+                        help="auto / bid / direct (create-task)")
+    parser.add_argument("--skill-id", default=None, help="Required skill UUID (create-task)")
+    parser.add_argument("--deadline", default=None, help="ISO deadline (create-task)")
+    parser.add_argument("--price", type=float, default=None, help="Bid price (submit-bid)")
+    parser.add_argument("--proposal", default=None, help="Bid proposal text (submit-bid)")
+    parser.add_argument("--bid-id", default=None, help="Bid UUID (accept-bid)")
     parser.add_argument("--interval", type=int, default=20,
                         help="Heartbeat interval in seconds (default: 20, TTL is 30)")
 
@@ -825,6 +908,16 @@ def main():
         "task_id": args.task_id,
         "result": args.result,
         "reason": args.reason,
+        "title": args.title,
+        "description": args.description,
+        "budget_min": args.budget_min,
+        "budget_max": args.budget_max,
+        "assignment_strategy": args.assignment_strategy,
+        "skill_id": args.skill_id,
+        "deadline": args.deadline,
+        "price": args.price,
+        "proposal": args.proposal,
+        "bid_id": args.bid_id,
         "state_file": args.state_file,
     }
 
