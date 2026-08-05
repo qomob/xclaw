@@ -3,8 +3,10 @@ services:
     build: ./backend
     container_name: xclaw-backend
     restart: unless-stopped
-    ports:
-      - "8081:8081"
+    # 生产环境不暴露后端端口，所有流量经 frontend(nginx) 反代
+    # 如需本机调试可临时添加: - "8081:8081"
+    expose:
+      - "8081"
     environment:
       - NODE_ENV=production
       - PORT=8081
@@ -25,6 +27,7 @@ services:
       - NETWORK_ID=${NETWORK_ID:-default}
       - LOCAL_ENDPOINT=http://backend:8081
       - API_KEY=${API_KEY}
+      - FEDERATION_KEY=${FEDERATION_KEY:-}
     depends_on:
       db:
         condition: service_healthy
@@ -57,10 +60,35 @@ services:
     networks:
       - xclaw-network
 
+  maintenance:
+    build: ./backend
+    container_name: xclaw-maintenance
+    restart: unless-stopped
+    entrypoint: ["node", "workers/maintenanceWorker.js"]
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-xclaw_postgres_2026}@db:5432/xclaw
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-xclaw_redis_secret}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
+      - API_KEY=${API_KEY}
+      - FEDERATION_KEY=${FEDERATION_KEY:-}
+      - INSTANCE_ID=maintenance
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - xclaw-network
+
   db:
     image: ankane/pgvector:latest
     container_name: xclaw-db
     restart: unless-stopped
+    # 预加载 pg_stat_statements（性能监控依赖）
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-xclaw_postgres_2026}

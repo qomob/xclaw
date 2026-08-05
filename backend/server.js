@@ -19,6 +19,7 @@ import apiRouter from './gateway/api.js';
 import { initPostgres, initRedis, closeConnections, getRedis } from './core/dependencies.js';
 import { errorHandler } from './core/utils.js';
 import { handleHeartbeat } from './registry/nodeRegistry.js';
+import { runMigrations } from './core/migrations.js';
 
 // 注册模块
 import { initDatabase } from './registry/db.js';
@@ -27,7 +28,7 @@ import { initGeoIP } from './core/geoip.js';
 // 监控模块
 import HeartbeatManager from './monitoring/heartbeat.js';
 import MetricsManager from './monitoring/metrics.js';
-import AlertManager from './monitoring/alerts.js';
+import alertManager from './monitoring/alerts.js';
 
 // 工作流模块
 import temporalClient from './workflows/temporalClient.js';
@@ -61,13 +62,19 @@ const server = app.listen(port, config.server.host, async () => {
     
     // 初始化数据库表
     await initDatabase();
+    // 应用未执行的迁移（修复 schema 漂移）
+    await runMigrations();
     
     await initGeoIP();
     
     await temporalClient.init();
     
     // 从 Redis 加载在线节点到 topologyService
+    await topologyService.init();
     await topologyService.loadFromRedis(redis);
+
+    // 初始化跨实例 WS 桥（定向消息路由）
+    await websocketService.initRedisBridge();
     
     // 初始化监控模块
     const heartbeatManager = new HeartbeatManager();
@@ -77,7 +84,7 @@ const server = app.listen(port, config.server.host, async () => {
     const metricsManager = new MetricsManager();
     await metricsManager.init();
     
-    new AlertManager();
+    await alertManager.init();
     
     // v1.1: 初始化事件总线和 Webhook 重试处理器
     await eventBus.init();
@@ -101,18 +108,11 @@ const server = app.listen(port, config.server.host, async () => {
 const redis = getRedis();
 
 // 将 WebSocket 服务器附加到 HTTP 服务器上
-// 注意: RealtimePushService 使用 noServer 模式自行处理 /ws 路径的 upgrade
-// 这里用 verifyClient 排除 /ws 避免 handleUpgrade 冲突
+// 注意: 主 WSS 与 RealtimePushService(/ws) 通过单一 upgrade 分发器按路径分流，
+// 避免两个 handleUpgrade 竞争导致 /ws 被主 WSS 403 拒绝
 const wss = new WebSocketServer({
-  server,
-  maxPayload: 1024 * 256,
-  verifyClient: (info, cb) => {
-    if (info.req.url && info.req.url.startsWith('/ws')) {
-      cb(false, 403, 'Wrong WS endpoint');
-    } else {
-      cb(true);
-    }
-  }
+  noServer: true,
+  maxPayload: 1024 * 256
 });
 
 // WebSocket 连接映射
@@ -123,6 +123,18 @@ websocketService.init(wss, wsConnections);
 
 // 初始化实时推送 WebSocket 服务 (路径: /ws)
 realtimePushService.initialize(server);
+
+// 单一 upgrade 分发：/ws → RealtimePushService，其余 → Agent WSS
+server.on('upgrade', (req, socket, head) => {
+  const { pathname } = new URL(req.url, `http://${req.headers.host}`);
+  if (pathname === '/ws') {
+    realtimePushService.handleUpgrade(req, socket, head);
+  } else {
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      wss.emit('connection', ws, req);
+    });
+  }
+});
 
 // Data pump removed — no auto-registration of zombie nodes
 const WS_RATE_LIMIT = parseInt(process.env.WS_RATE_LIMIT || '30');
@@ -149,6 +161,25 @@ const limiter = rateLimit({
   skip: (req) => req.path === '/health' || req.path === '/metrics'
 });
 app.use(limiter);
+
+// 请求 ID 中间件：生成/透传 x-request-id，记录请求日志（便于跨服务串联与排障）
+app.use((req, res, next) => {
+  const requestId = req.headers['x-request-id'] || crypto.randomUUID();
+  req.requestId = requestId;
+  res.setHeader('x-request-id', requestId);
+  const start = Date.now();
+  res.on('finish', () => {
+    logger.info('HTTP request', {
+      requestId,
+      method: req.method,
+      path: req.path,
+      status: res.statusCode,
+      durationMs: Date.now() - start,
+      ip: req.ip
+    });
+  });
+  next();
+});
 
 // CORS 配置
 app.use(cors({
@@ -189,6 +220,10 @@ wss.on('connection', (ws, req) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const agentId = url.searchParams.get('agent_id');
   
+  // 保存客户端 IP（考虑反向代理）
+  const forwarded = req.headers['x-forwarded-for'];
+  ws._clientIp = forwarded ? forwarded.split(',')[0].trim() : req.socket.remoteAddress;
+  
   if (!agentId) {
     logger.warn('WebSocket connection failed: missing agent_id');
     ws.close(4001, 'Missing agent_id');
@@ -201,12 +236,22 @@ wss.on('connection', (ws, req) => {
   if (agentId === 'monitor') {
     const monitorToken = url.searchParams.get('token');
     const expectedToken = process.env.MONITOR_TOKEN;
-    if (expectedToken && (!monitorToken || !crypto.timingSafeEqual(
-      Buffer.from(monitorToken), Buffer.from(expectedToken)
-    ))) {
-      logger.warn('Monitor WebSocket connection rejected: invalid token');
-      ws.close(4003, 'Invalid monitor token');
-      return;
+    if (expectedToken) {
+      let tokenValid = false;
+      try {
+        // timingSafeEqual 要求两缓冲区等长，先比长度避免异常崩溃
+        const provided = Buffer.from(monitorToken || '');
+        const expected = Buffer.from(expectedToken);
+        tokenValid = provided.length === expected.length
+          && crypto.timingSafeEqual(provided, expected);
+      } catch (err) {
+        logger.warn('Monitor token comparison error', { error: err.message });
+      }
+      if (!tokenValid) {
+        logger.warn('Monitor WebSocket connection rejected: invalid token');
+        ws.close(4003, 'Invalid monitor token');
+        return;
+      }
     }
     wsConnections.set(agentId, ws);
     logger.info('Monitor WebSocket connected');
@@ -257,7 +302,9 @@ wss.on('connection', (ws, req) => {
         }
 
         wsConnections.set(agentId, ws);
+        ws.agentId = agentId;
         logger.info('WebSocket authenticated', { agentId });
+        await websocketService.registerRoute(agentId);
 
         const redisClient = getRedis();
         const now = new Date();
@@ -296,7 +343,7 @@ wss.on('connection', (ws, req) => {
             ws.send(JSON.stringify({ success: false, error: 'Rate limit exceeded' }));
             return;
           }
-          handleWebSocketMessage(message, agentId);
+          handleWebSocketMessage(message, agentId, ws._clientIp);
         });
       }
     } catch (error) {
@@ -307,9 +354,10 @@ wss.on('connection', (ws, req) => {
 
   ws.on('message', authHandler);
 
-  ws.on('close', () => {
-    if (wsConnections.get(agentId) === ws) {
-      wsConnections.delete(agentId);
+    ws.on('close', () => {
+      if (wsConnections.get(agentId) === ws) {
+        wsConnections.delete(agentId);
+        websocketService.unregisterRoute(agentId).catch(() => {});
       // 更新离线状态
       (async () => {
         try {
@@ -337,7 +385,7 @@ wss.on('connection', (ws, req) => {
 });
 
 // 处理 WebSocket 消息
-async function handleWebSocketMessage(message, agentId) {
+async function handleWebSocketMessage(message, agentId, clientIp) {
   try {
     const data = JSON.parse(message);
     
@@ -366,7 +414,7 @@ async function handleWebSocketMessage(message, agentId) {
           await handleBroadcastMessage(data, agentId);
           break;
         case 'HEARTBEAT':
-          await handleHeartbeat(agentId);
+          await handleHeartbeat(agentId, clientIp);
           break;
         default:
           logger.warn('Unknown message type', { type: data.type });

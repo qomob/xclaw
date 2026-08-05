@@ -1,4 +1,9 @@
+import { getRedis } from '../core/dependencies.js';
+import { instanceId } from '../core/instance.js';
 import logger from './loggerService.js';
+
+const TOPO_SET = 'topology:nodes';
+const TOPO_EVENTS = 'xclaw:topology:events';
 
 class TopologyService {
   constructor() {
@@ -6,6 +11,36 @@ class TopologyService {
       nodes: [],
       links: []
     };
+    this._pub = null;
+    this._sub = null;
+    this._initialized = false;
+  }
+
+  /**
+   * 初始化 Redis 发布/订阅桥（跨实例拓扑同步）
+   */
+  async init() {
+    if (this._initialized) return;
+    this._pub = getRedis();
+    this._sub = getRedis().duplicate();
+    this._sub.on('message', (channel, message) => {
+      if (channel !== TOPO_EVENTS) return;
+      try {
+        const event = JSON.parse(message);
+        if (event.instance === instanceId) return; // 自己发布的消息已本地应用
+        if (event.delete) {
+          this.removeNode(event.delete);
+        } else {
+          if (event.node) this.addNode(event.node);
+          if (Array.isArray(event.links) && event.links.length > 0) this.addLinks(event.links);
+        }
+      } catch (err) {
+        logger.warn('[Topology] Event parse error', { error: err.message });
+      }
+    });
+    await this._sub.subscribe(TOPO_EVENTS);
+    this._initialized = true;
+    logger.info('[Topology] Redis bridge initialized', { instance: instanceId });
   }
 
   getState() {
@@ -74,8 +109,8 @@ class TopologyService {
 
   _deriveGroup(info) {
     if (info.tags) {
-      const tags = JSON.parse(info.tags);
-      if (Array.isArray(tags) && tags.length > 0) {
+      const tags = Array.isArray(info.tags) ? info.tags : JSON.parse(info.tags);
+      if (tags.length > 0) {
         let hash = 0;
         for (const tag of tags) {
           for (let i = 0; i < tag.length; i++) {
@@ -100,25 +135,70 @@ class TopologyService {
     return linkCount + 5;
   }
 
+  /**
+   * 持久化节点到 Redis 并广播增量（本地应用 + 跨实例同步）
+   */
+  async publishUpdate(node, links = []) {
+    if (!node || !node.id) return;
+    this.addNode(node);
+    if (links.length > 0) this.addLinks(links);
+    try {
+      await this._pub.sadd(TOPO_SET, node.id);
+      // 序列化复杂字段（Redis HSET 会把对象 String() 化，需显式 JSON）
+      await this._pub.hset(`topology:node:${node.id}`, {
+        id: String(node.id),
+        name: String(node.name || node.id),
+        status: String(node.status || 'online'),
+        tags: JSON.stringify(node.tags || []),
+        lat: String(node.lat ?? 0),
+        lng: String(node.lng ?? 0)
+      });
+      await this._pub.publish(TOPO_EVENTS, JSON.stringify({ node, links, instance: instanceId }));
+    } catch (err) {
+      logger.warn('[Topology] publishUpdate failed', { error: err.message, nodeId: node.id });
+    }
+  }
+
+  /**
+   * 删除节点并广播删除事件
+   */
+  async publishDelete(nodeId) {
+    this.removeNode(nodeId);
+    try {
+      await this._pub.srem(TOPO_SET, nodeId);
+      await this._pub.del(`topology:node:${nodeId}`);
+      await this._pub.publish(TOPO_EVENTS, JSON.stringify({ delete: nodeId, instance: instanceId }));
+    } catch (err) {
+      logger.warn('[Topology] publishDelete failed', { error: err.message, nodeId });
+    }
+  }
+
+  /**
+   * 从 Redis 加载持久化拓扑
+   */
   async loadFromRedis(redisClient) {
     try {
-      const nodeIds = await redisClient.smembers('online_nodes');
+      const nodeIds = await redisClient.smembers(TOPO_SET);
       let loaded = 0;
       for (const nodeId of nodeIds) {
         if (this.hasNode(nodeId)) continue;
-        const info = await redisClient.hgetall(`node:${nodeId}`);
-        if (info && info.id) {
-          this.state.nodes.push({
-            id: info.id,
-            name: info.name || info.id,
-            status: info.status || 'online',
-            tags: info.tags ? JSON.parse(info.tags) : [],
-            group: this._deriveGroup(info),
-            val: this._deriveVal(info),
-            lat: parseFloat(info.lat) || 0,
-            lng: parseFloat(info.lng) || 0
-          });
-          loaded++;
+        try {
+          const info = await redisClient.hgetall(`topology:node:${nodeId}`);
+          if (info && info.id) {
+            this.state.nodes.push({
+              id: info.id,
+              name: info.name || info.id,
+              status: info.status || 'online',
+              tags: info.tags ? (Array.isArray(info.tags) ? info.tags : JSON.parse(info.tags)) : [],
+              group: this._deriveGroup(info),
+              val: this._deriveVal(info),
+              lat: parseFloat(info.lat) || 0,
+              lng: parseFloat(info.lng) || 0
+            });
+            loaded++;
+          }
+        } catch (parseErr) {
+          logger.warn('[Topology] Skip unparseable node', { nodeId, error: parseErr.message });
         }
       }
       logger.info('Topology loaded from Redis', { total: nodeIds.length, loaded });
