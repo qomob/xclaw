@@ -1,6 +1,7 @@
 import { getPostgres, getRedis } from '../core/dependencies.js';
 import logger from './loggerService.js';
 import crossNetworkService from './crossChainService.js';
+import { safeFetch } from '../core/httpGuard.js';
 
 // ============================================
 // 常量配置
@@ -292,25 +293,20 @@ class FederationService {
     }
     
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 30000);
-      
-      const response = await fetch(`${peer.endpoint.replace(/\/+$/, '')}/api/v1/federation/task/receive`, {
+      const response = await safeFetch(`${peer.endpoint.replace(/\/+$/, '')}/api/v1/federation/task/receive`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Federation-Source': this.localNetworkId,
-          'X-Federation-Target': targetNetworkId
+          'X-Federation-Target': targetNetworkId,
+          'X-Federation-Key': process.env.FEDERATION_KEY || process.env.API_KEY || ''
         },
         body: JSON.stringify({
           source_network: this.localNetworkId,
           task: taskData,
           hops: (taskData._hops || 0) + 1
-        }),
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeout);
+        })
+      }, 30000);
       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
@@ -348,16 +344,13 @@ class FederationService {
     const peer = JSON.parse(peerInfo);
     
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15000);
-      
-      const response = await fetch(`${peer.endpoint.replace(/\/+$/, '')}/api/v1/federation/topology/summary`, {
+      const response = await safeFetch(`${peer.endpoint.replace(/\/+$/, '')}/api/v1/federation/topology/summary`, {
         method: 'GET',
-        headers: { 'X-Federation-Source': this.localNetworkId },
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeout);
+        headers: {
+          'X-Federation-Source': this.localNetworkId,
+          'X-Federation-Key': process.env.FEDERATION_KEY || process.env.API_KEY || ''
+        }
+      }, 15000);
       
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       
@@ -393,7 +386,16 @@ class FederationService {
         FROM nodes WHERE status = 'online'
       `),
       pgPool.query('SELECT id, name, category, description FROM skills'),
-      pgPool.query('SELECT * FROM task_market_stats')
+      pgPool.query(`
+        SELECT
+          COUNT(*) FILTER (WHERE status IN ('open', 'pending')) as open_tasks,
+          COUNT(*) FILTER (WHERE status = 'completed') as completed_tasks,
+          COUNT(*) FILTER (WHERE status = 'cancelled') as cancelled_tasks,
+          COUNT(*) as total_tasks,
+          COALESCE(SUM(budget_min), 0) as total_budget_min,
+          COALESCE(SUM(budget_max), 0) as total_budget_max
+        FROM tasks
+      `)
     ]);
     
     return {
@@ -467,15 +469,9 @@ class FederationService {
 
   async _checkPeerReachable(endpoint) {
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
-      
-      const response = await fetch(`${endpoint.replace(/\/+$/, '')}/api/v1/federation/health`, {
+      const response = await safeFetch(`${endpoint.replace(/\/+$/, '')}/api/v1/federation/health`, {
         method: 'GET',
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeout);
+      }, 10000);
       return response.ok;
     } catch {
       return false;
@@ -509,20 +505,15 @@ class FederationService {
 
   async _queryRemoteMatches(peer, taskData, hops) {
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15000);
-      
-      const response = await fetch(`${peer.endpoint.replace(/\/+$/, '')}/api/v1/federation/task/match`, {
+      const response = await safeFetch(`${peer.endpoint.replace(/\/+$/, '')}/api/v1/federation/task/match`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Federation-Source': this.localNetworkId
+          'X-Federation-Source': this.localNetworkId,
+          'X-Federation-Key': process.env.FEDERATION_KEY || process.env.API_KEY || ''
         },
-        body: JSON.stringify({ task: taskData, hops: hops + 1 }),
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeout);
+        body: JSON.stringify({ task: taskData, hops: hops + 1 })
+      }, 15000);
       
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return await response.json();

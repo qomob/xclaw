@@ -151,6 +151,7 @@ class AuthService {
     const apiKey = `ak_${crypto.randomBytes(24).toString('base64url')}`;
     const redis = getRedis();
     await redis.set(`apikey:${apiKey}`, agentId);
+    await redis.set(`agent_apikey:${agentId}`, apiKey);
     logger.info('API key generated', { agentId, keyPrefix: apiKey.substring(0, 10) });
     return apiKey;
   }
@@ -166,6 +167,10 @@ class AuthService {
 
   async deleteApiKey(apiKey) {
     const redis = getRedis();
+    const agentId = await redis.get(`apikey:${apiKey}`);
+    if (agentId) {
+      await redis.del(`agent_apikey:${agentId}`);
+    }
     return (await redis.del(`apikey:${apiKey}`)) > 0;
   }
 

@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { getPostgres, getRedis } from '../core/dependencies.js';
 import logger from './loggerService.js';
+import { safeFetch } from '../core/httpGuard.js';
 
 const DELIVERY_TIMEOUT = parseInt(process.env.WEBHOOK_TIMEOUT || '10000');
 const MAX_RETRIES = parseInt(process.env.WEBHOOK_MAX_RETRIES || '5');
@@ -49,7 +50,8 @@ export async function createWebhook(nodeId, { url, events, description = null })
 
   // 脱敏返回
   webhook.secret_preview = webhook.secret.substring(0, 8) + '...';
-  return webhook;
+  const { secret: _secret, ...safeWebhook } = webhook;
+  return safeWebhook;
 }
 
 /**
@@ -209,10 +211,7 @@ async function deliverWebhook(deliveryId, webhook, payload) {
       .update(JSON.stringify(payload))
       .digest('hex');
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), DELIVERY_TIMEOUT);
-
-    const response = await fetch(webhook.url, {
+    const response = await safeFetch(webhook.url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -221,10 +220,7 @@ async function deliverWebhook(deliveryId, webhook, payload) {
         'X-XClaw-Delivery': payload.delivery_id,
       },
       body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeout);
+    }, DELIVERY_TIMEOUT);
 
     if (response.ok) {
       // 成功
@@ -381,6 +377,62 @@ export async function listDeliveries(webhookId, nodeId, { status = null, limit =
     limit,
     offset
   };
+}
+
+/**
+ * 列出全部死信投递（管理员）
+ */
+export async function listDeadDeliveries({ limit = 50 } = {}) {
+  const pool = getPostgres();
+  const result = await pool.query(
+    `SELECT wd.id, wd.webhook_id, wd.event_type, wd.payload, wd.status, wd.attempts,
+            wd.last_response_code, wd.last_error, wd.created_at, wd.updated_at,
+            w.url, w.node_id
+     FROM webhook_deliveries wd
+     JOIN webhooks w ON wd.webhook_id = w.id
+     WHERE wd.status IN ('dead', 'failed')
+     ORDER BY wd.updated_at DESC
+     LIMIT $1`,
+    [Math.min(Math.max(parseInt(limit) || 50, 1), 200)]
+  );
+  return result.rows;
+}
+
+/**
+ * 管理员重试任意死信投递（不校验 node 归属）
+ */
+export async function retryDeliveryAdmin(deliveryId) {
+  const pool = getPostgres();
+  const result = await pool.query(
+    `SELECT wd.*, w.url, w.secret
+     FROM webhook_deliveries wd
+     JOIN webhooks w ON wd.webhook_id = w.id
+     WHERE wd.id = $1 AND wd.status IN ('failed', 'dead')`,
+    [deliveryId]
+  );
+  if (result.rows.length === 0) {
+    throw new Error('Delivery not found or not retryable');
+  }
+
+  const delivery = result.rows[0];
+  const payload = typeof delivery.payload === 'string'
+    ? JSON.parse(delivery.payload)
+    : delivery.payload;
+
+  await pool.query(
+    `UPDATE webhook_deliveries
+     SET status = 'pending', attempts = 0, next_retry_at = NULL, updated_at = NOW()
+     WHERE id = $1`,
+    [deliveryId]
+  );
+
+  setImmediate(() => deliverWebhook(
+    deliveryId,
+    { id: delivery.webhook_id, url: delivery.url, secret: delivery.secret },
+    payload
+  ));
+
+  return { success: true, deliveryId };
 }
 
 // ==========================================

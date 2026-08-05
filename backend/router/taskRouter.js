@@ -406,15 +406,19 @@ export async function completeTask(taskId, result, error = null) {
     if (status === 'completed' && task.node_id) {
       const rewardAmount = task.reward_amount || TASK_BASE_PRICE;
       const audit = { operator_id: task.node_id, reason: `task_complete:${taskId}` };
-      try {
-        await chargeTask(taskId, rewardAmount, audit);
-      } catch (billingError) {
+      // 先真实扣减调用方余额，扣费成功才发放奖励，防止凭空造币
+      const chargeResult = await chargeTask(taskId, rewardAmount, audit).catch((billingError) => {
         logger.error('Auto chargeTask failed', { error: billingError.message, taskId });
-      }
-      try {
-        await rewardNode(task.node_id, rewardAmount, audit);
-      } catch (billingError) {
-        logger.error('Auto rewardNode failed', { error: billingError.message, taskId, nodeId: task.node_id });
+        return formatResponse(false, null, '任务计费失败');
+      });
+      if (chargeResult.success) {
+        try {
+          await rewardNode(task.node_id, rewardAmount, audit);
+        } catch (billingError) {
+          logger.error('Auto rewardNode failed', { error: billingError.message, taskId, nodeId: task.node_id });
+        }
+      } else {
+        logger.warn('Task charge failed, reward skipped', { taskId, error: chargeResult.error });
       }
 
       try {

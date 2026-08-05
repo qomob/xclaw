@@ -1,7 +1,7 @@
 /**
- * multiChainPaymentService.js — 多链支付服务
+ * multiChainPaymentService.js — 多币种支付服务
  *
- * 支持 Ethereum / Polygon / Arbitrum / Optimism 四条链的
+ * 支持 ETH (Ethereum) / BTC (Bitcoin) / USDT (ERC-20) 三种货币的
  * 钱包管理、充值确认、提现处理。
  *
  * @module services/multiChainPaymentService
@@ -11,28 +11,27 @@ import { getPostgres, getRedis } from '../core/dependencies.js';
 import { generateUUID, formatResponse } from '../core/utils.js';
 import logger from './loggerService.js';
 import eventBus from './eventBus.js';
+import crypto from 'crypto';
 
-// ─── 常量 ──────────────────────────────────────────────
-const SUPPORTED_CHAINS = ['ethereum', 'polygon', 'arbitrum', 'optimism'];
-const CACHE_TTL = 60; // 秒
+const SUPPORTED_CURRENCIES = ['ethereum', 'bitcoin', 'usdt'];
+const CACHE_TTL = 60;
 
-// ─── 内部工具 ───────────────────────────────────────────
+const CURRENCY_META = {
+  ethereum: { symbol: 'ETH', label: 'Ethereum', type: 'native' },
+  bitcoin:  { symbol: 'BTC', label: 'Bitcoin',  type: 'native' },
+  usdt:     { symbol: 'USDT', label: 'Tether USD', type: 'token' }
+};
 
-/**
- * 校验链 ID 是否合法
- * @param {string} chain
- * @returns {boolean}
- */
-function isValidChain(chain) {
-  return SUPPORTED_CHAINS.includes(chain);
+function isValidCurrency(currency) {
+  return SUPPORTED_CURRENCIES.includes(currency);
 }
 
-/**
- * 基础的 EVM 地址格式校验（0x 开头，42 字符，十六进制）
- * @param {string} address
- * @returns {boolean}
- */
-function isValidEvmAddress(address) {
+function isValidAddress(address, currency) {
+  if (!address || typeof address !== 'string') return false;
+  if (currency === 'bitcoin') {
+    return /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(address)
+      || /^bc1[a-zA-HJ-NP-Z0-9]{25,90}$/.test(address);
+  }
   return /^0x[0-9a-fA-F]{40}$/.test(address);
 }
 
@@ -61,11 +60,11 @@ async function invalidateWalletCache(nodeId) {
  * @returns {Promise<object>} formatResponse
  */
 export async function registerWallet(nodeId, { chain, address, label } = {}) {
-  if (!isValidChain(chain)) {
-    return formatResponse(false, null, `不支持的链: ${chain}，支持: ${SUPPORTED_CHAINS.join(', ')}`);
+  if (!isValidCurrency(chain)) {
+    return formatResponse(false, null, `不支持的货币: ${chain}，支持: ${SUPPORTED_CURRENCIES.join(', ')}`);
   }
-  if (!isValidEvmAddress(address)) {
-    return formatResponse(false, null, '无效的 EVM 地址格式');
+  if (!isValidAddress(address, chain)) {
+    return formatResponse(false, null, `无效的 ${CURRENCY_META[chain]?.symbol || chain} 地址格式`);
   }
 
   const pgPool = getPostgres();
@@ -250,8 +249,8 @@ export async function removeWallet(nodeId, walletId) {
  * @returns {Promise<object>}
  */
 export async function createDeposit(nodeId, { chain, tx_hash, amount, currency, from_address, to_address } = {}) {
-  if (!isValidChain(chain)) {
-    return formatResponse(false, null, `不支持的链: ${chain}`);
+  if (!isValidCurrency(chain)) {
+    return formatResponse(false, null, `不支持的货币: ${chain}`);
   }
   const numAmount = Number(amount);
   if (!Number.isFinite(numAmount) || numAmount <= 0) {
@@ -288,7 +287,7 @@ export async function createDeposit(nodeId, { chain, tx_hash, amount, currency, 
     );
     if (chainConfig.rows.length === 0) {
       await client.query('ROLLBACK');
-      return formatResponse(false, null, `链 ${chain} 未启用`);
+      return formatResponse(false, null, `货币 ${chain} 未启用`);
     }
 
     if (numAmount < parseFloat(chainConfig.rows[0].min_deposit)) {
@@ -313,7 +312,7 @@ export async function createDeposit(nodeId, { chain, tx_hash, amount, currency, 
         txId, nodeId,
         walletResult.rows.length > 0 ? walletResult.rows[0].wallet_id : null,
         chain, tx_hash, numAmount,
-        currency || 'ETH',
+        currency || CURRENCY_META[chain]?.symbol || 'ETH',
         chainConfig.rows[0].confirmations_required,
         from_address || null,
         to_address || null
@@ -330,7 +329,7 @@ export async function createDeposit(nodeId, { chain, tx_hash, amount, currency, 
       chain,
       tx_hash,
       amount: numAmount,
-      currency: currency || 'ETH',
+      currency: currency || CURRENCY_META[chain]?.symbol || 'ETH',
       status: 'pending'
     });
   } catch (error) {
@@ -357,11 +356,11 @@ export async function createDeposit(nodeId, { chain, tx_hash, amount, currency, 
  * @returns {Promise<object>}
  */
 export async function createWithdrawal(nodeId, { chain, to_address, amount, currency } = {}) {
-  if (!isValidChain(chain)) {
-    return formatResponse(false, null, `不支持的链: ${chain}`);
+  if (!isValidCurrency(chain)) {
+    return formatResponse(false, null, `不支持的货币: ${chain}`);
   }
-  if (!isValidEvmAddress(to_address)) {
-    return formatResponse(false, null, '无效的目标地址');
+  if (!isValidAddress(to_address, chain)) {
+    return formatResponse(false, null, `无效的 ${CURRENCY_META[chain]?.symbol || chain} 目标地址`);
   }
   const numAmount = Number(amount);
   if (!Number.isFinite(numAmount) || numAmount <= 0) {
@@ -381,7 +380,7 @@ export async function createWithdrawal(nodeId, { chain, to_address, amount, curr
     );
     if (chainConfig.rows.length === 0) {
       await client.query('ROLLBACK');
-      return formatResponse(false, null, `链 ${chain} 未启用`);
+      return formatResponse(false, null, `货币 ${chain} 未启用`);
     }
 
     const minWithdrawal = parseFloat(chainConfig.rows[0].min_withdrawal);
@@ -392,27 +391,13 @@ export async function createWithdrawal(nodeId, { chain, to_address, amount, curr
       return formatResponse(false, null, `提现金额低于最低限额 ${minWithdrawal}`);
     }
 
-    // 检查余额（从 billing 系统）
-    const balanceResult = await client.query(
-      'SELECT COALESCE(total_earnings, 0) as balance FROM nodes WHERE node_id = $1',
-      [nodeId]
-    );
-    if (balanceResult.rows.length === 0) {
+    // 从统一账本（billing_accounts）原子扣款
+    const { debitAccount } = await import('../billing/index.js');
+    const debit = await debitAccount(client, nodeId, numAmount + fee);
+    if (!debit.ok) {
       await client.query('ROLLBACK');
-      return formatResponse(false, null, '节点不存在');
+      return formatResponse(false, null, '余额不足');
     }
-
-    const balance = parseFloat(balanceResult.rows[0].balance);
-    if (balance < numAmount + fee) {
-      await client.query('ROLLBACK');
-      return formatResponse(false, null, `余额不足 (余额: ${balance}, 需要: ${numAmount + fee})`);
-    }
-
-    // 扣款
-    await client.query(
-      'UPDATE nodes SET total_earnings = total_earnings - $1, updated_at = NOW() WHERE node_id = $2',
-      [numAmount + fee, nodeId]
-    );
 
     // 获取主钱包地址作为 from_address
     const walletResult = await client.query(
@@ -431,7 +416,7 @@ export async function createWithdrawal(nodeId, { chain, to_address, amount, curr
         txId, nodeId,
         walletResult.rows.length > 0 ? walletResult.rows[0].wallet_id : null,
         chain, numAmount,
-        currency || 'ETH',
+        currency || CURRENCY_META[chain]?.symbol || 'ETH',
         chainConfig.rows[0].confirmations_required,
         walletResult.rows.length > 0 ? walletResult.rows[0].address : null,
         to_address,
@@ -466,7 +451,7 @@ export async function createWithdrawal(nodeId, { chain, to_address, amount, curr
       amount: numAmount,
       fee,
       net_amount: numAmount,
-      currency: currency || 'ETH',
+      currency: currency || CURRENCY_META[chain]?.symbol || 'ETH',
       to_address,
       status: 'pending'
     });
@@ -474,6 +459,144 @@ export async function createWithdrawal(nodeId, { chain, to_address, amount, curr
     try { await client.query('ROLLBACK'); } catch (_) {}
     logger.error('Create withdrawal failed', { error: error.message, nodeId });
     return formatResponse(false, null, '发起提现失败');
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * 管理员确认充值入账（线下核验链上交易后调用）
+ * 将 pending 充值转为 completed 并入账 billing_accounts
+ */
+export async function confirmDeposit(txId, adminNote = null) {
+  const pgPool = getPostgres();
+  const client = await pgPool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const res = await client.query(
+      `SELECT * FROM chain_transactions
+        WHERE id = $1 AND type = 'deposit' AND status = 'pending'
+        FOR UPDATE`,
+      [txId]
+    );
+    if (res.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return formatResponse(false, null, '充值记录不存在或已处理');
+    }
+
+    const tx = res.rows[0];
+    const amount = parseFloat(tx.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      await client.query('ROLLBACK');
+      return formatResponse(false, null, '充值金额异常');
+    }
+
+    const { creditAccount } = await import('../billing/index.js');
+    const newBalance = await creditAccount(client, tx.node_id, amount);
+
+    await client.query(
+      `UPDATE chain_transactions
+          SET status = 'completed',
+              confirmations = required_confirmations,
+              metadata = metadata || $2::jsonb,
+              updated_at = NOW()
+        WHERE id = $1`,
+      [txId, JSON.stringify({ confirmed_by: 'admin', note: adminNote, confirmed_at: new Date().toISOString() })]
+    );
+
+    await client.query('COMMIT');
+
+    try {
+      const redisClient = getRedis();
+      await redisClient.del(`node:${tx.node_id}:balance`);
+    } catch (_) {}
+
+    logger.info('Deposit confirmed', { txId, nodeId: tx.node_id, amount, newBalance });
+    eventBus.emit('payment.deposit_confirmed', { node_id: tx.node_id, amount, tx_id: txId }, { sourceId: tx.node_id });
+
+    return formatResponse(true, {
+      id: txId,
+      node_id: tx.node_id,
+      amount,
+      status: 'completed',
+      new_balance: newBalance
+    });
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    logger.error('Confirm deposit failed', { error: error.message, txId });
+    return formatResponse(false, null, '确认充值失败');
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * 管理员更新提现状态：completed（链上已打款）或 failed（失败退款）
+ */
+export async function updateWithdrawalStatus(txId, newStatus, adminNote = null) {
+  if (!['completed', 'failed'].includes(newStatus)) {
+    return formatResponse(false, null, '状态必须是 completed 或 failed');
+  }
+
+  const pgPool = getPostgres();
+  const client = await pgPool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const res = await client.query(
+      `SELECT * FROM chain_transactions
+        WHERE id = $1 AND type = 'withdrawal' AND status = 'pending'
+        FOR UPDATE`,
+      [txId]
+    );
+    if (res.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return formatResponse(false, null, '提现记录不存在或已处理');
+    }
+
+    const tx = res.rows[0];
+    const metadata = JSON.parse(tx.metadata || '{}');
+    const amount = parseFloat(tx.amount);
+    const fee = parseFloat(metadata.fee) || 0;
+
+    if (newStatus === 'failed') {
+      // 退款：本金 + 手续费退回账本
+      const { creditAccount } = await import('../billing/index.js');
+      const refund = parseFloat((amount + fee).toFixed(2));
+      const newBalance = await creditAccount(client, tx.node_id, refund);
+      await client.query(
+        `INSERT INTO transactions (id, node_id, amount, type, status, reason, metadata)
+         VALUES ($1, $2, $3, 'withdrawal_refund', 'completed', $4, $5)`,
+        [crypto.randomUUID(), tx.node_id, refund, 'withdrawal failed refund', JSON.stringify({ withdrawal_id: txId })]
+      );
+      logger.info('Withdrawal refunded', { txId, nodeId: tx.node_id, refund, newBalance });
+    }
+
+    await client.query(
+      `UPDATE chain_transactions
+          SET status = $2,
+              metadata = metadata || $3::jsonb,
+              updated_at = NOW()
+        WHERE id = $1`,
+      [txId, newStatus, JSON.stringify({ settled_by: 'admin', note: adminNote, settled_at: new Date().toISOString() })]
+    );
+
+    await client.query('COMMIT');
+
+    try {
+      const redisClient = getRedis();
+      await redisClient.del(`node:${tx.node_id}:balance`);
+    } catch (_) {}
+
+    logger.info('Withdrawal status updated', { txId, newStatus, nodeId: tx.node_id });
+    return formatResponse(true, { id: txId, status: newStatus });
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    logger.error('Update withdrawal status failed', { error: error.message, txId });
+    return formatResponse(false, null, '更新提现状态失败');
   } finally {
     client.release();
   }
@@ -557,13 +680,18 @@ export async function getSupportedChains() {
               confirmations_required, is_active, explorer_url
        FROM supported_chains ORDER BY name`
     );
+    const chains = result.rows.map(row => ({
+      ...row,
+      symbol: CURRENCY_META[row.chain_id]?.symbol || row.chain_currency,
+      type: CURRENCY_META[row.chain_id]?.type || 'native'
+    }));
     return formatResponse(true, {
-      total: result.rows.length,
-      chains: result.rows
+      total: chains.length,
+      chains
     });
   } catch (error) {
     logger.error('Get supported chains failed', { error: error.message });
-    return formatResponse(false, null, '获取支持的链列表失败');
+    return formatResponse(false, null, '获取支持的货币列表失败');
   }
 }
 

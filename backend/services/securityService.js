@@ -11,6 +11,20 @@ import logger from './loggerService.js';
 const TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 小时
 const RATE_LIMIT_PREFIX = 'ratelimit:';
 
+/** 只存储 token 的 SHA-256 哈希，防止 DB 泄露导致会话全部失效 */
+function hashToken(token) {
+  return crypto.createHash('sha256').update(String(token)).digest('hex');
+}
+
+/** 恒定时间字符串比较（长度不等返回 false，不抛异常） */
+function safeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
 /**
  * 安全服务类 — 管理 OAuth2、审计日志、速率限制
  */
@@ -165,7 +179,7 @@ class SecurityService {
         }
 
         const client = clientRes.rows[0];
-        if (client.client_secret !== client_secret) {
+        if (!safeEqual(client.client_secret, client_secret)) {
           return { success: false, error: 'Invalid client credentials' };
         }
 
@@ -181,7 +195,7 @@ class SecurityService {
         await pg.query(
           `INSERT INTO oauth_tokens (client_id, access_token, refresh_token, expires_at)
            VALUES ($1, $2, $3, $4)`,
-          [client_id, accessToken, refreshToken, expiresAt]
+          [client_id, hashToken(accessToken), hashToken(refreshToken), expiresAt]
         );
 
         return {
@@ -197,43 +211,8 @@ class SecurityService {
       }
 
       if (grantType === 'password') {
-        const { client_id, client_secret, username, password, agent_id } = params;
-
-        // 验证 client
-        const clientRes = await pg.query(
-          'SELECT * FROM oauth_clients WHERE client_id = $1',
-          [client_id]
-        );
-
-        if (clientRes.rows.length === 0 || clientRes.rows[0].client_secret !== client_secret) {
-          return { success: false, error: 'Invalid client credentials' };
-        }
-
-        if (!clientRes.rows[0].grant_types.includes('password')) {
-          return { success: false, error: 'Grant type not allowed for this client' };
-        }
-
-        // 简化版：直接用 agent_id 作为用户标识（实际生产中需要验证密码）
-        const accessToken = crypto.randomBytes(32).toString('hex');
-        const refreshToken = crypto.randomBytes(32).toString('hex');
-        const expiresAt = new Date(Date.now() + TOKEN_EXPIRY_MS);
-
-        await pg.query(
-          `INSERT INTO oauth_tokens (client_id, agent_id, access_token, refresh_token, expires_at)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [client_id, agent_id || null, accessToken, refreshToken, expiresAt]
-        );
-
-        return {
-          success: true,
-          data: {
-            access_token: accessToken,
-            refresh_token: refreshToken,
-            token_type: 'Bearer',
-            expires_in: Math.floor(TOKEN_EXPIRY_MS / 1000),
-            scope: 'read'
-          }
-        };
+        // 无真实用户密码体系前，禁止 password grant（原实现不校验密码，可冒充任意 Agent）
+        return { success: false, error: 'password grant type is not supported' };
       }
 
       if (grantType === 'refresh_token') {
@@ -246,7 +225,7 @@ class SecurityService {
         // 查找 refresh token
         const tokenRes = await pg.query(
           'SELECT * FROM oauth_tokens WHERE refresh_token = $1',
-          [refresh_token]
+          [hashToken(refresh_token)]
         );
 
         if (tokenRes.rows.length === 0) {
@@ -266,7 +245,7 @@ class SecurityService {
         await pg.query(
           `INSERT INTO oauth_tokens (client_id, agent_id, access_token, refresh_token, expires_at)
            VALUES ($1, $2, $3, $4, $5)`,
-          [oldToken.client_id, oldToken.agent_id, newAccessToken, newRefreshToken, expiresAt]
+          [oldToken.client_id, oldToken.agent_id, hashToken(newAccessToken), hashToken(newRefreshToken), expiresAt]
         );
 
         return {
@@ -299,7 +278,7 @@ class SecurityService {
 
       const result = await pg.query(
         'DELETE FROM oauth_tokens WHERE access_token = $1 OR refresh_token = $1',
-        [token]
+        [hashToken(token)]
       );
 
       if (result.rowCount === 0) {
@@ -327,7 +306,7 @@ class SecurityService {
          FROM oauth_tokens t
          LEFT JOIN oauth_clients c ON t.client_id = c.client_id
          WHERE t.access_token = $1`,
-        [token]
+        [hashToken(token)]
       );
 
       if (result.rows.length === 0) {

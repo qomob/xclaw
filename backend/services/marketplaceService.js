@@ -1,7 +1,7 @@
 import { getPostgres, getRedis } from '../core/dependencies.js';
 import { generateUUID, formatResponse } from '../core/utils.js';
 import { routeTask, completeTask } from '../router/taskRouter.js';
-import { chargeTask, rewardNode, deductFromBalance, getNodeBalance } from '../billing/index.js';
+import { debitAccount, creditAccount } from '../billing/index.js';
 import logger from '../services/loggerService.js';
 import eventBus from '../services/eventBus.js';
 
@@ -181,26 +181,12 @@ export async function placeOrder(buyerId, skillId, payload = {}) {
     const price = parseFloat(skill.price);
     const commission = Math.round(price * COMMISSION_RATE * 100) / 100;
 
-    const balanceResult = await client.query(
-      'SELECT total_earnings FROM nodes WHERE node_id = $1 FOR UPDATE',
-      [buyerId]
-    );
-
-    if (balanceResult.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return formatResponse(false, null, '买家节点不存在');
-    }
-
-    const buyerBalance = parseFloat(balanceResult.rows[0].total_earnings) || 0;
-    if (buyerBalance < price) {
+    // 从统一账本扣款（原子条件更新，余额不足返回空行）
+    const debit = await debitAccount(client, buyerId, price);
+    if (!debit.ok) {
       await client.query('ROLLBACK');
       return formatResponse(false, null, '余额不足');
     }
-
-    await client.query(
-      'UPDATE nodes SET total_earnings = total_earnings - $1 WHERE node_id = $2',
-      [price, buyerId]
-    );
 
     const orderId = generateUUID(`order:${Date.now()}`);
     await client.query(
@@ -388,10 +374,7 @@ export async function completeOrder(orderId, resultData, error = null) {
 
     if (newStatus === 'completed') {
       const netAmount = parseFloat(order.amount) - parseFloat(order.commission);
-      await client.query(
-        'UPDATE nodes SET total_earnings = COALESCE(total_earnings, 0) + $1 WHERE node_id = $2',
-        [netAmount, order.seller_id]
-      );
+      await creditAccount(client, order.seller_id, netAmount);
 
       if (order.task_id) {
         try {
@@ -399,10 +382,8 @@ export async function completeOrder(orderId, resultData, error = null) {
         } catch (_) {}
       }
     } else {
-      await client.query(
-        'UPDATE nodes SET total_earnings = COALESCE(total_earnings, 0) + $1 WHERE node_id = $2',
-        [parseFloat(order.amount), order.buyer_id]
-      );
+      // 失败退款：退回买家
+      await creditAccount(client, order.buyer_id, parseFloat(order.amount));
     }
 
     await client.query('COMMIT');

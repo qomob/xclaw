@@ -15,7 +15,8 @@ import { chargeTask, chargeSkill, getTransactions, getNodeBalance, deductFromBal
 import {
   registerWallet, getWallets, setPrimaryWallet, removeWallet,
   createDeposit, createWithdrawal,
-  getChainTransactions, getSupportedChains, getPaymentOverview
+  getChainTransactions, getSupportedChains, getPaymentOverview,
+  confirmDeposit, updateWithdrawalStatus
 } from '../services/multiChainPaymentService.js';
 import { addMemory, getMemories, getMemoryStats, deleteMemory, getGlobalMemoryStats } from '../services/memoryService.js';
 import { updateRelationship, getRelationships, deleteRelationship, getSocialGraph, decayRelationships, getGlobalRelationshipStats } from '../services/relationshipService.js';
@@ -38,12 +39,13 @@ import {
   computeMatchScore, findBestMatches, placeBid, getTaskBids, acceptBid, autoAssignTask,
   browseTasks, getMarketStats, createMarketTask, completeMarketTask
 } from '../services/taskMarketService.js';
-import { verifyApiKey, requireAdmin } from './auth.js';
+import { verifyApiKey, requireAdmin, requireAgentId, requireOwnNode, requireFederationKey } from './auth.js';
 import { searchAgentsByIntent } from '../services/searchEngine.js';
 import { executeQuery, findNearestNodes } from '../services/databaseService.js';
 import {
   createWebhook, listWebhooks, getWebhook, deleteWebhook,
-  retryDelivery, listDeliveries, getValidEvents
+  retryDelivery, listDeliveries, getValidEvents,
+  listDeadDeliveries, retryDeliveryAdmin
 } from '../services/webhookService.js';
 import eventBus from '../services/eventBus.js';
 
@@ -211,7 +213,7 @@ router.get('/v1/agents/:agent_id', validateUUIDParam("agent_id"), async (req, re
 router.post('/v1/agents/:agent_id/heartbeat', validateUUIDParam("agent_id"), async (req, res) => {
   const { agent_id } = req.params;
   
-  const result = await handleHeartbeat(agent_id);
+  const result = await handleHeartbeat(agent_id, req.ip);
   if (result.success) {
     res.status(200).json(result);
   } else {
@@ -401,7 +403,7 @@ router.post('/v1/billing/skill/:skill_id', requireAuth, validateUUIDParam("skill
   }
 });
 
-router.get('/v1/billing/node/:node_id/balance', requireAuth, validateUUIDParam("node_id"), async (req, res) => {
+router.get('/v1/billing/node/:node_id/balance', requireAuth, requireAgentId("node_id"), validateUUIDParam("node_id"), async (req, res) => {
   try {
     const { node_id } = req.params;
     const result = await getNodeBalance(node_id);
@@ -411,7 +413,7 @@ router.get('/v1/billing/node/:node_id/balance', requireAuth, validateUUIDParam("
   }
 });
 
-router.get('/v1/billing/node/:node_id/stats', requireAuth, validateUUIDParam("node_id"), async (req, res) => {
+router.get('/v1/billing/node/:node_id/stats', requireAuth, requireAgentId("node_id"), validateUUIDParam("node_id"), async (req, res) => {
   try {
     const { node_id } = req.params;
     const result = await getBillingStats(node_id);
@@ -421,7 +423,7 @@ router.get('/v1/billing/node/:node_id/stats', requireAuth, validateUUIDParam("no
   }
 });
 
-router.post('/v1/billing/node/:node_id/withdraw', requireAuth, validateUUIDParam("node_id"), async (req, res) => {
+router.post('/v1/billing/node/:node_id/withdraw', requireAuth, requireAgentId("node_id"), validateUUIDParam("node_id"), async (req, res) => {
   try {
     const { node_id } = req.params;
     const { amount, reason } = req.body;
@@ -494,7 +496,7 @@ router.get('/v1/agents/:agent_id/profile', validateUUIDParam("agent_id"), async 
 // Agent 记忆 API 路由
 // ==========================================
 
-router.post('/v1/agents/:agent_id/memories', validateUUIDParam("agent_id"), async (req, res) => {
+router.post('/v1/agents/:agent_id/memories', requireAuth, requireAgentId("agent_id"), validateUUIDParam("agent_id"), async (req, res) => {
   const { agent_id } = req.params;
   const { type, content, related_agent_id, task_id, importance } = req.body;
   if (!content) {
@@ -504,20 +506,20 @@ router.post('/v1/agents/:agent_id/memories', validateUUIDParam("agent_id"), asyn
   res.status(result.success ? 200 : 400).json(result);
 });
 
-router.get('/v1/agents/:agent_id/memories', validateUUIDParam("agent_id"), async (req, res) => {
+router.get('/v1/agents/:agent_id/memories', requireAuth, requireAgentId("agent_id"), validateUUIDParam("agent_id"), async (req, res) => {
   const { agent_id } = req.params;
   const { type, limit, offset } = req.query;
   const result = await getMemories(agent_id, { type, limit: parseInt(limit) || 20, offset: parseInt(offset) || 0 });
   res.status(result.success ? 200 : 400).json(result);
 });
 
-router.get('/v1/agents/:agent_id/memories/stats', validateUUIDParam("agent_id"), async (req, res) => {
+router.get('/v1/agents/:agent_id/memories/stats', requireAuth, requireAgentId("agent_id"), validateUUIDParam("agent_id"), async (req, res) => {
   const { agent_id } = req.params;
   const result = await getMemoryStats(agent_id);
   res.status(result.success ? 200 : 400).json(result);
 });
 
-router.delete('/v1/agents/:agent_id/memories/:memory_id', validateUUIDParam("agent_id"), async (req, res) => {
+router.delete('/v1/agents/:agent_id/memories/:memory_id', requireAuth, requireAgentId("agent_id"), validateUUIDParam("agent_id"), async (req, res) => {
   const { agent_id, memory_id } = req.params;
   const result = await deleteMemory(agent_id, memory_id);
   res.status(result.success ? 200 : 400).json(result);
@@ -527,7 +529,7 @@ router.delete('/v1/agents/:agent_id/memories/:memory_id', validateUUIDParam("age
 // Agent 关系 API 路由
 // ==========================================
 
-router.post('/v1/agents/:agent_id/relationships', validateUUIDParam("agent_id"), async (req, res) => {
+router.post('/v1/agents/:agent_id/relationships', requireAuth, requireAgentId("agent_id"), validateUUIDParam("agent_id"), async (req, res) => {
   const { agent_id } = req.params;
   const { related_agent_id, type, rating } = req.body;
   if (!related_agent_id) {
@@ -537,14 +539,14 @@ router.post('/v1/agents/:agent_id/relationships', validateUUIDParam("agent_id"),
   res.status(result.success ? 200 : 400).json(result);
 });
 
-router.get('/v1/agents/:agent_id/relationships', validateUUIDParam("agent_id"), async (req, res) => {
+router.get('/v1/agents/:agent_id/relationships', requireAuth, requireAgentId("agent_id"), validateUUIDParam("agent_id"), async (req, res) => {
   const { agent_id } = req.params;
   const { type } = req.query;
   const result = await getRelationships(agent_id, { type });
   res.status(result.success ? 200 : 400).json(result);
 });
 
-router.delete('/v1/agents/:agent_id/relationships/:related_agent_id', validateUUIDParam("agent_id"), async (req, res) => {
+router.delete('/v1/agents/:agent_id/relationships/:related_agent_id', requireAuth, requireAgentId("agent_id"), validateUUIDParam("agent_id"), async (req, res) => {
   const { agent_id, related_agent_id } = req.params;
   const result = await deleteRelationship(agent_id, related_agent_id);
   res.status(result.success ? 200 : 400).json(result);
@@ -683,11 +685,22 @@ router.get('/v1/crossnetwork/messages/:messageId/status', requireAuth, async (re
   }
 });
 
+// 跨网络消息接收端点（供远端实例中继，需联邦共享密钥）
+router.post('/v1/crossnetwork/receive', requireFederationKey, async (req, res) => {
+  try {
+    const sourceNetwork = req.headers['x-federation-source'] || req.body?.source_network;
+    const result = await crossNetworkService.receiveFromRemote(sourceNetwork, req.body?.payload || req.body);
+    res.status(result.success ? 200 : 400).json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ==========================================
 // Agent 消息 API 路由
 // ==========================================
 
-router.post('/v1/agents/:agent_id/messages', validateUUIDParam("agent_id"), async (req, res) => {
+router.post('/v1/agents/:agent_id/messages', requireAuth, requireAgentId("agent_id"), validateUUIDParam("agent_id"), async (req, res) => {
   const { agent_id } = req.params;
   const { receiver_id, type, content, task_id, encrypt } = req.body;
   if (!receiver_id || !content) {
@@ -697,7 +710,7 @@ router.post('/v1/agents/:agent_id/messages', validateUUIDParam("agent_id"), asyn
   res.status(result.success ? 200 : 400).json(result);
 });
 
-router.get('/v1/agents/:agent_id/messages', validateUUIDParam("agent_id"), async (req, res) => {
+router.get('/v1/agents/:agent_id/messages', requireAuth, requireAgentId("agent_id"), validateUUIDParam("agent_id"), async (req, res) => {
   const { agent_id } = req.params;
   const { unread_only, limit, offset } = req.query;
   const result = await getMessages(agent_id, {
@@ -708,28 +721,28 @@ router.get('/v1/agents/:agent_id/messages', validateUUIDParam("agent_id"), async
   res.status(result.success ? 200 : 400).json(result);
 });
 
-router.put('/v1/agents/:agent_id/messages/read', validateUUIDParam("agent_id"), async (req, res) => {
+router.put('/v1/agents/:agent_id/messages/read', requireAuth, requireAgentId("agent_id"), validateUUIDParam("agent_id"), async (req, res) => {
   const { agent_id } = req.params;
   const { message_ids } = req.body;
   const result = await markMessagesRead(agent_id, message_ids);
   res.status(result.success ? 200 : 400).json(result);
 });
 
-router.get('/v1/agents/:agent_id/messages/unread-count', validateUUIDParam("agent_id"), async (req, res) => {
+router.get('/v1/agents/:agent_id/messages/unread-count', requireAuth, requireAgentId("agent_id"), validateUUIDParam("agent_id"), async (req, res) => {
   const { agent_id } = req.params;
   const result = await getUnreadCount(agent_id);
   res.status(result.success ? 200 : 400).json(result);
 });
 
 // 离线消息队列
-router.get('/v1/agents/:agent_id/messages/offline', validateUUIDParam("agent_id"), async (req, res) => {
+router.get('/v1/agents/:agent_id/messages/offline', requireAuth, requireAgentId("agent_id"), validateUUIDParam("agent_id"), async (req, res) => {
   const { agent_id } = req.params;
   const { limit } = req.query;
   const result = await dequeueOfflineMessages(agent_id, parseInt(limit) || 50);
   res.status(result.success ? 200 : 500).json(result);
 });
 
-router.get('/v1/agents/:agent_id/messages/offline-count', validateUUIDParam("agent_id"), async (req, res) => {
+router.get('/v1/agents/:agent_id/messages/offline-count', requireAuth, requireAgentId("agent_id"), validateUUIDParam("agent_id"), async (req, res) => {
   const { agent_id } = req.params;
   const result = await getOfflineQueueLength(agent_id);
   res.status(result.success ? 200 : 500).json(result);
@@ -809,7 +822,7 @@ router.post('/v1/auth/login', async (req, res) => {
     if (!result.valid) {
       return res.status(401).json(formatResponse(false, null, '无效的 API Key'));
     }
-    const token = authService.generateToken({ agentId: result.agentId });
+    const token = authService.generateToken(result.agentId);
     res.json(formatResponse(true, { token, agent_id: result.agentId }));
   } catch (error) {
     res.status(500).json(formatResponse(false, null, '登录失败'));
@@ -980,7 +993,7 @@ router.get('/v1/billing/balance', requireAuth, async (req, res) => {
   }
 });
 
-router.get('/v1/agents/:agent_id/stats', validateUUIDParam("agent_id"), async (req, res) => {
+router.get('/v1/agents/:agent_id/stats', requireAuth, requireAgentId("agent_id"), validateUUIDParam("agent_id"), async (req, res) => {
   try {
     const { agent_id } = req.params;
     const pgPool = getPostgres();
@@ -1002,11 +1015,15 @@ router.get('/v1/agents/:agent_id/stats', validateUUIDParam("agent_id"), async (r
   }
 });
 
-router.post('/v1/billing/topup', requireAuth, async (req, res) => {
+// 充值仅限管理员（无真实支付渠道时禁止公开造币）
+router.post('/v1/billing/topup', verifyApiKey, requireAdmin, async (req, res) => {
   try {
     const { amount, method } = req.body;
     if (!amount || amount <= 0) {
       return res.status(400).json({ error: 'amount must be positive' });
+    }
+    if (Number(amount) > 1000000) {
+      return res.status(400).json({ error: 'amount exceeds maximum' });
     }
     const agentId = req.agentId;
     const { executeQuery } = await import('../services/databaseService.js');
@@ -1767,11 +1784,30 @@ router.get('/v1/admin/billing/overview', verifyApiKey, requireAdmin, async (req,
   }
 });
 
+// Webhook 死信管理（管理员）
+router.get('/v1/admin/webhooks/dead-letter', verifyApiKey, requireAdmin, async (req, res) => {
+  try {
+    const rows = await listDeadDeliveries({ limit: req.query.limit });
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/v1/admin/webhooks/deliveries/:id/retry', verifyApiKey, requireAdmin, async (req, res) => {
+  try {
+    const result = await retryDeliveryAdmin(req.params.id);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
 // ═════════════════════════════════════════════════════════
-// Phase 5: 多链支付 — 钱包 + 充值 + 提现
+// Phase 5: 多币种支付 — 钱包 + 充值 + 提现 (ETH / BTC / USDT)
 // ═════════════════════════════════════════════════════════
 
-// 获取支持的链
+// 获取支持的货币
 router.get('/v1/payment/chains', verifyApiKey, async (_req, res) => {
   const result = await getSupportedChains();
   res.json(result);
@@ -1787,23 +1823,23 @@ router.post('/v1/payment/wallets', verifyApiKey, async (req, res) => {
   res.status(result.success ? 201 : 400).json(result);
 });
 
-router.get('/v1/payment/wallets/:node_id', verifyApiKey, validateUUIDParam('node_id'), async (req, res) => {
+router.get('/v1/payment/wallets/:node_id', requireAuth, requireAgentId('node_id'), validateUUIDParam('node_id'), async (req, res) => {
   const result = await getWallets(req.params.node_id, { chain: req.query.chain });
   res.json(result);
 });
 
-router.put('/v1/payment/wallets/:node_id/:wallet_id/primary', verifyApiKey, validateUUIDParam('node_id'), async (req, res) => {
+router.put('/v1/payment/wallets/:node_id/:wallet_id/primary', requireAuth, requireAgentId('node_id'), validateUUIDParam('node_id'), async (req, res) => {
   const result = await setPrimaryWallet(req.params.node_id, req.params.wallet_id);
   res.json(result);
 });
 
-router.delete('/v1/payment/wallets/:node_id/:wallet_id', verifyApiKey, validateUUIDParam('node_id'), async (req, res) => {
+router.delete('/v1/payment/wallets/:node_id/:wallet_id', requireAuth, requireAgentId('node_id'), validateUUIDParam('node_id'), async (req, res) => {
   const result = await removeWallet(req.params.node_id, req.params.wallet_id);
   res.json(result);
 });
 
 // 充值
-router.post('/v1/payment/deposit', verifyApiKey, async (req, res) => {
+router.post('/v1/payment/deposit', requireAuth, requireOwnNode(), async (req, res) => {
   const { node_id, chain, tx_hash, amount, currency, from_address, to_address } = req.body;
   if (!node_id || !chain || !tx_hash || !amount) {
     return res.status(400).json(formatResponse(false, null, '缺少 node_id, chain, tx_hash, amount'));
@@ -1813,7 +1849,7 @@ router.post('/v1/payment/deposit', verifyApiKey, async (req, res) => {
 });
 
 // 提现
-router.post('/v1/payment/withdraw', verifyApiKey, async (req, res) => {
+router.post('/v1/payment/withdraw', requireAuth, requireOwnNode(), async (req, res) => {
   const { node_id, chain, to_address, amount, currency } = req.body;
   if (!node_id || !chain || !to_address || !amount) {
     return res.status(400).json(formatResponse(false, null, '缺少 node_id, chain, to_address, amount'));
@@ -1822,8 +1858,21 @@ router.post('/v1/payment/withdraw', verifyApiKey, async (req, res) => {
   res.status(result.success ? 201 : 400).json(result);
 });
 
+// 管理员确认充值入账（线下核验链上交易后调用）
+router.post('/v1/payment/deposits/:tx_id/confirm', verifyApiKey, requireAdmin, async (req, res) => {
+  const result = await confirmDeposit(req.params.tx_id, req.body?.note || null);
+  res.status(result.success ? 200 : 400).json(result);
+});
+
+// 管理员更新提现状态：completed / failed（失败自动退款）
+router.post('/v1/payment/withdrawals/:tx_id/:status', verifyApiKey, requireAdmin, async (req, res) => {
+  const { tx_id, status } = req.params;
+  const result = await updateWithdrawalStatus(tx_id, status, req.body?.note || null);
+  res.status(result.success ? 200 : 400).json(result);
+});
+
 // 链上交易记录
-router.get('/v1/payment/transactions/:node_id', verifyApiKey, validateUUIDParam('node_id'), async (req, res) => {
+router.get('/v1/payment/transactions/:node_id', requireAuth, requireAgentId('node_id'), validateUUIDParam('node_id'), async (req, res) => {
   const result = await getChainTransactions(req.params.node_id, {
     chain: req.query.chain,
     type: req.query.type,
@@ -2285,6 +2334,17 @@ router.get('/v1/monitor/alerts', verifyApiKey, async (req, res) => {
   }
 });
 
+// 持久化指标历史
+router.get('/v1/monitor/metrics/history', verifyApiKey, async (req, res) => {
+  try {
+    const hours = Math.min(Math.max(parseInt(req.query.hours) || 24, 1), 168);
+    const result = await monitorService.getMetricsHistory(hours, req.query.limit);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ============================================
 // Phase 8: 联邦网络 API
 // ============================================
@@ -2374,7 +2434,7 @@ router.post('/v1/federation/task/dispatch', verifyApiKey, async (req, res) => {
 });
 
 // 接收远端任务（被远端调用）
-router.post('/v1/federation/task/receive', async (req, res) => {
+router.post('/v1/federation/task/receive', requireFederationKey, async (req, res) => {
   try {
     const sourceNetwork = req.headers['x-federation-source'] || req.body.source_network;
     const taskData = req.body.task;
@@ -2389,7 +2449,7 @@ router.post('/v1/federation/task/receive', async (req, res) => {
 });
 
 // 处理远端匹配查询（被远端调用）
-router.post('/v1/federation/task/match', async (req, res) => {
+router.post('/v1/federation/task/match', requireFederationKey, async (req, res) => {
   try {
     const sourceNetwork = req.headers['x-federation-source'] || req.body.source_network;
     const taskData = req.body.task;
@@ -2411,7 +2471,7 @@ router.post('/v1/federation/topology/sync/:network_id', verifyApiKey, async (req
 });
 
 // 返回本地拓扑摘要（供远端调用）
-router.get('/v1/federation/topology/summary', async (req, res) => {
+router.get('/v1/federation/topology/summary', requireFederationKey, async (req, res) => {
   try {
     const result = await federationService.getLocalTopologySummary();
     res.json(result);

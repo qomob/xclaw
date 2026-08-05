@@ -22,17 +22,24 @@ export async function registerNode(nodeData, signature, clientIp) {
     // 生成节点 ID（基于公钥哈希）
     const nodeId = generateUUID(nodeData.public_key);
 
-    let latitude = nodeData.latitude || 0;
-    let longitude = nodeData.longitude || 0;
+    let latitude = nodeData.latitude ?? null;
+    let longitude = nodeData.longitude ?? null;
 
-    if ((!latitude || !longitude) && clientIp) {
-      const geo = lookup(clientIp);
-      if (geo) {
-        latitude = geo.latitude;
-        longitude = geo.longitude;
-        console.log(`[register] GeoIP: ${clientIp} → ${geo.city || 'Unknown'} (${latitude}, ${longitude})`);
-      } else {
-        console.warn(`[register] GeoIP lookup failed for IP: ${clientIp}`);
+    if (latitude == null || longitude == null) {
+      if (clientIp) {
+        const geo = lookup(clientIp);
+        if (geo) {
+          latitude = geo.latitude;
+          longitude = geo.longitude;
+          console.log(`[register] GeoIP: ${clientIp} → ${geo.city || 'Unknown'} (${latitude}, ${longitude})`);
+        } else {
+          console.warn(`[register] GeoIP lookup failed for IP: ${clientIp}`);
+        }
+      }
+      if (latitude == null || longitude == null) {
+        latitude = config.geo.defaultLatitude;
+        longitude = config.geo.defaultLongitude;
+        console.warn(`[register] No coordinates available, using defaults: (${latitude}, ${longitude})`);
       }
     } else {
       console.log(`[register] Using provided coords: (${latitude}, ${longitude}), IP: ${clientIp}`);
@@ -132,17 +139,10 @@ export async function registerNode(nodeData, signature, clientIp) {
 
     // 生成 API key 用于认证（如果不存在）
     let apiKey = null;
-    // 查找是否已有 API key
-    const keys = await redisClient.keys(`apikey:*`);
-    for (const key of keys) {
-      const value = await redisClient.get(key);
-      if (value === nodeId) {
-        apiKey = key.replace('apikey:', '');
-        break;
-      }
-    }
+    apiKey = await redisClient.get(`agent_apikey:${nodeId}`);
     if (!apiKey) {
       apiKey = await authService.generateApiKey(nodeId);
+      await redisClient.set(`agent_apikey:${nodeId}`, apiKey);
     }
 
     eventBus.emit('agent.registered', { node_id: nodeId, name: nodeData.agent_name, capabilities: nodeData.capabilities }, { sourceId: nodeId });
@@ -271,7 +271,7 @@ export async function handleHeartbeat(nodeId, clientIp) {
       if (existing.rows.length > 0) {
         const lat = Number(existing.rows[0].latitude);
         const lng = Number(existing.rows[0].longitude);
-        if (!lat && !lng) {
+        if ((lat === 0 && lng === 0) || (Number.isNaN(lat) || Number.isNaN(lng))) {
           const geo = lookup(clientIp);
           if (geo) {
             extraUpdate = ', latitude = $4, longitude = $5';
@@ -323,7 +323,7 @@ export async function deleteNode(nodeId) {
     await redisClient.del(`node:${nodeId}`);
     await redisClient.srem('online_nodes', nodeId);
     
-    topologyService.removeNode(nodeId);
+    await topologyService.publishDelete(nodeId);
     
     return formatResponse(true, { message: '节点删除成功' });
   } catch (error) {

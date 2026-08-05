@@ -3,6 +3,7 @@ import logger from './loggerService.js';
 import authService from './authService.js';
 import encryptionService from './encryptionService.js';
 import { getRedis } from '../core/dependencies.js';
+import { safeFetch } from '../core/httpGuard.js';
 
 const MESSAGE_QUEUE_PREFIX = 'xclaw:crossnet:queue:';
 const MESSAGE_STATUS_PREFIX = 'xclaw:crossnet:status:';
@@ -179,17 +180,14 @@ class CrossNetworkService {
     let lastError;
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), RELAY_TIMEOUT_MS);
-
-        const response = await fetch(`${targetUrl.replace(/\/+$/, '')}/api/v1/crossnet/receive`, {
+        const response = await safeFetch(`${targetUrl.replace(/\/+$/, '')}/api/v1/crossnetwork/receive`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source_network: this.localNetworkId, payload: encryptedMessage }),
-          signal: controller.signal
-        });
-
-        clearTimeout(timeout);
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Federation-Key': process.env.FEDERATION_KEY || process.env.API_KEY || ''
+          },
+          body: JSON.stringify({ source_network: this.localNetworkId, payload: encryptedMessage })
+        }, RELAY_TIMEOUT_MS);
 
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${await response.text().catch(() => '')}`);

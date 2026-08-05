@@ -3,6 +3,7 @@ import { getPostgres, getRedis } from '../core/dependencies.js';
 import { generateUUID, formatResponse } from '../core/utils.js';
 import logger from './loggerService.js';
 import eventBus from './eventBus.js';
+import { safeFetch } from '../core/httpGuard.js';
 
 // ============================================
 // Table initialization
@@ -367,12 +368,11 @@ export async function invokeMCPTool(serverId, toolName, params, callerId) {
 
     // 3. Send to server endpoint
     const headers = buildAuthHeaders(server);
-    const response = await fetch(server.endpoint, {
+    const response = await safeFetch(server.endpoint, {
       method: 'POST',
       headers,
       body: JSON.stringify(rpcRequest),
-      signal: AbortSignal.timeout(30000),
-    });
+    }, 30000);
 
     const durationMs = Date.now() - startTime;
     const responseBody = await response.json();
@@ -461,12 +461,11 @@ export async function listMCPServerTools(serverId) {
     };
 
     const headers = buildAuthHeaders(server);
-    const response = await fetch(server.endpoint, {
+    const response = await safeFetch(server.endpoint, {
       method: 'POST',
       headers,
       body: JSON.stringify(rpcRequest),
-      signal: AbortSignal.timeout(15000),
-    });
+    }, 15000);
 
     const responseBody = await response.json();
 
@@ -683,12 +682,11 @@ export async function checkMCPServerHealth(serverId) {
     let responseStatus = null;
 
     try {
-      const response = await fetch(server.endpoint, {
+      const response = await safeFetch(server.endpoint, {
         method: 'POST',
         headers,
         body: JSON.stringify(rpcRequest),
-        signal: AbortSignal.timeout(10000),
-      });
+      }, 10000);
       responseStatus = response.status;
       healthy = response.ok;
     } catch (fetchErr) {

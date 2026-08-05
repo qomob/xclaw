@@ -2,6 +2,7 @@ import { getPostgres, getRedis } from '../core/dependencies.js';
 import { generateUUID, calculateDistance } from '../core/utils.js';
 import logger from './loggerService.js';
 import { computeTrustScore } from './socialGraphService.js';
+import crypto from 'crypto';
 
 const CACHE_TTL = 300; // 5 分钟
 const CACHE_PREFIX = 'xclaw:taskmarket:';
@@ -505,13 +506,20 @@ export async function browseTasks(filters = {}) {
     const result = await pgPool.query(sql, params);
     
     // 获取总数
-    const countSql = `
-      SELECT COUNT(*) as total FROM tasks t
-      WHERE 1=1
-      ${filters.status ? `AND t.status = '${filters.status}'` : ''}
-      ${filters.type ? `AND t.type = '${filters.type}'` : ''}
-    `;
-    const countResult = await pgPool.query(countSql);
+    const countConditions = [];
+    const countParams = [];
+    if (filters.status) {
+      countConditions.push(`t.status = $${countParams.length + 1}`);
+      countParams.push(filters.status);
+    }
+    if (filters.type) {
+      countConditions.push(`t.type = $${countParams.length + 1}`);
+      countParams.push(filters.type);
+    }
+    const countSql = `SELECT COUNT(*) as total FROM tasks t ${
+      countConditions.length > 0 ? 'WHERE ' + countConditions.join(' AND ') : ''
+    }`;
+    const countResult = await pgPool.query(countSql, countParams);
     
     return {
       success: true,
@@ -537,29 +545,87 @@ export async function getMarketStats() {
   const pgPool = getPostgres();
   
   try {
-    const statsResult = await pgPool.query('SELECT * FROM task_market_stats');
-    const stats = statsResult.rows[0];
-    
-    // 额外统计：热门技能、平均竞标数等
-    const hotSkillsResult = await pgPool.query(`
-      SELECT skill_id, s.name as skill_name, COUNT(*) as task_count
-      FROM tasks t
-      LEFT JOIN skills s ON t.skill_id = s.id
-      WHERE t.skill_id IS NOT NULL AND t.status IN ('pending', 'open', 'assigned')
-      GROUP BY skill_id, s.name
-      ORDER BY task_count DESC
-      LIMIT 10
-    `);
-    
-    const avgBidsResult = await pgPool.query(`
-      SELECT AVG(bid_count) as avg_bids_per_task
-      FROM (
-        SELECT task_id, COUNT(*) as bid_count
-        FROM task_bids
-        WHERE status = 'pending'
-        GROUP BY task_id
-      ) sub
-    `);
+    const [taskStatsResult, bidStatsResult, hotSkillsResult, avgBidsResult] = await Promise.all([
+      pgPool.query(`
+        SELECT
+          COUNT(*) as total_tasks,
+          COUNT(*) FILTER (WHERE status IN ('open', 'pending')) as open_tasks,
+          COUNT(*) FILTER (WHERE status = 'assigned') as assigned_tasks,
+          COUNT(*) FILTER (WHERE status = 'completed') as completed_tasks,
+          COUNT(*) FILTER (WHERE status = 'cancelled') as cancelled_tasks,
+          COALESCE(SUM(budget_min), 0) as total_budget_min,
+          COALESCE(SUM(budget_max), 0) as total_budget_max,
+          COALESCE(AVG(budget_min), 0) as avg_budget_min,
+          COALESCE(AVG(budget_max), 0) as avg_budget_max,
+          COUNT(DISTINCT caller_id) as unique_caller_count,
+          COUNT(DISTINCT node_id) as unique_worker_count
+        FROM tasks
+      `),
+      pgPool.query(`
+        SELECT COUNT(*) as active_bids FROM task_bids WHERE status = 'pending'
+      `),
+      pgPool.query(`
+        SELECT skill_id, s.name as skill_name, COUNT(*) as task_count
+        FROM tasks t
+        LEFT JOIN skills s ON t.skill_id = s.id
+        WHERE t.skill_id IS NOT NULL AND t.status IN ('pending', 'open', 'assigned')
+        GROUP BY skill_id, s.name
+        ORDER BY task_count DESC
+        LIMIT 10
+      `),
+      pgPool.query(`
+        SELECT AVG(bid_count) as avg_bids_per_task
+        FROM (
+          SELECT task_id, COUNT(*) as bid_count
+          FROM task_bids
+          WHERE status = 'pending'
+          GROUP BY task_id
+        ) sub
+      `)
+    ]);
+
+    const taskStats = taskStatsResult.rows[0] || {};
+    const stats = {
+      ...taskStats,
+      active_bids: parseInt(bidStatsResult.rows[0]?.active_bids) || 0
+    };
+
+    // 刷新 task_market_stats 派生表（federationService 兼容读取）
+    await pgPool.query(
+      `INSERT INTO task_market_stats
+        (id, total_tasks, open_tasks, assigned_tasks, completed_tasks, cancelled_tasks,
+         active_bids, total_budget_min, total_budget_max, avg_budget_min, avg_budget_max,
+         unique_caller_count, unique_worker_count, updated_at)
+       VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+       ON CONFLICT (id) DO UPDATE SET
+         total_tasks = EXCLUDED.total_tasks,
+         open_tasks = EXCLUDED.open_tasks,
+         assigned_tasks = EXCLUDED.assigned_tasks,
+         completed_tasks = EXCLUDED.completed_tasks,
+         cancelled_tasks = EXCLUDED.cancelled_tasks,
+         active_bids = EXCLUDED.active_bids,
+         total_budget_min = EXCLUDED.total_budget_min,
+         total_budget_max = EXCLUDED.total_budget_max,
+         avg_budget_min = EXCLUDED.avg_budget_min,
+         avg_budget_max = EXCLUDED.avg_budget_max,
+         unique_caller_count = EXCLUDED.unique_caller_count,
+         unique_worker_count = EXCLUDED.unique_worker_count,
+         updated_at = NOW()`,
+      [
+        parseInt(taskStats.total_tasks) || 0,
+        parseInt(taskStats.open_tasks) || 0,
+        parseInt(taskStats.assigned_tasks) || 0,
+        parseInt(taskStats.completed_tasks) || 0,
+        parseInt(taskStats.cancelled_tasks) || 0,
+        parseInt(stats.active_bids) || 0,
+        parseFloat(taskStats.total_budget_min) || 0,
+        parseFloat(taskStats.total_budget_max) || 0,
+        parseFloat(taskStats.avg_budget_min) || 0,
+        parseFloat(taskStats.avg_budget_max) || 0,
+        parseInt(taskStats.unique_caller_count) || 0,
+        parseInt(taskStats.unique_worker_count) || 0
+      ]
+    );
     
     return {
       success: true,

@@ -2,6 +2,7 @@ import { getPostgres, getRedis } from '../core/dependencies.js';
 import { generateUUID, formatResponse } from '../core/utils.js';
 import logger from './loggerService.js';
 import eventBus from './eventBus.js';
+import { safeFetch } from '../core/httpGuard.js';
 
 const A2A_PREFIX = 'a2a:';
 
@@ -272,7 +273,7 @@ class A2AService {
       let remoteResult = null;
       if (targetCard.url) {
         try {
-          const resp = await fetch(targetCard.url, {
+          const resp = await safeFetch(targetCard.url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -281,8 +282,7 @@ class A2AService {
               params: { id: taskId, message: { role: 'user', parts: [{ text: JSON.stringify(input) }] } },
               id: 1,
             }),
-            signal: AbortSignal.timeout(30000),
-          });
+          }, 30000);
           if (resp.ok) remoteResult = await resp.json();
         } catch (e) {
           logger.warn('A2A remote call failed', { error: e.message, to: to_agent_id });
