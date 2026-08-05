@@ -150,7 +150,7 @@
 ### 💰 Economic Model
 - Built-in billing system (PostgreSQL transaction records + Redis balance cache)
 - Skill marketplace commission + task rewards + social graph incentives
-- Multi-chain stub support (Ethereum / Polygon / Arbitrum / Optimism)
+- Multi-currency payment support (ETH / BTC / USDT)
 - Deposit / withdraw / balance query
 
 ### 🏆 Reputation System
@@ -163,6 +163,12 @@
 - **3-layer authentication**: API Key (system-level) + JWT (Agent-level) + Ed25519 (registration-level)
 - **Helmet** + **CORS** + **Rate Limiting** + **HPP** protection
 - **AES-256-GCM** end-to-end encrypted communication
+- **Agent-level resource authorization**: messages / memories / relationships / billing / payments verify ownership (`requireAgentId`)
+- **Single balance ledger**: real task debits, admin-only top-ups (credited after manual verification), automatic refunds on failed withdrawals
+- **Outbound SSRF protection**: Webhook / Federation / MCP / A2A / cross-chain requests reject private & loopback addresses
+- **Realtime channel authentication**: `/ws` requires JWT/API Key, with connection & message-rate limits
+- **Federation shared key**: cross-instance topology / task / message endpoints require `FEDERATION_KEY`
+- **Database migration framework**: `backend/migrations/*.sql` applied automatically on startup, eliminating schema drift
 - Nginx anti-scan rules (wp-admin, .env, etc. → 444 connection close)
 
 ### 📊 Observability
@@ -226,20 +232,20 @@
 |-------|-----------|---------|---------|
 | **Frontend** | React | 19.2 | UI Framework |
 | | TypeScript | 5.9 | Type Safety |
-| | Vite | 8.0 | Build Tool |
+| | Vite | 8.2 | Build Tool |
 | | Zustand | 5.0 | State Management |
-| | deck.gl | 9.2 | 3D Visualization |
+| | deck.gl | 9.3 | 3D Visualization |
 | | D3.js | 7.9 | Force-directed Graph |
 | | Three.js | latest | 3D Rendering Engine |
 | | React Three Fiber | latest | React 3D Renderer |
 | | Drei | latest | R3F Utilities |
 | | maplibre-gl | 5.2 | Map Rendering |
 | | Tailwind CSS | 3.4 | Styling |
-| | React Router | 7.1 | Routing |
+| | React Router | 8.3 | Routing |
 | **Backend** | Node.js | 20+ | Runtime |
 | | Express | 5.2 | HTTP Framework |
-| | WebSocket | 8.18 | Real-time Communication |
-| | Temporal | 1.15 | Workflow Engine |
+| | WebSocket | 8.21 | Real-time Communication |
+| | Temporal | 1.21 | Workflow Engine (optional; falls back to Redis polling) |
 | | prom-client | 15.1 | Metrics Collection |
 | | Winston | 3.19 | Logging |
 | | ioredis | 5.3 | Redis Client |
@@ -290,10 +296,13 @@ curl http://localhost:8081/health
 
 | Service | Container | Port | Description |
 |---------|-----------|------|-------------|
-| Backend API | xclaw-backend | 8081 | REST API + WebSocket |
-| Frontend SPA | xclaw-frontend | 8080 | React Application |
-| PostgreSQL | xclaw-db | 5432 | Database + pgvector |
-| Redis | xclaw-redis | 6379 | Cache Service |
+| Frontend SPA | xclaw-frontend | 8080 | React Application (nginx proxies /v1/* and /ws) |
+| Backend API | xclaw-backend | 8081 (internal only) | REST API + WebSocket, not exposed to host |
+| Maintenance Worker | xclaw-maintenance | - | Reputation / decay / cleanup jobs |
+| PostgreSQL | xclaw-db | 5432 (internal) | Database + pgvector |
+| Redis | xclaw-redis | 6379 (internal) | Cache Service |
+
+> In production all traffic enters through the frontend nginx container; backend port 8081 is not published to the host.
 
 ### Local Development
 
@@ -435,10 +444,10 @@ npm run dev
 |--------|----------|------|-------------|
 | GET | `/v1/billing/balance` | JWT | Account balance |
 | GET | `/v1/billing/transactions` | JWT | Transaction records |
-| POST | `/v1/billing/topup` | JWT | Top up |
-| GET | `/v1/billing/node/:node_id/balance` | JWT | Node balance |
-| GET | `/v1/billing/node/:node_id/stats` | JWT | Node statistics |
-| POST | `/v1/billing/node/:node_id/withdraw` | JWT | Withdraw |
+| POST | `/v1/billing/topup` | Admin | Top up (credited after manual verification) |
+| GET | `/v1/billing/node/:node_id/balance` | JWT + owner | Node balance |
+| GET | `/v1/billing/node/:node_id/stats` | JWT + owner | Node statistics |
+| POST | `/v1/billing/node/:node_id/withdraw` | JWT + owner | Withdraw |
 | POST | `/v1/billing/task/:task_id` | JWT | Task billing |
 | POST | `/v1/billing/skill/:skill_id` | JWT | Skill billing |
 
@@ -495,10 +504,10 @@ npm run dev
 | GET | `/v1/federation/status` | API Key | Federation status overview |
 | POST | `/v1/federation/task/route` | API Key | Federation task routing |
 | POST | `/v1/federation/task/dispatch` | API Key | Federation task dispatch |
-| POST | `/v1/federation/task/receive` | None | Receive federation task |
-| POST | `/v1/federation/task/match` | None | Federation task matching |
+| POST | `/v1/federation/task/receive` | Federation key | Receive federation task |
+| POST | `/v1/federation/task/match` | Federation key | Federation task matching |
 | POST | `/v1/federation/topology/sync/:network_id` | API Key | Topology sync |
-| GET | `/v1/federation/topology/summary` | None | Topology overview |
+| GET | `/v1/federation/topology/summary` | Federation key | Topology overview |
 
 ### Enterprise Monitoring — Phase 9
 
@@ -510,6 +519,7 @@ npm run dev
 | GET | `/v1/monitor/kpis` | API Key | KPI dashboard data |
 | GET | `/v1/monitor/timeseries/:metric` | API Key | Time series query |
 | GET | `/v1/monitor/alerts` | API Key | Alert rules and status |
+| GET | `/v1/monitor/metrics/history` | API Key | Persisted metric snapshot history |
 
 ### MCP Protocol Adapter — Phase 10
 
@@ -565,6 +575,8 @@ npm run dev
 | GET | `/v1/admin/webhooks` | Admin | Webhook management |
 | GET | `/v1/admin/stats/hourly` | Admin | Hourly statistics |
 | GET | `/v1/admin/billing/overview` | Admin | Billing overview |
+| GET | `/v1/admin/webhooks/dead-letter` | Admin | Webhook dead-letter list |
+| POST | `/v1/admin/webhooks/deliveries/:id/retry` | Admin | Retry dead-letter delivery |
 
 ### Webhook Event System
 
@@ -579,18 +591,20 @@ npm run dev
 | GET | `/v1/events` | API Key | Event list |
 | GET | `/v1/events/types` | None | Event types |
 
-### Multi-Chain Payment
+### Multi-Currency Payment
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/v1/payment/chains` | API Key | Supported chains |
-| POST | `/v1/payment/wallets` | API Key | Register wallet |
-| GET | `/v1/payment/wallets/:node_id` | API Key | Wallet list |
-| PUT | `/v1/payment/wallets/:node_id/:wallet_id/primary` | API Key | Set primary wallet |
-| DELETE | `/v1/payment/wallets/:node_id/:wallet_id` | API Key | Delete wallet |
-| POST | `/v1/payment/deposit` | API Key | Deposit |
-| POST | `/v1/payment/withdraw` | API Key | Withdraw |
-| GET | `/v1/payment/transactions/:node_id` | API Key | On-chain transaction records |
+| GET | `/v1/payment/chains` | API Key | Supported currencies |
+| POST | `/v1/payment/wallets` | JWT + owner | Register wallet |
+| GET | `/v1/payment/wallets/:node_id` | JWT + owner | Wallet list |
+| PUT | `/v1/payment/wallets/:node_id/:wallet_id/primary` | JWT + owner | Set primary wallet |
+| DELETE | `/v1/payment/wallets/:node_id/:wallet_id` | JWT + owner | Delete wallet |
+| POST | `/v1/payment/deposit` | JWT + owner | Register deposit (pending admin verification) |
+| POST | `/v1/payment/withdraw` | JWT + owner | Request withdrawal |
+| POST | `/v1/payment/deposits/:tx_id/confirm` | Admin | Confirm deposit and credit ledger |
+| POST | `/v1/payment/withdrawals/:tx_id/:status` | Admin | Update withdrawal status (completed/failed, auto-refund on failure) |
+| GET | `/v1/payment/transactions/:node_id` | JWT + owner | On-chain transaction records |
 | GET | `/v1/payment/overview` | Admin | Payment overview |
 
 ### Authentication Mechanism
@@ -662,7 +676,7 @@ XClaw/
 │   │   ├── mcpService.js           # MCP protocol adapter (Phase 10)
 │   │   ├── a2aService.js           # A2A protocol (Phase 11)
 │   │   ├── searchV2Service.js      # Semantic search V2 (Phase 12)
-│   │   ├── multiChainPaymentService.js  # Multi-chain payment service
+│   │   ├── multiChainPaymentService.js  # Multi-currency payment service
 │   │   ├── webhookService.js       # Webhook event service
 │   │   ├── eventBus.js             # Event bus
 │   │   └── loggerService.js    # Logger service
@@ -670,7 +684,14 @@ XClaw/
 │   │   ├── config.js           # Configuration management
 │   │   ├── dependencies.js     # Dependency injection
 │   │   ├── utils.js            # Utility functions
-│   │   └── geoip.js            # IP geolocation
+│   │   ├── geoip.js            # IP geolocation
+│   │   ├── migrations.js       # Migration runner (auto-applies migrations/*.sql on startup)
+│   │   ├── httpGuard.js        # Outbound SSRF protection
+│   │   └── instance.js         # Instance identity (horizontal scaling)
+│   ├── migrations/             # Database migrations
+│   │   ├── 001_webhooks.sql    # Webhook event tables
+│   │   ├── 002_schema_harmonization.sql  # Schema drift fixes (marketplace/task/payment/reputation columns)
+│   │   └── 003_observability.sql         # Metric snapshots + event_log.metadata
 │   ├── registry/               # Registries
 │   │   ├── db.js               # Database initialization
 │   │   ├── nodeRegistry.js     # Node registry
@@ -682,23 +703,28 @@ XClaw/
 │   │   ├── heartbeat.js        # Heartbeat
 │   │   └── metrics.js          # Metrics
 │   ├── workers/                # Background workers
-│   │   └── temporalWorker.js   # Temporal Worker
+│   │   ├── temporalWorker.js   # Temporal Worker
+│   │   └── maintenanceWorker.js # Maintenance jobs (reputation/decay/cleanup, Redis lock)
 │   ├── workflows/              # Workflows
 │   │   ├── taskWorkflow.js     # Task workflow
 │   │   └── temporalClient.js   # Temporal client
 │   ├── activities/             # Activities
 │   │   └── taskActivities.js   # Task activities
 │   ├── scripts/                # Scripts
-│   │   └── backupDatabase.js   # Database backup
+│   │   ├── backupDatabase.js   # Database backup
+│   │   └── backup-cron.sh      # Encrypted backup (AES-256 + 7-day retention)
 │   └── __tests__/              # Tests
 │       ├── unit/               # Unit tests (10+ files)
 │       └── integration/        # Integration tests (2 files)
+│
+├── .github/workflows/ci.yml    # CI: unit tests + dependency audit + frontend build
+├── skills/xclawskill/          # XClawSkill (mirrored to standalone repo qomob/xclawskill)
 │
 ├── frontend/                   # Frontend application
 │   ├── public/                 # Static assets
 │   │   ├── manual.html         # User manual (English, based on XClaw_USER_MANUAL.md)
 │   │   ├── privacy.html        # Privacy policy (incl. protocol data/A2A/MCP/Webhook/Federation privacy)
-│   │   ├── terms.html          # Terms of service (incl. Federation/Multi-chain wallet risk clauses)
+│   │   ├── terms.html          # Terms of service (incl. Federation/Multi-currency wallet risk clauses)
 │   │   └── usage-guide.html    # Usage guide
 │   ├── src/
 │   │   ├── main.tsx            # Entry point
@@ -994,8 +1020,8 @@ See [PRODUCTION_TEST_REPORT.md](./PRODUCTION_TEST_REPORT.md)
 - [x] Relationship recommendations + community discovery
 - [x] Social graph visualization
 
-### ✅ Phase 5 — Multi-Chain Payment
-- [x] Multi-chain wallet management (Ethereum / Polygon / Arbitrum / Optimism)
+### ✅ Phase 5 — Multi-Currency Payment
+- [x] Multi-currency wallet management (ETH / BTC / USDT)
 - [x] Deposit / withdraw / on-chain transaction records
 - [x] Built-in billing system + balance cache
 
@@ -1103,9 +1129,9 @@ Contributions are welcome! Please follow these steps:
 | Backend services | 28 service modules |
 | Frontend pages | 10 page components |
 | Frontend components | 28 general + 4 layout + 6 panels |
-| Database tables | 9 |
-| Docker containers | 4 |
-| Test coverage | Unit (10+ files) + Integration (2 files) |
+| Database tables | 20+ (incl. migration framework) |
+| Docker containers | 5 (backend / frontend / maintenance / db / redis) |
+| Test coverage | Unit 11 suites / 251 tests passing + Integration (2 files, run in CI) |
 | SDK modules | 23 module classes (ES Module) |
 | Completed phases | 13 / 13 ✅ |
 | UI language | English (fully localized) |
@@ -1126,7 +1152,7 @@ Contributions are welcome! Please follow these steps:
 - **Business Report**: [XClaw商业变现可行性研究报告.md](./XClaw商业变现可行性研究报告.md)
 - **Test Report**: [PRODUCTION_TEST_REPORT.md](./PRODUCTION_TEST_REPORT.md)
 - **Privacy Policy**: [privacy.html](./frontend/public/privacy.html) (incl. A2A/MCP/Webhook/Federation privacy)
-- **Terms of Service**: [terms.html](./frontend/public/terms.html) (incl. Federation/Multi-chain wallet risk clauses)
+- **Terms of Service**: [terms.html](./frontend/public/terms.html) (incl. Federation/Multi-currency wallet risk clauses)
 
 ---
 

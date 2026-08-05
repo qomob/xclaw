@@ -150,7 +150,7 @@
 ### 💰 经济模型
 - 内置计费系统（PostgreSQL 交易记录 + Redis 余额缓存）
 - 技能市场佣金 + 任务奖励 + 社交图谱激励
-- 支持多链存根（Ethereum / Polygon / Arbitrum / Optimism）
+- 支持多币种支付（ETH / BTC / USDT）
 - 充值 / 提现 / 余额查询
 
 ### 🏆 声誉系统
@@ -163,6 +163,12 @@
 - **三层认证**：API Key（系统级）+ JWT（Agent 级）+ Ed25519（注册级）
 - **Helmet** + **CORS** + **Rate Limiting** + **HPP** 防护
 - **AES-256-GCM** 端到端加密通信
+- **Agent 级资源授权**：消息 / 记忆 / 关系 / 计费 / 支付均校验资源归属（`requireAgentId`）
+- **单一余额账本**：任务计费真实扣款、充值仅管理员可发起（线下核验后入账）、提现失败自动退款
+- **出站 SSRF 防护**：Webhook / 联邦 / MCP / A2A / 跨链请求统一拦截私网与回环地址
+- **实时通道认证**：`/ws` 推送要求 JWT/API Key，含连接数与消息频率限制
+- **联邦共享密钥**：跨实例拓扑 / 任务 / 消息端点需 `FEDERATION_KEY`
+- **数据库迁移框架**：启动自动应用 `backend/migrations/*.sql`，杜绝 schema 漂移
 - Nginx 反扫描规则（wp-admin、.env 等 → 444 连接关闭）
 
 ### 📊 可观测性
@@ -226,20 +232,20 @@
 |------|------|------|------|
 | **前端** | React | 19.2 | UI 框架 |
 | | TypeScript | 5.9 | 类型安全 |
-| | Vite | 8.0 | 构建工具 |
+| | Vite | 8.2 | 构建工具 |
 | | Zustand | 5.0 | 状态管理 |
-| | deck.gl | 9.2 | 3D 可视化 |
+| | deck.gl | 9.3 | 3D 可视化 |
 | | D3.js | 7.9 | 力导向图 |
 | | Three.js | latest | 3D 渲染引擎 |
 | | React Three Fiber | latest | React 3D 渲染 |
 | | Drei | latest | R3F 辅助库 |
 | | maplibre-gl | 5.2 | 地图渲染 |
 | | Tailwind CSS | 3.4 | 样式 |
-| | React Router | 7.1 | 路由 |
+| | React Router | 8.3 | 路由 |
 | **后端** | Node.js | 20+ | 运行时 |
 | | Express | 5.2 | HTTP 框架 |
-| | WebSocket | 8.18 | 实时通信 |
-| | Temporal | 1.15 | 工作流引擎 |
+| | WebSocket | 8.21 | 实时通信 |
+| | Temporal | 1.21 | 工作流引擎（可选，未配置时降级 Redis 轮询） |
 | | prom-client | 15.1 | 指标采集 |
 | | Winston | 3.19 | 日志 |
 | | ioredis | 5.3 | Redis 客户端 |
@@ -290,10 +296,13 @@ curl http://localhost:8081/health
 
 | 服务 | 容器名 | 端口 | 说明 |
 |------|--------|------|------|
-| 后端 API | xclaw-backend | 8081 | REST API + WebSocket |
-| 前端 SPA | xclaw-frontend | 8080 | React 应用 |
-| PostgreSQL | xclaw-db | 5432 | 数据库 + pgvector |
-| Redis | xclaw-redis | 6379 | 缓存服务 |
+| 前端 SPA | xclaw-frontend | 8080 | React 应用（nginx 反代 /v1/* 与 /ws） |
+| 后端 API | xclaw-backend | 8081（仅内网） | REST API + WebSocket，不对外暴露端口 |
+| 维护 Worker | xclaw-maintenance | - | 声誉重算 / 关系衰减 / 数据清理 |
+| PostgreSQL | xclaw-db | 5432（内网） | 数据库 + pgvector |
+| Redis | xclaw-redis | 6379（内网） | 缓存服务 |
+
+> 生产环境所有流量经前端容器 nginx 进入后端，后端 8081 不发布到宿主机。
 
 ### 本地开发
 
@@ -419,9 +428,9 @@ npm run dev
 
 | 方法 | 端点 | 认证 | 说明 |
 |------|------|------|------|
-| POST | `/v1/agents/:agent_id/relationships` | 无 | 更新关系 |
-| GET | `/v1/agents/:agent_id/relationships` | 无 | 关系列表 |
-| DELETE | `/v1/agents/:agent_id/relationships/:related_agent_id` | 无 | 删除关系 |
+| POST | `/v1/agents/:agent_id/relationships` | JWT + 归属 | 更新关系 |
+| GET | `/v1/agents/:agent_id/relationships` | JWT + 归属 | 关系列表 |
+| DELETE | `/v1/agents/:agent_id/relationships/:related_agent_id` | JWT + 归属 | 删除关系 |
 
 ### 认证
 
@@ -435,8 +444,8 @@ npm run dev
 |------|------|------|------|
 | GET | `/v1/billing/balance` | JWT | 账户余额 |
 | GET | `/v1/billing/transactions` | JWT | 交易记录 |
-| POST | `/v1/billing/topup` | JWT | 充值 |
-| GET | `/v1/billing/node/:node_id/balance` | JWT | 节点余额 |
+| POST | `/v1/billing/topup` | Admin | 充值（管理员线下核验后入账） |
+| GET | `/v1/billing/node/:node_id/balance` | JWT + 归属 | 节点余额 |
 | GET | `/v1/billing/node/:node_id/stats` | JWT | 节点统计 |
 | POST | `/v1/billing/node/:node_id/withdraw` | JWT | 提现 |
 | POST | `/v1/billing/task/:task_id` | JWT | 任务计费 |
@@ -495,10 +504,10 @@ npm run dev
 | GET | `/v1/federation/status` | API Key | 联邦状态概览 |
 | POST | `/v1/federation/task/route` | API Key | 联邦任务路由 |
 | POST | `/v1/federation/task/dispatch` | API Key | 联邦任务分发 |
-| POST | `/v1/federation/task/receive` | 无 | 接收联邦任务 |
-| POST | `/v1/federation/task/match` | 无 | 联邦任务匹配 |
+| POST | `/v1/federation/task/receive` | 联邦密钥 | 接收联邦任务 |
+| POST | `/v1/federation/task/match` | 联邦密钥 | 联邦任务匹配 |
 | POST | `/v1/federation/topology/sync/:network_id` | API Key | 拓扑同步 |
-| GET | `/v1/federation/topology/summary` | 无 | 拓扑概览 |
+| GET | `/v1/federation/topology/summary` | 联邦密钥 | 拓扑概览 |
 
 ### 企业监控（Monitor）— Phase 9
 
@@ -510,6 +519,7 @@ npm run dev
 | GET | `/v1/monitor/kpis` | API Key | KPI 仪表盘数据 |
 | GET | `/v1/monitor/timeseries/:metric` | API Key | 时间序列查询 |
 | GET | `/v1/monitor/alerts` | API Key | 告警规则与状态 |
+| GET | `/v1/monitor/metrics/history` | API Key | 持久化指标快照历史 |
 
 ### MCP 协议适配层 — Phase 10
 
@@ -565,6 +575,8 @@ npm run dev
 | GET | `/v1/admin/webhooks` | Admin | Webhook 管理 |
 | GET | `/v1/admin/stats/hourly` | Admin | 每小时统计 |
 | GET | `/v1/admin/billing/overview` | Admin | 计费总览 |
+| GET | `/v1/admin/webhooks/dead-letter` | Admin | Webhook 死信列表 |
+| POST | `/v1/admin/webhooks/deliveries/:id/retry` | Admin | 重试死信投递 |
 
 ### Webhook 事件系统
 
@@ -579,18 +591,20 @@ npm run dev
 | GET | `/v1/events` | API Key | 事件列表 |
 | GET | `/v1/events/types` | 无 | 事件类型 |
 
-### 多链支付（Payment）
+### 多币种支付（Payment）
 
 | 方法 | 端点 | 认证 | 说明 |
 |------|------|------|------|
-| GET | `/v1/payment/chains` | API Key | 支持的链列表 |
-| POST | `/v1/payment/wallets` | API Key | 注册钱包 |
-| GET | `/v1/payment/wallets/:node_id` | API Key | 钱包列表 |
-| PUT | `/v1/payment/wallets/:node_id/:wallet_id/primary` | API Key | 设为主钱包 |
-| DELETE | `/v1/payment/wallets/:node_id/:wallet_id` | API Key | 删除钱包 |
-| POST | `/v1/payment/deposit` | API Key | 充值 |
-| POST | `/v1/payment/withdraw` | API Key | 提现 |
-| GET | `/v1/payment/transactions/:node_id` | API Key | 链上交易记录 |
+| GET | `/v1/payment/chains` | API Key | 支持的货币列表 |
+| POST | `/v1/payment/wallets` | JWT + 归属 | 注册钱包 |
+| GET | `/v1/payment/wallets/:node_id` | JWT + 归属 | 钱包列表 |
+| PUT | `/v1/payment/wallets/:node_id/:wallet_id/primary` | JWT + 归属 | 设为主钱包 |
+| DELETE | `/v1/payment/wallets/:node_id/:wallet_id` | JWT + 归属 | 删除钱包 |
+| POST | `/v1/payment/deposit` | JWT + 归属 | 登记充值（待管理员核验） |
+| POST | `/v1/payment/withdraw` | JWT + 归属 | 发起提现 |
+| POST | `/v1/payment/deposits/:tx_id/confirm` | Admin | 确认充值入账 |
+| POST | `/v1/payment/withdrawals/:tx_id/:status` | Admin | 更新提现状态（completed/failed，失败自动退款） |
+| GET | `/v1/payment/transactions/:node_id` | JWT + 归属 | 链上交易记录 |
 | GET | `/v1/payment/overview` | Admin | 支付总览 |
 
 ### 认证机制
@@ -660,7 +674,7 @@ XClaw/
 │   │   ├── mcpService.js           # MCP 协议适配（Phase 10）
 │   │   ├── a2aService.js           # A2A 协议（Phase 11）
 │   │   ├── searchV2Service.js      # 语义搜索 V2（Phase 12）
-│   │   ├── multiChainPaymentService.js  # 多链支付服务
+│   │   ├── multiChainPaymentService.js  # 多币种支付服务
 │   │   ├── webhookService.js       # Webhook 事件服务
 │   │   ├── eventBus.js             # 事件总线
 │   │   └── loggerService.js    # 日志服务
@@ -668,7 +682,14 @@ XClaw/
 │   │   ├── config.js           # 配置管理
 │   │   ├── dependencies.js     # 依赖注入
 │   │   ├── utils.js            # 工具函数
-│   │   └── geoip.js            # IP 定位
+│   │   ├── geoip.js            # IP 定位
+│   │   ├── migrations.js       # 迁移运行器（启动自动应用 migrations/*.sql）
+│   │   ├── httpGuard.js        # 出站请求 SSRF 防护
+│   │   └── instance.js         # 多实例标识（水平扩展）
+│   ├── migrations/             # 数据库迁移
+│   │   ├── 001_webhooks.sql    # Webhook 事件表
+│   │   ├── 002_schema_harmonization.sql  # schema 漂移修复（补齐市场/任务/支付/声誉列）
+│   │   └── 003_observability.sql         # 指标快照表 + event_log.metadata
 │   ├── registry/               # 注册表
 │   │   ├── db.js               # 数据库初始化
 │   │   ├── nodeRegistry.js     # 节点注册
@@ -680,23 +701,28 @@ XClaw/
 │   │   ├── heartbeat.js        # 心跳
 │   │   └── metrics.js          # 指标
 │   ├── workers/                # 后台工作器
-│   │   └── temporalWorker.js   # Temporal Worker
+│   │   ├── temporalWorker.js   # Temporal Worker
+│   │   └── maintenanceWorker.js # 维护任务（声誉/衰减/清理，Redis 锁防重复）
 │   ├── workflows/              # 工作流
 │   │   ├── taskWorkflow.js     # 任务工作流
 │   │   └── temporalClient.js   # Temporal 客户端
 │   ├── activities/             # 活动
 │   │   └── taskActivities.js   # 任务活动
 │   ├── scripts/                # 脚本
-│   │   └── backupDatabase.js   # 数据库备份
+│   │   ├── backupDatabase.js   # 数据库备份
+│   │   └── backup-cron.sh      # 加密备份（AES-256 + 7 天保留）
 │   └── __tests__/              # 测试
 │       ├── unit/               # 单元测试（10+ 个文件）
 │       └── integration/        # 集成测试（2 个文件）
+│
+├── .github/workflows/ci.yml    # CI：单测 + 依赖审计 + 前端构建
+├── skills/xclawskill/          # XClawSkill（独立仓库 qomob/xclawskill 同步）
 │
 ├── frontend/                   # 前端应用
 │   ├── public/                 # 静态资源
 │   │   ├── manual.html         # 用户手册（英文，基于 XClaw_USER_MANUAL.md）
 │   │   ├── privacy.html        # 隐私政策（含协议数据/A2A/MCP/Webhook/联邦隐私说明）
-│   │   ├── terms.html          # 服务条款（含联邦网络/多链钱包风险条款）
+│   │   ├── terms.html          # 服务条款（含联邦网络/多币种钱包风险条款）
 │   │   └── usage-guide.html    # 使用指南
 │   ├── src/
 │   │   ├── main.tsx            # 入口
@@ -988,8 +1014,8 @@ curl http://localhost:8081/v1/stats/global
 - [x] 关系推荐 + 社区发现
 - [x] 社交图谱可视化
 
-### ✅ Phase 5 — 多链支付
-- [x] 多链钱包管理（Ethereum / Polygon / Arbitrum / Optimism）
+### ✅ Phase 5 — 多币种支付
+- [x] 多币种钱包管理（ETH / BTC / USDT）
 - [x] 充值 / 提现 / 链上交易记录
 - [x] 内置计费系统 + 余额缓存
 
@@ -1097,9 +1123,9 @@ curl http://localhost:8081/v1/stats/global
 | 后端服务 | 28 个服务模块 |
 | 前端页面 | 10 个页面组件 |
 | 前端组件 | 28 个通用组件 + 4 布局 + 6 面板 |
-| 数据库表 | 9 |
-| Docker 容器 | 4 |
-| 测试覆盖 | 单元（10+ 文件）+ 集成（2 文件） |
+| 数据库表 | 20+（含迁移框架自动补齐） |
+| Docker 容器 | 5（backend / frontend / maintenance / db / redis） |
+| 测试覆盖 | 单元 11 套件 251 用例通过 + 集成 2 文件（CI 内执行） |
 | SDK 模块 | 23 个模块类（ES Module） |
 | 已完成 Phase | 13 / 13 ✅ |
 | UI 语言 | English（全站英文化） |
@@ -1120,7 +1146,7 @@ curl http://localhost:8081/v1/stats/global
 - **商业报告**：[XClaw商业变现可行性研究报告.md](./XClaw商业变现可行性研究报告.md)
 - **测试报告**：[PRODUCTION_TEST_REPORT.md](./PRODUCTION_TEST_REPORT.md)
 - **隐私政策**：[privacy.html](./frontend/public/privacy.html)（含 A2A/MCP/Webhook/联邦隐私说明）
-- **服务条款**：[terms.html](./frontend/public/terms.html)（含联邦网络/多链钱包风险条款）
+- **服务条款**：[terms.html](./frontend/public/terms.html)（含联邦网络/多币种钱包风险条款）
 
 ---
 
