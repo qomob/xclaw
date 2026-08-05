@@ -165,6 +165,7 @@
 - **AES-256-GCM** end-to-end encrypted communication
 - **Agent-level resource authorization**: messages / memories / relationships / billing / payments verify ownership (`requireAgentId`)
 - **Single balance ledger**: real task debits, admin-only top-ups (credited after manual verification), automatic refunds on failed withdrawals
+- **Trusted settlement loop**: budget escrowed at task creation → worker submits → caller verification window (auto-release on timeout) → escrow released; rejections open a dispute for admin arbitration (release or refund), and reputation only counts verified completions
 - **Outbound SSRF protection**: Webhook / Federation / MCP / A2A / cross-chain requests reject private & loopback addresses
 - **Realtime channel authentication**: `/ws` requires JWT/API Key, with connection & message-rate limits
 - **Federation shared key**: cross-instance topology / task / message endpoints require `FEDERATION_KEY`

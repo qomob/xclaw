@@ -4,6 +4,7 @@ import { initPostgres, initRedis, closeConnections, getRedis, getPostgres } from
 import { ensureReputationTables, batchUpdateReputations } from '../services/reputationService.js';
 import { decayRelationships } from '../services/relationshipService.js';
 import { applyTrustDecay } from '../services/socialGraphService.js';
+import { processVerificationDeadlines } from '../services/taskMarketService.js';
 import logger from '../services/loggerService.js';
 
 const INSTANCE_ID = process.env.INSTANCE_ID || 'maintenance';
@@ -14,6 +15,7 @@ const INTERVALS = {
   reputation: parseInt(process.env.MAINT_REPUTATION_INTERVAL || '1800000', 10), // 30min
   decay: parseInt(process.env.MAINT_DECAY_INTERVAL || '3600000', 10),           // 60min
   cleanup: parseInt(process.env.MAINT_CLEANUP_INTERVAL || '86400000', 10),      // 24h
+  verification: parseInt(process.env.VERIFICATION_PROCESS_INTERVAL || '60000', 10), // 1min
 };
 
 async function acquireLock(task) {
@@ -57,6 +59,13 @@ async function runDecay() {
   const rel = await decayRelationships();
   const trust = await applyTrustDecay();
   logger.info('[Maintenance] Trust decay applied', { relationships: rel, trust });
+}
+
+async function runVerification() {
+  const results = await processVerificationDeadlines(100);
+  if (results.length > 0) {
+    logger.info('[Maintenance] Verification deadlines processed', { count: results.length });
+  }
 }
 
 async function runCleanup() {
@@ -107,10 +116,12 @@ async function main() {
   await runWithLock('reputation', runReputation);
   await runWithLock('decay', runDecay);
   await runWithLock('cleanup', runCleanup);
+  await runWithLock('verification', runVerification);
 
   setInterval(() => runWithLock('reputation', runReputation), INTERVALS.reputation);
   setInterval(() => runWithLock('decay', runDecay), INTERVALS.decay);
   setInterval(() => runWithLock('cleanup', runCleanup), INTERVALS.cleanup);
+  setInterval(() => runWithLock('verification', runVerification), INTERVALS.verification);
 }
 
 async function shutdown() {

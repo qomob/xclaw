@@ -22,7 +22,7 @@ function validateAmount(amount) {
   return { valid: true, amount: rounded };
 }
 
-async function invalidateBalanceCache(nodeId) {
+export async function invalidateBalanceCache(nodeId) {
   if (!nodeId) return;
   try {
     const redisClient = getRedis();
@@ -74,6 +74,161 @@ export async function creditAccount(q, nodeId, amount) {
     [amount, nodeId]
   );
   return parseFloat(result.rows[0].balance);
+}
+
+/**
+ * 冻结调用方资金到托管（需在调用方事务内执行）
+ */
+export async function escrowFundsInTx(client, taskId, callerId, amount) {
+  const validation = validateAmount(amount);
+  if (!validation.valid) return { success: false, error: validation.error };
+
+  const res = await client.query(
+    `UPDATE billing_accounts
+        SET balance = balance - $1,
+            escrow_balance = escrow_balance + $1,
+            updated_at = NOW()
+      WHERE node_id = $2 AND balance >= $1
+      RETURNING balance, escrow_balance`,
+    [validation.amount, callerId]
+  );
+  if (res.rows.length === 0) return { success: false, error: '余额不足，无法托管' };
+
+  await client.query(
+    `INSERT INTO transactions
+      (id, task_id, node_id, amount, type, status, reason, metadata)
+     VALUES ($1, $2, $3, $4, 'escrow_hold', 'completed', $5, $6)`,
+    [crypto.randomUUID(), taskId, callerId, validation.amount, `escrow_hold:${taskId}`, JSON.stringify({})]
+  );
+  await client.query(
+    `UPDATE tasks SET escrow_amount = $1, escrow_status = 'held', updated_at = NOW() WHERE id = $2`,
+    [validation.amount, taskId]
+  );
+
+  return {
+    success: true,
+    amount: validation.amount,
+    balance: parseFloat(res.rows[0].balance),
+    escrow_balance: parseFloat(res.rows[0].escrow_balance)
+  };
+}
+
+/**
+ * 调整托管金额：竞标价高于当前托管则追加冻结，低于则解冻差额（需在调用方事务内执行）
+ */
+export async function adjustEscrowInTx(client, taskId, newAmount) {
+  const taskRes = await client.query(
+    'SELECT caller_id, escrow_amount, escrow_status FROM tasks WHERE id = $1 FOR UPDATE',
+    [taskId]
+  );
+  if (!taskRes.rows.length) return { success: false, error: '任务不存在' };
+  const task = taskRes.rows[0];
+  if (task.escrow_status !== 'held') return { success: false, error: '任务未处于托管状态' };
+
+  const current = parseFloat(task.escrow_amount) || 0;
+  const target = Math.round(Number(newAmount) * 100) / 100;
+  if (!Number.isFinite(target) || target <= 0) return { success: false, error: '托管金额无效' };
+  const diff = Math.round((target - current) * 100) / 100;
+  if (diff === 0) return { success: true, amount: current, delta: 0 };
+
+  if (diff > 0) {
+    const res = await client.query(
+      `UPDATE billing_accounts
+          SET balance = balance - $1,
+              escrow_balance = escrow_balance + $1,
+              updated_at = NOW()
+        WHERE node_id = $2 AND balance >= $1
+        RETURNING balance`,
+      [diff, task.caller_id]
+    );
+    if (res.rows.length === 0) return { success: false, error: '余额不足，无法追加托管' };
+  } else {
+    await client.query(
+      `UPDATE billing_accounts
+          SET balance = balance + $1,
+              escrow_balance = escrow_balance - $1,
+              updated_at = NOW()
+        WHERE node_id = $2`,
+      [Math.abs(diff), task.caller_id]
+    );
+  }
+
+  await client.query(
+    `UPDATE tasks SET escrow_amount = $1, updated_at = NOW() WHERE id = $2`,
+    [target, taskId]
+  );
+  return { success: true, amount: target, delta: diff };
+}
+
+/**
+ * 释放托管给执行方（需在调用方事务内执行）
+ */
+export async function releaseEscrowInTx(client, taskId, workerId) {
+  const taskRes = await client.query(
+    'SELECT caller_id, escrow_amount, escrow_status FROM tasks WHERE id = $1 FOR UPDATE',
+    [taskId]
+  );
+  if (!taskRes.rows.length) return { success: false, error: '任务不存在' };
+  const task = taskRes.rows[0];
+  if (task.escrow_status !== 'held') return { success: false, error: '任务未处于托管状态' };
+  const escrow = parseFloat(task.escrow_amount) || 0;
+  if (escrow <= 0) return { success: false, error: '托管金额异常' };
+
+  await client.query(
+    `UPDATE billing_accounts
+        SET escrow_balance = escrow_balance - $1, updated_at = NOW()
+      WHERE node_id = $2`,
+    [escrow, task.caller_id]
+  );
+  const workerBalance = await creditAccount(client, workerId, escrow);
+  await client.query(
+    `INSERT INTO transactions
+      (id, task_id, node_id, amount, type, status, reason, metadata)
+     VALUES ($1, $2, $3, $4, 'escrow_release', 'completed', $5, $6)`,
+    [crypto.randomUUID(), taskId, workerId, escrow, `escrow_release:${taskId}`, JSON.stringify({ caller_id: task.caller_id })]
+  );
+  await client.query(
+    `UPDATE tasks SET escrow_amount = 0, escrow_status = 'released', resolution = 'released', updated_at = NOW() WHERE id = $1`,
+    [taskId]
+  );
+
+  return { success: true, amount: escrow, worker_balance: workerBalance };
+}
+
+/**
+ * 托管退款给调用方（需在调用方事务内执行）
+ */
+export async function refundEscrowInTx(client, taskId) {
+  const taskRes = await client.query(
+    'SELECT caller_id, escrow_amount, escrow_status FROM tasks WHERE id = $1 FOR UPDATE',
+    [taskId]
+  );
+  if (!taskRes.rows.length) return { success: false, error: '任务不存在' };
+  const task = taskRes.rows[0];
+  if (task.escrow_status !== 'held') return { success: false, error: '任务未处于托管状态' };
+  const escrow = parseFloat(task.escrow_amount) || 0;
+  if (escrow <= 0) return { success: false, error: '托管金额异常' };
+
+  await client.query(
+    `UPDATE billing_accounts
+        SET balance = balance + $1,
+            escrow_balance = escrow_balance - $1,
+            updated_at = NOW()
+      WHERE node_id = $2`,
+    [escrow, task.caller_id]
+  );
+  await client.query(
+    `INSERT INTO transactions
+      (id, task_id, node_id, amount, type, status, reason, metadata)
+     VALUES ($1, $2, $3, $4, 'escrow_refund', 'completed', $5, $6)`,
+    [crypto.randomUUID(), taskId, task.caller_id, escrow, `escrow_refund:${taskId}`, JSON.stringify({})]
+  );
+  await client.query(
+    `UPDATE tasks SET escrow_amount = 0, escrow_status = 'refunded', resolution = 'refunded', updated_at = NOW() WHERE id = $1`,
+    [taskId]
+  );
+
+  return { success: true, amount: escrow };
 }
 
 async function getCachedBalance(nodeId) {
@@ -353,11 +508,12 @@ export async function getNodeBalance(nodeId) {
       return formatResponse(false, null, '节点不存在');
     }
     const dbResult = await pgPool.query(
-      'SELECT balance FROM billing_accounts WHERE node_id = $1',
+      'SELECT balance, escrow_balance FROM billing_accounts WHERE node_id = $1',
       [nodeId]
     );
 
     const balance = parseFloat(dbResult.rows[0].balance) || 0;
+    const escrowBalance = parseFloat(dbResult.rows[0].escrow_balance) || 0;
     // 刷新缓存，保持读取一致
     const redisClient = getRedis();
     await redisClient.set(`node:${nodeId}:balance`, balance.toString(), 'EX', BALANCE_CACHE_TTL).catch(() => {});
@@ -365,6 +521,8 @@ export async function getNodeBalance(nodeId) {
     return formatResponse(true, {
       node_id: nodeId,
       balance,
+      escrow_balance: escrowBalance,
+      total_balance: Math.round((balance + escrowBalance) * 100) / 100,
       currency: process.env.CURRENCY || 'XCL'
     });
   } catch (error) {

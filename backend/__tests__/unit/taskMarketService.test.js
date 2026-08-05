@@ -35,6 +35,33 @@ jest.unstable_mockModule('../../services/socialGraphService.js', () => ({
   computeTrustScore: jest.fn(() => Promise.resolve(0.8)),
 }));
 
+const mockEscrowFunds = jest.fn().mockResolvedValue({ success: true, amount: 50 });
+const mockAdjustEscrow = jest.fn().mockResolvedValue({ success: true, amount: 10, delta: 0 });
+const mockReleaseEscrow = jest.fn().mockResolvedValue({ success: true, amount: 10, worker_balance: 0 });
+const mockRefundEscrow = jest.fn().mockResolvedValue({ success: true, amount: 10 });
+const mockInvalidateCache = jest.fn();
+const mockEmitEvent = jest.fn();
+
+jest.unstable_mockModule('../../billing/index.js', () => ({
+  escrowFundsInTx: mockEscrowFunds,
+  adjustEscrowInTx: mockAdjustEscrow,
+  releaseEscrowInTx: mockReleaseEscrow,
+  refundEscrowInTx: mockRefundEscrow,
+  invalidateBalanceCache: mockInvalidateCache,
+}));
+
+jest.unstable_mockModule('../../services/eventBus.js', () => ({
+  default: { emit: mockEmitEvent, on: jest.fn() },
+}));
+
+jest.unstable_mockModule('../../services/websocketService.js', () => ({
+  default: { sendToAgent: jest.fn() },
+}));
+
+jest.unstable_mockModule('../../services/reputationService.js', () => ({
+  logReputationEvent: jest.fn().mockResolvedValue({}),
+}));
+
 jest.unstable_mockModule('uuid', () => ({
   v1: jest.fn(() => 'mock-uuid-v1'),
   v3: jest.fn(() => 'mock-uuid-v3'),
@@ -59,6 +86,9 @@ const {
   getMarketStats,
   createMarketTask,
   completeMarketTask,
+  acceptTaskResult,
+  rejectTaskResult,
+  cancelMarketTaskByCaller,
 } = await import('../../services/taskMarketService.js');
 
 // ============================================
@@ -72,6 +102,12 @@ describe('taskMarketService', () => {
     mockRedisSmembers.mockReset().mockResolvedValue([]);
     mockRedisSet.mockReset().mockResolvedValue('OK');
     mockRedisGet.mockReset().mockResolvedValue(null);
+    mockEscrowFunds.mockReset().mockResolvedValue({ success: true, amount: 50 });
+    mockAdjustEscrow.mockReset().mockResolvedValue({ success: true, amount: 10, delta: 0 });
+    mockReleaseEscrow.mockReset().mockResolvedValue({ success: true, amount: 10, worker_balance: 0 });
+    mockRefundEscrow.mockReset().mockResolvedValue({ success: true, amount: 10 });
+    mockInvalidateCache.mockReset();
+    mockEmitEvent.mockReset();
   });
 
   // ============================================
@@ -264,8 +300,11 @@ describe('taskMarketService', () => {
 
     test('should create task with default strategy auto', async () => {
       mockPoolQuery
-        .mockResolvedValueOnce({ rows: [{ node_id: 'caller1' }] }) // caller check
-        .mockResolvedValueOnce({ rows: [{ id: 'new-task-id' }] }); // INSERT
+        .mockResolvedValueOnce({ rows: [{ node_id: 'caller1' }] }); // caller check
+      mockClientQuery
+        .mockResolvedValueOnce({}) // BEGIN
+        .mockResolvedValueOnce({ rows: [{ id: 'new-task-id' }] }) // INSERT tasks
+        .mockResolvedValueOnce({}); // COMMIT
 
       const result = await createMarketTask({
         caller_id: 'caller1',
@@ -276,13 +315,19 @@ describe('taskMarketService', () => {
 
       expect(result.success).toBe(true);
       expect(result.data.task_id).toBeDefined();
-      expect(mockPoolQuery).toHaveBeenCalledTimes(2);
+      expect(result.data.escrow_amount).toBe(50);
+      expect(mockPoolQuery).toHaveBeenCalledTimes(1);
+      expect(mockEscrowFunds).toHaveBeenCalledTimes(1);
+      expect(mockEscrowFunds.mock.calls[0][3]).toBe(50);
     });
 
     test('should set bid_deadline when strategy is bid without deadline', async () => {
       mockPoolQuery
-        .mockResolvedValueOnce({ rows: [{ node_id: 'caller1' }] })
-        .mockResolvedValueOnce({ rows: [{ id: 'new-task-id' }] });
+        .mockResolvedValueOnce({ rows: [{ node_id: 'caller1' }] });
+      mockClientQuery
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({ rows: [{ id: 'new-task-id' }] })
+        .mockResolvedValueOnce({});
 
       const result = await createMarketTask({
         caller_id: 'caller1',
@@ -290,14 +335,16 @@ describe('taskMarketService', () => {
       });
 
       expect(result.success).toBe(true);
-      const insertCall = mockPoolQuery.mock.calls[1];
-      expect(insertCall[0]).toContain('INSERT INTO tasks');
+      expect(mockEscrowFunds).not.toHaveBeenCalled();
     });
 
     test('should create task with direct strategy as assigned status', async () => {
       mockPoolQuery
-        .mockResolvedValueOnce({ rows: [{ node_id: 'caller1' }] })
-        .mockResolvedValueOnce({ rows: [{ id: 'new-task-id' }] });
+        .mockResolvedValueOnce({ rows: [{ node_id: 'caller1' }] });
+      mockClientQuery
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({ rows: [{ id: 'new-task-id' }] })
+        .mockResolvedValueOnce({});
 
       const result = await createMarketTask({
         caller_id: 'caller1',
@@ -305,19 +352,73 @@ describe('taskMarketService', () => {
       });
 
       expect(result.success).toBe(true);
-      const insertCall = mockPoolQuery.mock.calls[1];
+      const insertCall = mockClientQuery.mock.calls[1];
       // The status value should be 'assigned' for direct strategy
       expect(insertCall[1][5]).toBe('assigned');
     });
 
     test('should handle DB error gracefully', async () => {
-      mockPoolQuery
-        .mockResolvedValueOnce({ rows: [{ node_id: 'caller1' }] })
+      mockPoolQuery.mockResolvedValueOnce({ rows: [{ node_id: 'caller1' }] });
+      mockClientQuery
+        .mockResolvedValueOnce({})
         .mockRejectedValueOnce(new Error('DB insert failed'));
 
       const result = await createMarketTask({ caller_id: 'caller1' });
       expect(result.success).toBe(false);
       expect(result.error).toMatch(/DB insert failed/);
+    });
+  });
+
+  // ============================================
+  // 可信结算：验收 / 拒绝 / 取消退款
+  // ============================================
+  describe('trusted settlement', () => {
+    test('should accept submitted task and release escrow to worker', async () => {
+      mockClientQuery
+        .mockResolvedValueOnce({}) // BEGIN
+        .mockResolvedValueOnce({ rows: [{ id: 't1', status: 'submitted', caller_id: 'caller1', node_id: 'worker1', escrow_status: 'held' }] }) // SELECT FOR UPDATE
+        .mockResolvedValueOnce({}) // UPDATE tasks completed
+        .mockResolvedValueOnce({}); // COMMIT
+
+      const result = await acceptTaskResult('t1', 'caller1', { auto: false });
+
+      expect(result.success).toBe(true);
+      expect(result.data.status).toBe('completed');
+      expect(mockReleaseEscrow).toHaveBeenCalledTimes(1);
+      expect(mockReleaseEscrow.mock.calls[0][1]).toBe('t1');
+      expect(mockReleaseEscrow.mock.calls[0][2]).toBe('worker1');
+      expect(mockEmitEvent).toHaveBeenCalled();
+    });
+
+    test('should reject submitted task and open dispute', async () => {
+      mockClientQuery
+        .mockResolvedValueOnce({}) // BEGIN
+        .mockResolvedValueOnce({ rows: [{ id: 't1', status: 'submitted', caller_id: 'caller1' }] }) // SELECT FOR UPDATE
+        .mockResolvedValueOnce({}) // UPDATE tasks disputed
+        .mockResolvedValueOnce({ rows: [{ id: 'd1' }] }) // INSERT dispute
+        .mockResolvedValueOnce({}); // COMMIT
+
+      const result = await rejectTaskResult('t1', 'caller1', '结果质量不合格');
+
+      expect(result.success).toBe(true);
+      expect(result.data.status).toBe('disputed');
+      expect(result.data.dispute_id).toBe('d1');
+      expect(mockReleaseEscrow).not.toHaveBeenCalled();
+    });
+
+    test('should cancel pending task and refund escrow', async () => {
+      mockClientQuery
+        .mockResolvedValueOnce({}) // BEGIN
+        .mockResolvedValueOnce({ rows: [{ id: 't1', status: 'open', caller_id: 'caller1', escrow_status: 'held' }] }) // SELECT FOR UPDATE
+        .mockResolvedValueOnce({}) // UPDATE tasks cancelled
+        .mockResolvedValueOnce({}) // UPDATE task_bids
+        .mockResolvedValueOnce({}); // COMMIT
+
+      const result = await cancelMarketTaskByCaller('t1', 'caller1');
+
+      expect(result.success).toBe(true);
+      expect(result.data.status).toBe('cancelled');
+      expect(mockRefundEscrow).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -3,6 +3,12 @@ import { generateUUID, calculateDistance } from '../core/utils.js';
 import logger from './loggerService.js';
 import { computeTrustScore } from './socialGraphService.js';
 import crypto from 'crypto';
+import eventBus from './eventBus.js';
+import websocketService from './websocketService.js';
+import { escrowFundsInTx, adjustEscrowInTx, releaseEscrowInTx, refundEscrowInTx, invalidateBalanceCache } from '../billing/index.js';
+import { logReputationEvent } from './reputationService.js';
+
+const VERIFICATION_WINDOW_MS = (parseInt(process.env.TASK_VERIFICATION_HOURS || '24', 10)) * 60 * 60 * 1000;
 
 const CACHE_TTL = 300; // 5 分钟
 const CACHE_PREFIX = 'xclaw:taskmarket:';
@@ -348,6 +354,15 @@ export async function acceptBid(taskId, bidId, callerId) {
        WHERE id = $3`,
       [bid.bidder_id, bid.proposed_price, taskId]
     );
+
+    // 托管调额：以中标价为准（高于预算追加冻结，低于预算解冻差额）
+    if (task.escrow_status === 'held') {
+      const adjust = await adjustEscrowInTx(client, taskId, bid.proposed_price);
+      if (!adjust.success) {
+        await client.query('ROLLBACK');
+        return { success: false, error: adjust.error };
+      }
+    }
     
     // 标记中标
     await client.query(
@@ -357,6 +372,20 @@ export async function acceptBid(taskId, bidId, callerId) {
     );
     
     await client.query('COMMIT');
+
+    // 事件驱动派活：向中标 Agent 推送 TASK
+    try {
+      websocketService.sendToAgent(bid.bidder_id, {
+        type: 'TASK',
+        market: true,
+        task_id: taskId,
+        skill_id: task.skill_id,
+        price: bid.proposed_price,
+        payload: task.payload || {}
+      });
+    } catch (pushErr) {
+      logger.warn('Failed to push TASK to winner', { error: pushErr.message, taskId });
+    }
     
     logger.info('Bid accepted', { taskId, bidId, winner: bid.bidder_id, price: bid.proposed_price });
     
@@ -421,6 +450,20 @@ export async function autoAssignTask(taskId) {
        WHERE id = $3`,
       [winner.node_id, task.budget_max || task.budget_min || 0, taskId]
     );
+
+    // 事件驱动派活：向自动匹配的 Agent 推送 TASK
+    try {
+      websocketService.sendToAgent(winner.node_id, {
+        type: 'TASK',
+        market: true,
+        task_id: taskId,
+        skill_id: task.skill_id,
+        price: task.budget_max || task.budget_min || 0,
+        payload: task.payload || {}
+      });
+    } catch (pushErr) {
+      logger.warn('Failed to push TASK on auto-assign', { error: pushErr.message, taskId });
+    }
     
     logger.info('Task auto-assigned', { taskId, winner: winner.node_id, matchScore: winner.match_score });
     
@@ -652,8 +695,10 @@ export async function getMarketStats() {
  */
 export async function createMarketTask(taskData) {
   const pgPool = getPostgres();
+  const client = await pgPool.connect();
   
   try {
+    await client.query('BEGIN');
     const taskId = crypto.randomUUID();
     
     // 验证调用者
@@ -677,7 +722,7 @@ export async function createMarketTask(taskData) {
       taskData.bid_deadline = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     }
     
-    await pgPool.query(
+    await client.query(
       `INSERT INTO tasks (
         id, type, title, description, payload, status, caller_id, skill_id,
         budget_min, budget_max, deadline, assignment_strategy, required_skills,
@@ -703,16 +748,36 @@ export async function createMarketTask(taskData) {
         taskData.bid_deadline || null
       ]
     );
+
+    // 可信结算：创建任务即冻结预算到托管（escrow）
+    const escrowAmount = Math.round((parseFloat(taskData.budget_max) || 0) * 100) / 100;
+    if (escrowAmount > 0) {
+      const escrow = await escrowFundsInTx(client, taskId, taskData.caller_id, escrowAmount);
+      if (!escrow.success) {
+        await client.query('ROLLBACK');
+        return { success: false, error: escrow.error };
+      }
+    }
+
+    await client.query('COMMIT');
     
     logger.info('Market task created', { taskId, strategy, caller: taskData.caller_id });
+    eventBus.emit('task.created', { task_id: taskId, caller_id: taskData.caller_id, escrow_amount: escrowAmount }, { sourceId: taskData.caller_id });
     
     return {
       success: true,
-      data: { task_id: taskId }
+      data: {
+        task_id: taskId,
+        escrow_amount: escrowAmount,
+        escrow_status: escrowAmount > 0 ? 'held' : 'none'
+      }
     };
   } catch (error) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
     logger.error('Failed to create market task', { error: error.message });
     return { success: false, error: error.message };
+  } finally {
+    client.release();
   }
 }
 
@@ -747,22 +812,34 @@ export async function completeMarketTask(taskId, nodeId, result) {
       return { success: false, error: `Task is not in progress (status: ${task.status})` };
     }
     
-    // 更新任务状态
+    // 提交执行结果：进入验收窗口（调用方可在截止前接受/拒绝，超时自动放行）
+    const verificationDeadline = new Date(Date.now() + VERIFICATION_WINDOW_MS);
     await client.query(
       `UPDATE tasks SET 
-         status = 'completed',
+         status = 'submitted',
+         verification_status = 'pending',
+         submitted_at = now(),
+         verification_deadline = $3,
          result = $1,
-         completed_at = now(),
+         result_evidence = $1,
          updated_at = now()
        WHERE id = $2`,
-      [JSON.stringify(result), taskId]
+      [JSON.stringify(result), taskId, verificationDeadline]
     );
     
     await client.query('COMMIT');
     
-    logger.info('Task completed', { taskId, nodeId });
+    logger.info('Task submitted for verification', { taskId, nodeId, deadline: verificationDeadline.toISOString() });
+    eventBus.emit('task.submitted', { task_id: taskId, node_id: nodeId }, { sourceId: nodeId });
     
-    return { success: true };
+    return {
+      success: true,
+      data: {
+        task_id: taskId,
+        status: 'submitted',
+        verification_deadline: verificationDeadline.toISOString()
+      }
+    };
   } catch (error) {
     await client.query('ROLLBACK');
     logger.error('Failed to complete task', { error: error.message, taskId, nodeId });
@@ -770,4 +847,330 @@ export async function completeMarketTask(taskId, nodeId, result) {
   } finally {
     client.release();
   }
+}
+
+// ============================================
+// 可信结算：验收 / 拒绝 / 争议 / 取消退款
+// ============================================
+
+/**
+ * 调用方验收执行结果：释放托管给执行方，任务完成
+ * @param {string} taskId
+ * @param {string} callerId
+ * @param {object} [opts] { auto: boolean } 超时自动放行标记
+ */
+export async function acceptTaskResult(taskId, callerId, opts = {}) {
+  const pgPool = getPostgres();
+  const client = await pgPool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const taskRes = await client.query(
+      'SELECT * FROM tasks WHERE id = $1 AND caller_id = $2 FOR UPDATE',
+      [taskId, callerId]
+    );
+    if (!taskRes.rows.length) {
+      await client.query('ROLLBACK');
+      return { success: false, error: '任务不存在或无权操作' };
+    }
+    const task = taskRes.rows[0];
+    if (task.status !== 'submitted') {
+      await client.query('ROLLBACK');
+      return { success: false, error: `任务不在待验收状态 (${task.status})` };
+    }
+
+    // 释放托管给执行方
+    const release = await releaseEscrowInTx(client, taskId, task.node_id);
+    if (!release.success) {
+      await client.query('ROLLBACK');
+      return { success: false, error: release.error };
+    }
+
+    await client.query(
+      `UPDATE tasks SET
+         status = 'completed',
+         verification_status = 'accepted',
+         completed_at = now(),
+         updated_at = now()
+       WHERE id = $1`,
+      [taskId]
+    );
+
+    await client.query('COMMIT');
+
+    await invalidateBalanceCache(callerId);
+    await invalidateBalanceCache(task.node_id);
+
+    logger.info('Task result accepted', { taskId, callerId, worker: task.node_id, amount: release.amount, auto: !!opts.auto });
+    eventBus.emit('task.completed', { task_id: taskId, result: task.result, worker_id: task.node_id }, { sourceId: task.node_id });
+
+    // 声誉联动：验证通过才计入完成
+    try {
+      await logReputationEvent(task.node_id, 'task_completed', { task_id: taskId });
+    } catch (repErr) {
+      logger.warn('Reputation event failed', { error: repErr.message, taskId });
+    }
+
+    return { success: true, data: { task_id: taskId, status: 'completed', released_amount: release.amount, auto: !!opts.auto } };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    logger.error('Failed to accept task result', { error: error.message, taskId });
+    return { success: false, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * 调用方拒绝执行结果：任务进入争议，资金继续托管
+ */
+export async function rejectTaskResult(taskId, callerId, reason) {
+  if (!reason || !String(reason).trim()) {
+    return { success: false, error: '拒绝原因必填' };
+  }
+  const pgPool = getPostgres();
+  const client = await pgPool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const taskRes = await client.query(
+      'SELECT * FROM tasks WHERE id = $1 AND caller_id = $2 FOR UPDATE',
+      [taskId, callerId]
+    );
+    if (!taskRes.rows.length) {
+      await client.query('ROLLBACK');
+      return { success: false, error: '任务不存在或无权操作' };
+    }
+    const task = taskRes.rows[0];
+    if (task.status !== 'submitted') {
+      await client.query('ROLLBACK');
+      return { success: false, error: `任务不在待验收状态 (${task.status})` };
+    }
+
+    await client.query(
+      `UPDATE tasks SET
+         status = 'disputed',
+         verification_status = 'disputed',
+         dispute_reason = $2,
+         updated_at = now()
+       WHERE id = $1`,
+      [taskId, String(reason).trim()]
+    );
+
+    const disputeRes = await client.query(
+      `INSERT INTO task_disputes (task_id, opened_by, reason, status)
+       VALUES ($1, $2, $3, 'open')
+       RETURNING id`,
+      [taskId, callerId, String(reason).trim()]
+    );
+
+    await client.query('COMMIT');
+
+    logger.info('Task disputed', { taskId, callerId, disputeId: disputeRes.rows[0].id });
+    eventBus.emit('task.disputed', { task_id: taskId, reason: String(reason).trim() }, { sourceId: callerId });
+
+    return { success: true, data: { task_id: taskId, status: 'disputed', dispute_id: disputeRes.rows[0].id } };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    logger.error('Failed to reject task result', { error: error.message, taskId });
+    return { success: false, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * 调用方取消任务：托管资金全额退回
+ */
+export async function cancelMarketTaskByCaller(taskId, callerId) {
+  const pgPool = getPostgres();
+  const client = await pgPool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const taskRes = await client.query(
+      'SELECT * FROM tasks WHERE id = $1 AND caller_id = $2 FOR UPDATE',
+      [taskId, callerId]
+    );
+    if (!taskRes.rows.length) {
+      await client.query('ROLLBACK');
+      return { success: false, error: '任务不存在或无权操作' };
+    }
+    const task = taskRes.rows[0];
+    if (task.status !== 'pending' && task.status !== 'open') {
+      await client.query('ROLLBACK');
+      return { success: false, error: `任务不可取消 (${task.status})` };
+    }
+
+    if (task.escrow_status === 'held') {
+      const refund = await refundEscrowInTx(client, taskId);
+      if (!refund.success) {
+        await client.query('ROLLBACK');
+        return { success: false, error: refund.error };
+      }
+    }
+
+    await client.query(
+      `UPDATE tasks SET status = 'cancelled', updated_at = now() WHERE id = $1`,
+      [taskId]
+    );
+    await client.query(
+      `UPDATE task_bids SET status = 'cancelled' WHERE task_id = $1 AND status = 'pending'`,
+      [taskId]
+    );
+
+    await client.query('COMMIT');
+    await invalidateBalanceCache(callerId);
+
+    logger.info('Market task cancelled with escrow refund', { taskId, callerId });
+    return { success: true, data: { task_id: taskId, status: 'cancelled', escrow_refunded: task.escrow_status === 'held' } };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    logger.error('Failed to cancel market task', { error: error.message, taskId });
+    return { success: false, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * 争议列表（管理员）
+ */
+export async function listDisputes({ status = null, limit = 50 } = {}) {
+  const pgPool = getPostgres();
+  const result = await pgPool.query(
+    `SELECT d.id, d.task_id, d.opened_by, d.reason, d.evidence, d.status,
+            d.resolution, d.resolved_by, d.created_at, d.resolved_at,
+            t.type, t.title, t.caller_id, t.node_id, t.escrow_amount
+     FROM task_disputes d
+     JOIN tasks t ON t.id = d.task_id
+     WHERE ($1::text IS NULL OR d.status = $1)
+     ORDER BY d.created_at DESC
+     LIMIT $2`,
+    [status, Math.min(Math.max(parseInt(limit) || 50, 1), 200)]
+  );
+  return { success: true, data: result.rows };
+}
+
+/**
+ * 管理员仲裁争议：释放给执行方 或 退款给调用方
+ */
+export async function resolveDispute(disputeId, resolution, adminId) {
+  if (!['released_to_worker', 'refunded_caller'].includes(resolution)) {
+    return { success: false, error: 'resolution 必须是 released_to_worker 或 refunded_caller' };
+  }
+  const pgPool = getPostgres();
+  const client = await pgPool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const disputeRes = await client.query(
+      `SELECT * FROM task_disputes WHERE id = $1 AND status = 'open' FOR UPDATE`,
+      [disputeId]
+    );
+    if (!disputeRes.rows.length) {
+      await client.query('ROLLBACK');
+      return { success: false, error: '争议不存在或已处理' };
+    }
+    const dispute = disputeRes.rows[0];
+
+    const taskRes = await client.query(
+      'SELECT * FROM tasks WHERE id = $1 FOR UPDATE',
+      [dispute.task_id]
+    );
+    if (!taskRes.rows.length) {
+      await client.query('ROLLBACK');
+      return { success: false, error: '关联任务不存在' };
+    }
+    const task = taskRes.rows[0];
+
+    if (resolution === 'released_to_worker') {
+      if (task.escrow_status === 'held') {
+        const release = await releaseEscrowInTx(client, task.id, task.node_id);
+        if (!release.success) {
+          await client.query('ROLLBACK');
+          return { success: false, error: release.error };
+        }
+      }
+      await client.query(
+        `UPDATE tasks SET
+           status = 'completed',
+           verification_status = 'resolved',
+           resolution = 'released',
+           completed_at = now(),
+           updated_at = now()
+         WHERE id = $1`,
+        [task.id]
+      );
+      try { await logReputationEvent(task.node_id, 'task_completed', { task_id: task.id, dispute: true }); } catch (_) {}
+    } else {
+      if (task.escrow_status === 'held') {
+        const refund = await refundEscrowInTx(client, task.id);
+        if (!refund.success) {
+          await client.query('ROLLBACK');
+          return { success: false, error: refund.error };
+        }
+      }
+      await client.query(
+        `UPDATE tasks SET
+           status = 'cancelled',
+           verification_status = 'resolved',
+           resolution = 'refunded',
+           updated_at = now()
+         WHERE id = $1`,
+        [task.id]
+      );
+      try { await logReputationEvent(task.node_id, 'task_failed', { task_id: task.id, dispute: true }); } catch (_) {}
+    }
+
+    await client.query(
+      `UPDATE task_disputes SET
+         status = 'resolved',
+         resolution = $2,
+         resolved_by = $3,
+         resolved_at = now(),
+         updated_at = now()
+       WHERE id = $1`,
+      [disputeId, resolution, adminId || null]
+    );
+
+    await client.query('COMMIT');
+    await invalidateBalanceCache(task.caller_id);
+    if (task.node_id) await invalidateBalanceCache(task.node_id);
+
+    logger.info('Dispute resolved', { disputeId, resolution, adminId });
+    return { success: true, data: { dispute_id: disputeId, resolution, task_id: task.id } };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    logger.error('Failed to resolve dispute', { error: error.message, disputeId });
+    return { success: false, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * 处理验收超时：到期的 submitted 任务自动放行（调用方超时视为接受）
+ */
+export async function processVerificationDeadlines(limit = 50) {
+  const pgPool = getPostgres();
+  const result = await pgPool.query(
+    `SELECT id AS task_id, caller_id
+     FROM tasks
+     WHERE verification_status = 'pending'
+       AND verification_deadline <= NOW()
+     LIMIT $1`,
+    [Math.min(Math.max(parseInt(limit) || 50, 1), 200)]
+  );
+
+  const results = [];
+  for (const row of result.rows) {
+    const r = await acceptTaskResult(row.task_id, row.caller_id, { auto: true });
+    results.push({ task_id: row.task_id, ...r });
+  }
+  return results;
 }

@@ -37,7 +37,9 @@ import * as reviewService from '../services/reviewService.js';
 import { generateText, generateEmbedding } from '../services/aiService.js';
 import {
   computeMatchScore, findBestMatches, placeBid, getTaskBids, acceptBid, autoAssignTask,
-  browseTasks, getMarketStats, createMarketTask, completeMarketTask
+  browseTasks, getMarketStats, createMarketTask, completeMarketTask,
+  acceptTaskResult, rejectTaskResult, cancelMarketTaskByCaller,
+  listDisputes, resolveDispute, processVerificationDeadlines
 } from '../services/taskMarketService.js';
 import { verifyApiKey, requireAdmin, requireAgentId, requireOwnNode, requireFederationKey } from './auth.js';
 import { searchAgentsByIntent } from '../services/searchEngine.js';
@@ -1018,14 +1020,17 @@ router.get('/v1/agents/:agent_id/stats', requireAuth, requireAgentId("agent_id")
 // 充值仅限管理员（无真实支付渠道时禁止公开造币）
 router.post('/v1/billing/topup', verifyApiKey, requireAdmin, async (req, res) => {
   try {
-    const { amount, method } = req.body;
+    const { node_id, amount, method } = req.body;
+    if (!node_id) {
+      return res.status(400).json({ error: 'node_id is required' });
+    }
     if (!amount || amount <= 0) {
       return res.status(400).json({ error: 'amount must be positive' });
     }
     if (Number(amount) > 1000000) {
       return res.status(400).json({ error: 'amount exceeds maximum' });
     }
-    const agentId = req.agentId;
+    const agentId = node_id;
     const { executeQuery } = await import('../services/databaseService.js');
     // 创建充值交易记录
     const { rows } = await executeQuery(
@@ -2044,10 +2049,10 @@ router.get('/v1/task-market/stats', verifyApiKey, async (_req, res) => {
 });
 
 // 创建任务（市场模式）
-router.post('/v1/task-market/tasks', verifyApiKey, async (req, res) => {
+router.post('/v1/task-market/tasks', requireAuth, async (req, res) => {
   try {
     const { type, title, description, payload, skill_id, budget_min, budget_max, deadline, assignment_strategy, required_skills, priority, min_reputation, bid_deadline } = req.body;
-    const caller_id = req.agentId || req.body.caller_id;
+    const caller_id = req.agentId;
     
     const result = await createMarketTask({
       caller_id, type, title, description, payload, skill_id,
@@ -2101,10 +2106,10 @@ router.get('/v1/task-market/tasks/:task_id/bids', verifyApiKey, validateUUIDPara
 });
 
 // 对任务出价
-router.post('/v1/task-market/tasks/:task_id/bids', verifyApiKey, validateUUIDParam('task_id'), async (req, res) => {
+router.post('/v1/task-market/tasks/:task_id/bids', requireAuth, validateUUIDParam('task_id'), async (req, res) => {
   try {
     const { task_id } = req.params;
-    const bidder_id = req.agentId || req.body.bidder_id;
+    const bidder_id = req.agentId;
     const { proposed_price, estimated_duration, proposal } = req.body;
     
     if (!proposed_price) {
@@ -2126,10 +2131,10 @@ router.post('/v1/task-market/tasks/:task_id/bids', verifyApiKey, validateUUIDPar
 });
 
 // 接受竞标（任务发布者）
-router.post('/v1/task-market/tasks/:task_id/bids/:bid_id/accept', verifyApiKey, validateUUIDParam('task_id'), validateUUIDParam('bid_id'), async (req, res) => {
+router.post('/v1/task-market/tasks/:task_id/bids/:bid_id/accept', requireAuth, validateUUIDParam('task_id'), validateUUIDParam('bid_id'), async (req, res) => {
   try {
     const { task_id, bid_id } = req.params;
-    const caller_id = req.agentId || req.body.caller_id;
+    const caller_id = req.agentId;
     
     const result = await acceptBid(task_id, bid_id, caller_id);
     
@@ -2178,10 +2183,10 @@ router.get('/v1/task-market/tasks/:task_id/matches', verifyApiKey, validateUUIDP
 });
 
 // 完成任务
-router.post('/v1/task-market/tasks/:task_id/complete', verifyApiKey, validateUUIDParam('task_id'), async (req, res) => {
+router.post('/v1/task-market/tasks/:task_id/complete', requireAuth, validateUUIDParam('task_id'), async (req, res) => {
   try {
     const { task_id } = req.params;
-    const node_id = req.agentId || req.body.node_id;
+    const node_id = req.agentId;
     const { result } = req.body;
     
     const completeResult = await completeMarketTask(task_id, node_id, result || {});
@@ -2197,49 +2202,74 @@ router.post('/v1/task-market/tasks/:task_id/complete', verifyApiKey, validateUUI
 });
 
 // 取消任务
-router.post('/v1/task-market/tasks/:task_id/cancel', verifyApiKey, validateUUIDParam('task_id'), async (req, res) => {
+router.post('/v1/task-market/tasks/:task_id/cancel', requireAuth, validateUUIDParam('task_id'), async (req, res) => {
   try {
     const { task_id } = req.params;
-    const caller_id = req.agentId || req.body.caller_id;
-    const pgPool = getPostgres();
-    
-    // 验证任务归属
-    const taskResult = await pgPool.query(
-      'SELECT * FROM tasks WHERE id = $1 AND caller_id = $2',
-      [task_id, caller_id]
-    );
-    
-    if (taskResult.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Task not found or not authorized' });
-    }
-    
-    const task = taskResult.rows[0];
-    if (task.status !== 'pending' && task.status !== 'open') {
-      return res.status(400).json({ success: false, error: `Cannot cancel task in status: ${task.status}` });
-    }
-    
-    await pgPool.query(
-      `UPDATE tasks SET status = 'cancelled', updated_at = now() WHERE id = $1`,
-      [task_id]
-    );
-    
-    // 拒绝所有待处理竞标
-    await pgPool.query(
-      `UPDATE task_bids SET status = 'cancelled' WHERE task_id = $1 AND status = 'pending'`,
-      [task_id]
-    );
-    
-    res.json({ success: true, message: 'Task cancelled' });
+    const caller_id = req.agentId;
+    const result = await cancelMarketTaskByCaller(task_id, caller_id);
+    res.status(result.success ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 调用方验收执行结果：释放托管给执行方
+router.post('/v1/task-market/tasks/:task_id/accept', requireAuth, validateUUIDParam('task_id'), async (req, res) => {
+  try {
+    const caller_id = req.agentId;
+    const result = await acceptTaskResult(req.params.task_id, caller_id, { auto: false });
+    res.status(result.success ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 调用方拒绝执行结果：进入争议，资金继续托管
+router.post('/v1/task-market/tasks/:task_id/reject', requireAuth, validateUUIDParam('task_id'), async (req, res) => {
+  try {
+    const caller_id = req.agentId;
+    const result = await rejectTaskResult(req.params.task_id, caller_id, req.body?.reason);
+    res.status(result.success ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 争议列表（管理员）
+router.get('/v1/admin/task-market/disputes', verifyApiKey, requireAdmin, async (req, res) => {
+  try {
+    const result = await listDisputes({ status: req.query.status, limit: req.query.limit });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 管理员仲裁争议
+router.post('/v1/admin/task-market/disputes/:dispute_id/resolve', verifyApiKey, requireAdmin, validateUUIDParam('dispute_id'), async (req, res) => {
+  try {
+    const result = await resolveDispute(req.params.dispute_id, req.body?.resolution, req.agentId || null);
+    res.status(result.success ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 手动触发验收超时处理（管理员/运维）
+router.post('/v1/admin/task-market/verification/process', verifyApiKey, requireAdmin, async (req, res) => {
+  try {
+    const results = await processVerificationDeadlines(req.query.limit);
+    res.json({ success: true, data: { processed: results.length, results } });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
 // 撤回竞标
-router.post('/v1/task-market/tasks/:task_id/bids/:bid_id/withdraw', verifyApiKey, validateUUIDParam('task_id'), validateUUIDParam('bid_id'), async (req, res) => {
+router.post('/v1/task-market/tasks/:task_id/bids/:bid_id/withdraw', requireAuth, validateUUIDParam('task_id'), validateUUIDParam('bid_id'), async (req, res) => {
   try {
     const { task_id, bid_id } = req.params;
-    const bidder_id = req.agentId || req.body.bidder_id;
+    const bidder_id = req.agentId;
     const pgPool = getPostgres();
     
     const bidResult = await pgPool.query(

@@ -718,12 +718,27 @@ class TaskMarketModule {
 
   /** 自动分配任务 */
   async autoAssign(taskId) {
-    return this._.post(`/v1/task-market/tasks/${taskId}/auto-assign`);
+    return this._.post(`/v1/task-market/tasks/${taskId}/assign`);
   }
 
-  /** 完成任务 */
-  async completeTask(taskId, params = {}) {
+  /** 提交执行结果（进入调用方验收窗口） */
+  async submitResult(taskId, params = {}) {
     return this._.post(`/v1/task-market/tasks/${taskId}/complete`, params);
+  }
+
+  /** 调用方验收执行结果（释放托管给执行方） */
+  async acceptResult(taskId) {
+    return this._.post(`/v1/task-market/tasks/${taskId}/accept`);
+  }
+
+  /** 调用方拒绝执行结果（进入争议） */
+  async rejectResult(taskId, reason) {
+    return this._.post(`/v1/task-market/tasks/${taskId}/reject`, { reason });
+  }
+
+  /** 取消任务（托管资金退回） */
+  async cancelTask(taskId) {
+    return this._.post(`/v1/task-market/tasks/${taskId}/cancel`);
   }
 
   /** 获取任务匹配 Agent */
@@ -1196,12 +1211,16 @@ export class OpenClaw extends EventEmitter {
     this.emit('message', msg); // 所有消息都触发
 
     // 如果是 TASK 类型且有 skill_id，调用注册的 handler
-    if (type === 'TASK' && msg.skill_id) {
+    if (type === 'TASK' && (msg.skill_id || msg.market)) {
       const handler = this._skillHandlers.get(msg.skill_id);
       if (handler) {
         handler(msg.payload || msg)
           .then((result) => {
             if (msg.task_id) {
+              // 市场任务走"提交→验收"闭环，经典任务直接完成
+              if (msg.market) {
+                return this.taskMarket.submitResult(msg.task_id, { result });
+              }
               return this.task.complete(msg.task_id, result);
             }
           })
