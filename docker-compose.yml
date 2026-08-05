@@ -80,6 +80,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
       - API_KEY=${API_KEY}
       - FEDERATION_KEY=${FEDERATION_KEY:-}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
       - INSTANCE_ID=maintenance
     depends_on:
       db:
