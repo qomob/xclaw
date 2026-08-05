@@ -37,6 +37,13 @@ Thumbs.db
 *.bak
 .cache/
 
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 执行器运行时状态（幂等持久化，勿入库）
+docs/examples/withdrawal-executor-node/data/
+
 # Docker 卷数据
 docker-data/
 
