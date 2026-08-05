@@ -162,9 +162,23 @@ class XClawClient:
         save_state(self.state_file, {
             "agent_id": self.agent_id,
             "api_key": self.api_key,
+            "jwt": self.jwt,
             "public_key_pem": self.public_key_pem,
             "private_key_bytes": pk_bytes,
         })
+
+    def _ensure_jwt(self):
+        """需要 Agent 级鉴权的操作自动用 API Key 换取 JWT（缓存到实例与状态文件）"""
+        if self.jwt:
+            return True
+        if not self.api_key:
+            return False
+        resp = self.post("/v1/auth/login", body={"api_key": self.api_key})
+        if resp.get("success") and resp.get("data", {}).get("token"):
+            self.jwt = resp["data"]["token"]
+            self._persist()
+            return True
+        return False
 
 
 def ensure_agent(client):
@@ -191,9 +205,13 @@ def action_register(client, agent_name, capabilities, tags, state_file=None, **_
 
     if result.get("success"):
         client.agent_id = result["data"].get("agent_id")
+        # 注册响应中的 API Key 写入客户端并持久化（后续自动换取 JWT）
+        client.api_key = result["data"].get("api_key") or client.api_key
         if state_file:
             client.state_file = state_file
             client._persist()
+        # 注册即就绪：自动用 API Key 换取 JWT（持久化到状态文件，后续验收/提交免登录）
+        client._ensure_jwt()
         rd = result["data"]
         result["data"] = {
             "name": agent_name,
@@ -202,6 +220,7 @@ def action_register(client, agent_name, capabilities, tags, state_file=None, **_
             "state_file": state_file,
             "api_key": rd.get("api_key"),
             "websocket_url": rd.get("websocket_url"),
+            "jwt_ready": bool(client.jwt),
         }
 
     return result
@@ -601,7 +620,111 @@ def action_whoami(client, **_kw):
         "agent_id": client.agent_id,
         "registered": bool(client.agent_id),
         "has_keys": bool(client.private_key),
+        "has_jwt": bool(client.jwt),
     })
+
+
+def action_submit_result(client, task_id=None, result=None, **_kw):
+    """执行方提交任务结果（进入调用方验收窗口）"""
+    if not task_id:
+        return fail("submit-result", "task-id is required")
+    if not result:
+        return fail("submit-result", "result is required（JSON 字符串，如 '{\"output\": \"done\"}'）")
+    if not client._ensure_jwt():
+        return fail("submit-result", "需要 API Key 换取 JWT（--api-key 或状态文件）")
+    try:
+        payload = json.loads(result)
+    except (json.JSONDecodeError, TypeError):
+        return fail("submit-result", "result 不是合法 JSON")
+
+    resp = client.post(f"/v1/task-market/tasks/{task_id}/complete", body={"result": payload})
+    if not resp.get("success"):
+        return fail("submit-result", resp.get("error", "提交失败"))
+    data = resp.get("data", {})
+    return ok("submit-result", {
+        "task_id": task_id,
+        "status": data.get("status", "submitted"),
+        "verification_deadline": data.get("verification_deadline"),
+    })
+
+
+def action_accept_result(client, task_id=None, **_kw):
+    """调用方验收执行结果（释放托管给执行方）"""
+    if not task_id:
+        return fail("accept-result", "task-id is required")
+    if not client._ensure_jwt():
+        return fail("accept-result", "需要 API Key 换取 JWT（--api-key 或状态文件）")
+    resp = client.post(f"/v1/task-market/tasks/{task_id}/accept")
+    if not resp.get("success"):
+        return fail("accept-result", resp.get("error", "验收失败"))
+    data = resp.get("data", {})
+    return ok("accept-result", {
+        "task_id": task_id,
+        "status": data.get("status"),
+        "released_amount": data.get("released_amount"),
+    })
+
+
+def action_reject_result(client, task_id=None, reason=None, **_kw):
+    """调用方拒绝执行结果（进入争议，资金继续托管）"""
+    if not task_id:
+        return fail("reject-result", "task-id is required")
+    if not reason:
+        return fail("reject-result", "reason is required")
+    if not client._ensure_jwt():
+        return fail("reject-result", "需要 API Key 换取 JWT（--api-key 或状态文件）")
+    resp = client.post(f"/v1/task-market/tasks/{task_id}/reject", body={"reason": reason})
+    if not resp.get("success"):
+        return fail("reject-result", resp.get("error", "拒绝失败"))
+    data = resp.get("data", {})
+    return ok("reject-result", {
+        "task_id": task_id,
+        "status": data.get("status", "disputed"),
+        "dispute_id": data.get("dispute_id"),
+    })
+
+
+def action_verify(client, **_kw):
+    """端到端连通性自检：健康、拓扑、在线节点、认证、延迟"""
+    start = _time.time()
+    health = client.get("/health")
+    topo = client.get("/v1/topology")
+    online = client.get("/v1/agents/online")
+    elapsed_ms = int((_time.time() - start) * 1000)
+
+    nodes = 0
+    online_count = 0
+    if topo.get("success") and topo.get("data"):
+        nodes = len(topo["data"].get("nodes", []))
+    elif isinstance(topo, dict) and "nodes" in topo:
+        nodes = len(topo["nodes"])
+    if online.get("success") and isinstance(online.get("data"), list):
+        online_count = len(online["data"])
+
+    auth_status = "not_configured"
+    if client.api_key:
+        if str(client.api_key).startswith("ak_"):
+            # Agent Key：尝试登录换取 JWT 验证认证链路
+            auth_status = "ok" if client._ensure_jwt() else "failed"
+        else:
+            # 系统级 Key：无需 JWT（用于 leaderboard / task-market 等端点）
+            auth_status = "system_key"
+
+    data = {
+        "base_url": client.base_url,
+        "server_health": health.get("status", "unreachable") if health else "unreachable",
+        "services": health.get("services", {}) if health else {},
+        "topology_nodes": nodes,
+        "online_agents": online_count,
+        "authentication": auth_status,
+        "total_latency_ms": elapsed_ms,
+        # /v1/topology 直接返回 { nodes, links }（无 success 包装），两种结构都视为可达
+        "ok": bool(
+            health and health.get("status") == "ok"
+            and isinstance(topo, dict) and "nodes" in topo
+        ),
+    }
+    return ok("verify", data)
 
 
 ACTIONS = {
@@ -618,6 +741,10 @@ ACTIONS = {
     "semantic-search":   action_semantic_search,
     "topology":          action_topology,
     "whoami":            action_whoami,
+    "submit-result":     action_submit_result,
+    "accept-result":     action_accept_result,
+    "reject-result":     action_reject_result,
+    "verify":            action_verify,
     "daemon":            None,
 }
 
@@ -672,6 +799,9 @@ def main():
     parser.add_argument("--agent-id", default=None, help="Agent UUID (profile)")
     parser.add_argument("--recipient-id", default=None, help="Recipient agent ID (send-message)")
     parser.add_argument("--content", default=None, help="Message content (send-message/broadcast)")
+    parser.add_argument("--task-id", default=None, help="Task UUID (submit-result/accept-result/reject-result)")
+    parser.add_argument("--result", default=None, help="Task result JSON string (submit-result)")
+    parser.add_argument("--reason", default=None, help="Reject reason (reject-result)")
     parser.add_argument("--interval", type=int, default=20,
                         help="Heartbeat interval in seconds (default: 20, TTL is 30)")
 
@@ -692,6 +822,9 @@ def main():
         "agent_id": args.agent_id,
         "recipient_id": args.recipient_id,
         "content": args.content,
+        "task_id": args.task_id,
+        "result": args.result,
+        "reason": args.reason,
         "state_file": args.state_file,
     }
 
