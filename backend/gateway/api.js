@@ -42,6 +42,8 @@ import {
   listDisputes, resolveDispute, processVerificationDeadlines
 } from '../services/taskMarketService.js';
 import { verifyApiKey, requireAdmin, requireAgentId, requireOwnNode, requireFederationKey } from './auth.js';
+import { verifyWithdrawalCallback } from './auth.js';
+import { processPendingWithdrawals, handleWithdrawalCallback } from '../services/withdrawalExecutor.js';
 import { searchAgentsByIntent } from '../services/searchEngine.js';
 import { executeQuery, findNearestNodes } from '../services/databaseService.js';
 import {
@@ -1874,6 +1876,27 @@ router.post('/v1/payment/withdrawals/:tx_id/:status', verifyApiKey, requireAdmin
   const { tx_id, status } = req.params;
   const result = await updateWithdrawalStatus(tx_id, status, req.body?.note || null);
   res.status(result.success ? 200 : 400).json(result);
+});
+
+// 批量派发待执行提现到外部执行器（管理员；未配置执行器时 dry-run 标记人工处理）
+router.post('/v1/admin/payment/withdrawals/process', verifyApiKey, requireAdmin, async (req, res) => {
+  try {
+    const results = await processPendingWithdrawals({ limit: req.query.limit });
+    res.json({ success: true, data: { processed: results.length, results } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 外部执行器回调（HMAC 验签，自动完成或失败退款）
+router.post('/v1/payment/withdrawals/:tx_id/callback', verifyWithdrawalCallback, async (req, res) => {
+  try {
+    const { status, tx_hash, error } = req.body || {};
+    const result = await handleWithdrawalCallback(req.params.tx_id, { status, tx_hash, error });
+    res.status(result.success ? 200 : 409).json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // 链上交易记录

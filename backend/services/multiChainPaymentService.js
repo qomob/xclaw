@@ -548,7 +548,7 @@ export async function updateWithdrawalStatus(txId, newStatus, adminNote = null) 
 
     const res = await client.query(
       `SELECT * FROM chain_transactions
-        WHERE id = $1 AND type = 'withdrawal' AND status = 'pending'
+        WHERE id = $1 AND type = 'withdrawal' AND status IN ('pending', 'executing')
         FOR UPDATE`,
       [txId]
     );
@@ -558,7 +558,7 @@ export async function updateWithdrawalStatus(txId, newStatus, adminNote = null) 
     }
 
     const tx = res.rows[0];
-    const metadata = JSON.parse(tx.metadata || '{}');
+    const metadata = typeof tx.metadata === 'string' ? JSON.parse(tx.metadata) : (tx.metadata || {});
     const amount = parseFloat(tx.amount);
     const fee = parseFloat(metadata.fee) || 0;
 

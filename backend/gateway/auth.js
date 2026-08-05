@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { verifySignature } from '../core/utils.js';
 import { getNode } from '../registry/nodeRegistry.js';
 import config from '../core/config.js';
+import { verifyCallbackSignature } from '../services/withdrawalExecutor.js';
 
 // 验证请求签名
 export async function verifyRequestSignature(req, res, next) {
@@ -122,6 +123,18 @@ export function requireFederationKey(req, res, next) {
       success: false,
       error: 'Invalid federation key'
     });
+  }
+  next();
+}
+
+/**
+ * 提现执行器回调验签（HMAC-SHA256，基于原始请求体）
+ */
+export function verifyWithdrawalCallback(req, res, next) {
+  const signature = req.headers['x-xclaw-signature'] || '';
+  const raw = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(req.body || {});
+  if (!verifyCallbackSignature(raw, signature)) {
+    return res.status(401).json({ success: false, error: 'Invalid callback signature' });
   }
   next();
 }

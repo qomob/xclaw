@@ -142,7 +142,10 @@ const WS_RATE_WINDOW_MS = parseInt(process.env.WS_RATE_WINDOW_MS || '10000');
 const wsMessageCounts = new Map();
 
 // 中间件
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({
+  limit: '1mb',
+  verify: (req, res, buf) => { req.rawBody = buf; }
+}));
 app.use(helmet());
 app.use(hpp());
 
