@@ -38,9 +38,11 @@ jest.unstable_mockModule('../../services/crossChainService.js', () => ({
   default: {},
 }));
 
-// Mock global fetch
-const mockFetch = jest.fn();
-global.fetch = mockFetch;
+// Mock SSRF 防护层（safeFetch），避免真实 DNS 查询
+const mockSafeFetch = jest.fn();
+jest.unstable_mockModule('../../core/httpGuard.js', () => ({
+  safeFetch: mockSafeFetch,
+}));
 
 // Import after mocks — federationService exports a singleton
 const federationServiceModule = await import('../../services/federationService.js');
@@ -58,7 +60,7 @@ describe('federationService', () => {
     mockRedisHdel.mockReset().mockResolvedValue(1);
     mockRedisSet.mockReset().mockResolvedValue('OK');
     mockRedisSmembers.mockReset().mockResolvedValue([]);
-    mockFetch.mockReset();
+    mockSafeFetch.mockReset();
 
     // Reset internal state
     federationService.redis = null;
@@ -89,7 +91,7 @@ describe('federationService', () => {
     });
 
     test('should register peer when reachable', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true });
+      mockSafeFetch.mockResolvedValueOnce({ ok: true });
 
       const result = await federationService.registerPeer(
         'remote-net-1',
@@ -112,11 +114,11 @@ describe('federationService', () => {
       );
 
       expect(result.success).toBe(true);
-      expect(mockFetch).not.toHaveBeenCalled();
+      expect(mockSafeFetch).not.toHaveBeenCalled();
     });
 
     test('should reject when peer endpoint is not reachable', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: false });
+      mockSafeFetch.mockResolvedValueOnce({ ok: false });
 
       const result = await federationService.registerPeer(
         'remote-net-3',
@@ -128,7 +130,7 @@ describe('federationService', () => {
     });
 
     test('should reject when fetch throws', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Connection refused'));
+      mockSafeFetch.mockRejectedValueOnce(new Error('Connection refused'));
 
       const result = await federationService.registerPeer(
         'remote-net-4',
@@ -140,7 +142,7 @@ describe('federationService', () => {
     });
 
     test('should store metadata correctly', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true });
+      mockSafeFetch.mockResolvedValueOnce({ ok: true });
 
       const result = await federationService.registerPeer(
         'remote-5',
@@ -268,7 +270,7 @@ describe('federationService', () => {
       });
 
       // _queryRemoteMatches → fetch
-      mockFetch.mockResolvedValueOnce({
+      mockSafeFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
           success: true,
@@ -308,7 +310,7 @@ describe('federationService', () => {
           is_alive: true,
         }),
       });
-      mockFetch.mockRejectedValueOnce(new Error('timeout')); // remote query fails
+      mockSafeFetch.mockRejectedValueOnce(new Error('timeout')); // remote query fails
 
       const result = await federationService.routeTaskFederated({ type: 'test' });
 
@@ -328,7 +330,7 @@ describe('federationService', () => {
         }),
       });
 
-      mockFetch.mockResolvedValueOnce({
+      mockSafeFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
           success: true,
@@ -339,7 +341,7 @@ describe('federationService', () => {
       await federationService.routeTaskFederated({ type: 'test' }, 2);
 
       // Verify fetch was called with hops+1 in body
-      const fetchCall = mockFetch.mock.calls[0];
+      const fetchCall = mockSafeFetch.mock.calls[0];
       const body = JSON.parse(fetchCall[1].body);
       expect(body.hops).toBe(3);
     });

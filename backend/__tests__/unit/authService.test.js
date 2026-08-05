@@ -152,21 +152,21 @@ describe('AuthService Tests', () => {
     
     mockRedis.get.mockResolvedValueOnce(agentId);
     const resolvedAgentId = await authService.verifyApiKey(apiKey);
-    expect(resolvedAgentId).toBe(agentId);
+    expect(resolvedAgentId).toEqual({ valid: true, agentId });
   });
 
   test('should reject unknown API key', async () => {
-    expect(await authService.verifyApiKey('ak_unknown_key_12345')).toBeNull();
+    expect(await authService.verifyApiKey('ak_unknown_key_12345')).toEqual({ valid: false });
   });
 
   test('should delete API key', async () => {
     const apiKey = await authService.generateApiKey(agentId);
     mockRedis.get.mockResolvedValueOnce(agentId);
-    expect(await authService.verifyApiKey(apiKey)).toBe(agentId);
+    expect(await authService.verifyApiKey(apiKey)).toEqual({ valid: true, agentId });
     
     mockRedis.del.mockResolvedValueOnce(1);
     expect(await authService.deleteApiKey(apiKey)).toBe(true);
     mockRedis.get.mockResolvedValueOnce(null);
-    expect(await authService.verifyApiKey(apiKey)).toBeNull();
+    expect(await authService.verifyApiKey(apiKey)).toEqual({ valid: false });
   });
 });

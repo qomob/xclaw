@@ -710,9 +710,15 @@ describe('taskMarketService', () => {
   describe('getMarketStats', () => {
     test('should return market statistics', async () => {
       mockPoolQuery
-        .mockResolvedValueOnce({ rows: [{ total_tasks: 100, active_tasks: 20 }] }) // task_market_stats
+        .mockResolvedValueOnce({ rows: [{
+          total_tasks: 100, open_tasks: 5, assigned_tasks: 2, completed_tasks: 80,
+          cancelled_tasks: 1, total_budget_min: '500', total_budget_max: '1000',
+          avg_budget_min: '5', avg_budget_max: '10', unique_caller_count: 10, unique_worker_count: 8
+        }] }) // task stats
+        .mockResolvedValueOnce({ rows: [{ active_bids: 7 }] }) // active bids
         .mockResolvedValueOnce({ rows: [{ skill_id: 's1', skill_name: 'Python', task_count: 15 }] }) // hot skills
-        .mockResolvedValueOnce({ rows: [{ avg_bids_per_task: '3.5' }] }); // avg bids
+        .mockResolvedValueOnce({ rows: [{ avg_bids_per_task: '3.5' }] }) // avg bids
+        .mockResolvedValueOnce({}); // task_market_stats upsert
 
       const result = await getMarketStats();
 

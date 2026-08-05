@@ -178,26 +178,27 @@ describe('Billing Module Tests', () => {
   });
 
   describe('rewardNode', () => {
-    test('should reward node and update reputation', async () => {
+    test('should reward node and credit balance', async () => {
       mockClientQuery
         .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({ rows: [{ exists: 1 }] })
         .mockResolvedValueOnce({ rows: [] })
-        .mockResolvedValueOnce({ rowCount: 1 })
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({ rows: [{ balance: '10.5' }] })
         .mockResolvedValueOnce({});
 
       const result = await rewardNode('node-1', 0.5);
       expect(result.success).toBe(true);
       expect(result.data.status).toBe('completed');
       expect(result.data.amount).toBe(0.5);
+      expect(result.data.new_balance).toBe(10.5);
       expect(mockRedisDel).toHaveBeenCalledWith('node:node-1:balance');
     });
 
     test('should reject non-existent node', async () => {
       mockClientQuery
         .mockResolvedValueOnce({})
-        .mockResolvedValueOnce({ rows: [] })
-        .mockResolvedValueOnce({ rowCount: 0 })
-        .mockResolvedValueOnce({});
+        .mockResolvedValueOnce({ rows: [] });
 
       const result = await rewardNode('node-missing', 0.5);
       expect(result.success).toBe(false);
@@ -212,7 +213,7 @@ describe('Billing Module Tests', () => {
     test('should handle database error', async () => {
       mockClientQuery
         .mockResolvedValueOnce({})
-        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ exists: 1 }] })
         .mockRejectedValueOnce(new Error('db error'));
 
       const result = await rewardNode('node-err', 0.5);
@@ -224,8 +225,10 @@ describe('Billing Module Tests', () => {
     test('should invalidate balance cache on success', async () => {
       mockClientQuery
         .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({ rows: [{ exists: 1 }] })
         .mockResolvedValueOnce({ rows: [] })
-        .mockResolvedValueOnce({ rowCount: 1 })
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({ rows: [{ balance: '11.5' }] })
         .mockResolvedValueOnce({});
 
       await rewardNode('node-cache', 1.0);
@@ -306,9 +309,11 @@ describe('Billing Module Tests', () => {
   });
 
   describe('getNodeBalance', () => {
-    test('should return balance from cache', async () => {
-      mockRedisGet.mockResolvedValueOnce('42.5');
-      mockPoolQuery.mockResolvedValueOnce({ rows: [{ total_earnings: '42.50' }] });
+    test('should return balance from ledger', async () => {
+      mockPoolQuery
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({ rows: [{ exists: 1 }] })
+        .mockResolvedValueOnce({ rows: [{ balance: '42.5' }] });
 
       const result = await getNodeBalance('node-1');
       expect(result.success).toBe(true);
@@ -316,9 +321,8 @@ describe('Billing Module Tests', () => {
     });
 
     test('should return error for non-existent node', async () => {
-      mockRedisGet.mockResolvedValueOnce(null);
       mockPoolQuery
-        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({})
         .mockResolvedValueOnce({ rows: [] });
 
       const result = await getNodeBalance('node-missing');
@@ -327,11 +331,15 @@ describe('Billing Module Tests', () => {
     });
 
     test('should handle redis error gracefully', async () => {
-      mockRedisGet.mockRejectedValueOnce(new Error('redis error'));
+      mockRedisSet.mockRejectedValueOnce(new Error('redis error'));
+      mockPoolQuery
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({ rows: [{ exists: 1 }] })
+        .mockResolvedValueOnce({ rows: [{ balance: '1.0' }] });
 
       const result = await getNodeBalance('node-err');
-      expect(result.success).toBe(false);
-      expect(result.error).toBe('获取节点余额失败');
+      expect(result.success).toBe(true);
+      expect(result.data.balance).toBe(1.0);
     });
   });
 
@@ -339,7 +347,8 @@ describe('Billing Module Tests', () => {
     test('should deduct from balance successfully', async () => {
       mockClientQuery
         .mockResolvedValueOnce({})
-        .mockResolvedValueOnce({ rows: [{ total_earnings: '9.5' }], rowCount: 1 })
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({ rows: [{ balance: '9.5' }] })
         .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({});
 
@@ -352,8 +361,8 @@ describe('Billing Module Tests', () => {
     test('should reject when balance insufficient', async () => {
       mockClientQuery
         .mockResolvedValueOnce({})
-        .mockResolvedValueOnce({ rows: [], rowCount: 0 })
-        .mockResolvedValueOnce({});
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({ rows: [] });
 
       const result = await deductFromBalance('node-1', 9999);
       expect(result.success).toBe(false);

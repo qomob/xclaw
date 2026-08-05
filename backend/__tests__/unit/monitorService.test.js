@@ -1,5 +1,8 @@
 import { jest, describe, test, expect, beforeEach } from '@jest/globals';
 
+// authService 在模块加载时要求 JWT_SECRET（monitorService → alerts → realtimeEvents 导入链）
+process.env.JWT_SECRET = 'test-jwt-secret-for-testing';
+
 // ============================================
 // Mock setup
 // ============================================
