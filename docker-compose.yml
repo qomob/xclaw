@@ -65,6 +65,12 @@ services:
     container_name: xclaw-maintenance
     restart: unless-stopped
     entrypoint: ["node", "workers/maintenanceWorker.js"]
+    # 覆盖 backend 镜像继承的 HEALTHCHECK（maintenance 不提供 HTTP 服务）
+    healthcheck:
+      test: ["CMD", "node", "-e", "process.exit(0)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     environment:
       - NODE_ENV=production
       - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-xclaw_postgres_2026}@db:5432/xclaw
