@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet } from 'react-router';
 import Sidebar from './Sidebar';
 import AppHeader from './AppHeader';
 import MobileNav from './MobileNav';

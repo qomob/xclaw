@@ -524,15 +524,16 @@ export async function fetchAlerts(params?: { severity?: string; limit?: number; 
 export class WebSocketManager {
   private ws: WebSocket | null = null;
   private url: string;
+  private token?: string;
   private onMessage: (data: unknown) => void;
   private onStatusChange: (connected: boolean) => void;
   private reconnectInterval: number = 3000;
   private shouldReconnect: boolean = true;
 
   constructor(agentId: string, onMessage: (data: unknown) => void, onStatusChange: (connected: boolean) => void, token?: string) {
-    const params = new URLSearchParams({ agent_id: agentId });
-    if (token) params.set('token', token);
-    this.url = `${WS_BASE_URL}/ws?${params.toString()}`;
+    // token 不放入 URL（避免进入访问日志/代理），改为连接后通过 auth 消息发送
+    this.token = token;
+    this.url = `${WS_BASE_URL}/ws?agent_id=${encodeURIComponent(agentId)}`;
     this.onMessage = onMessage;
     this.onStatusChange = onStatusChange;
   }
@@ -544,6 +545,9 @@ export class WebSocketManager {
     this.ws.onopen = () => {
       console.log('WebSocket connected');
       this.onStatusChange(true);
+      if (this.token) {
+        this.ws?.send(JSON.stringify({ type: 'auth', apiKey: this.token, agentId: 'monitor' }));
+      }
     };
 
     this.ws.onmessage = (event) => {

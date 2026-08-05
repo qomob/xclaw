@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import NetworkMap from '../components/NetworkMap';
-import SocialGraph from '../components/SocialGraph';
-import TopologyView from '../components/TopologyView';
-import OsintFeedView from '../components/OsintFeedView';
-import GalaxyView from '../components/GalaxyView';
 import { useXClawStore } from '../store/useXClawStore';
+
+// 重型可视化组件全部懒加载，初始只加载默认视图（MAP）
+const NetworkMap = React.lazy(() => import('../components/NetworkMap'));
+const SocialGraph = React.lazy(() => import('../components/SocialGraph'));
+const TopologyView = React.lazy(() => import('../components/TopologyView'));
+const OsintFeedView = React.lazy(() => import('../components/OsintFeedView'));
+const GalaxyView = React.lazy(() => import('../components/GalaxyView'));
 
 type ViewMode = 'map' | 'galaxy' | 'topology' | 'osint' | 'graph';
 
@@ -64,11 +66,13 @@ export default function NetworkOverview() {
       </div>
 
       <div className="flex-1 min-h-0">
-        {view === 'map' && <NetworkMap />}
-        {view === 'galaxy' && <GalaxyView nodes={galaxyNodes} edges={galaxyEdges} />}
-        {view === 'topology' && <TopologyView />}
-        {view === 'osint' && <OsintFeedView />}
-        {view === 'graph' && <SocialGraph />}
+        <React.Suspense fallback={<div className="h-full flex items-center justify-center text-xs text-slate-500">Loading view…</div>}>
+          {view === 'map' && <NetworkMap />}
+          {view === 'galaxy' && <GalaxyView nodes={galaxyNodes} edges={galaxyEdges} />}
+          {view === 'topology' && <TopologyView />}
+          {view === 'osint' && <OsintFeedView />}
+          {view === 'graph' && <SocialGraph />}
+        </React.Suspense>
       </div>
     </div>
   );

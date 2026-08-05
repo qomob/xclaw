@@ -91,7 +91,13 @@ export default function FinanceCenter() {
     loadWallets();
   }, [loadData, loadWallets]);
 
-  const supportedChains = ['ethereum', 'polygon', 'arbitrum', 'optimism'];
+  const supportedChains = ['ethereum', 'bitcoin', 'usdt'];
+
+  const chainMeta: Record<string, { symbol: string; label: string; color: string; bg: string }> = {
+    ethereum: { symbol: 'ETH', label: 'Ethereum', color: 'text-blue-400', bg: 'bg-blue-500/20' },
+    bitcoin:  { symbol: 'BTC', label: 'Bitcoin',  color: 'text-orange-400', bg: 'bg-orange-500/20' },
+    usdt:     { symbol: 'USDT', label: 'Tether USD', color: 'text-green-400', bg: 'bg-green-500/20' },
+  };
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'overview', label: 'Overview' },
@@ -191,8 +197,8 @@ export default function FinanceCenter() {
                 {wallets.map(w => (
                   <div key={w.wallet_id} className="flex items-center justify-between p-2 rounded-lg bg-slate-800">
                     <div>
-                      <span className="text-xs font-medium text-white">
-                        {w.chain}
+                      <span className={`text-xs font-medium ${chainMeta[w.chain]?.color || 'text-white'}`}>
+                        {chainMeta[w.chain]?.symbol || w.chain}
                       </span>
                       {w.is_primary && (
                         <span className="ml-2 text-[10px] text-brand-400">Primary</span>
@@ -260,12 +266,9 @@ export default function FinanceCenter() {
                   <div key={w.wallet_id} className="flex items-center justify-between p-3 rounded-lg bg-slate-800">
                     <div className="flex items-center gap-3">
                       <span className={`text-xs font-bold px-2 py-1 rounded ${
-                        w.chain === 'ethereum' ? 'bg-blue-500/20 text-blue-400' :
-                        w.chain === 'polygon' ? 'bg-purple-500/20 text-purple-400' :
-                        w.chain === 'arbitrum' ? 'bg-sky-500/20 text-sky-400' :
-                        'bg-red-500/20 text-red-400'
-                      }`}>
-                        {w.chain}
+                        chainMeta[w.chain]?.bg || 'bg-slate-500/20'
+                      } ${chainMeta[w.chain]?.color || 'text-slate-400'}`}>
+                        {chainMeta[w.chain]?.symbol || w.chain}
                       </span>
                       <span className="text-xs font-mono text-slate-400">
                         {w.address.slice(0, 12)}...{w.address.slice(-8)}
@@ -284,13 +287,16 @@ export default function FinanceCenter() {
             <h3 className="text-sm font-semibold mb-3 text-white">
               Supported Chains
             </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {supportedChains.map(chain => (
                 <div key={chain} className="text-center p-3 rounded-lg bg-slate-800">
-                  <div className="text-xs font-medium text-white">
-                    {chain}
+                  <div className={`text-xs font-bold ${chainMeta[chain]?.color || 'text-white'}`}>
+                    {chainMeta[chain]?.symbol || chain}
                   </div>
                   <div className="text-[10px] text-slate-400">
+                    {chainMeta[chain]?.label || chain}
+                  </div>
+                  <div className="text-[10px] text-slate-500">
                     {wallets.some(w => w.chain === chain) ? 'Bound' : 'Not bound'}
                   </div>
                 </div>
@@ -321,8 +327,9 @@ export default function FinanceCenter() {
               className="w-full px-3 py-2 rounded-lg text-sm outline-none bg-slate-800 border border-slate-700 text-white"
             >
               <option value="api">API</option>
-              <option value="ethereum">Ethereum</option>
-              <option value="polygon">Polygon</option>
+              <option value="ethereum">ETH (Ethereum)</option>
+              <option value="bitcoin">BTC (Bitcoin)</option>
+              <option value="usdt">USDT (ERC-20)</option>
             </select>
             <div className="flex items-center gap-3">
               <button
@@ -330,11 +337,14 @@ export default function FinanceCenter() {
                 disabled={!topupAmount || parseFloat(topupAmount) <= 0}
                 className="px-4 py-2 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600 disabled:opacity-40 transition-colors"
               >
-                Top Up
+                Request Top Up
               </button>
               {topupStatus === 'success' && <span className="text-xs text-green-400">✓ Top-up successful</span>}
               {topupStatus === 'error' && <span className="text-xs text-red-400">✗ Top-up failed</span>}
             </div>
+            <p className="text-[10px] text-slate-400 mt-2">
+              Top-ups are manually verified by administrators and credited to the ledger after confirmation.
+            </p>
           </div>
         </div>
       )}

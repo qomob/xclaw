@@ -1,5 +1,5 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router';
 import RealtimeProvider from './components/RealtimeProvider';
 import { useThemeStore } from './store/useThemeStore';
 import { getToken } from './utils/api';

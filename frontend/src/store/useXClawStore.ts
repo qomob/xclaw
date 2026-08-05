@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { fetchOnlineAgents, fetchSkillCategories, getTopology3D, WebSocketManager } from '../utils/api';
+import { fetchOnlineAgents, fetchSkillCategories, getTopology3D, WebSocketManager, getToken } from '../utils/api';
 
 // 日志类型定义
 export interface Log {
@@ -361,7 +361,7 @@ export const useXClawStore = create<XClawState>((set, get) => {
               }
             },
             (connected) => set({ isConnected: connected }),
-            import.meta.env.VITE_MONITOR_TOKEN || undefined
+            getToken() || undefined
           );
           wsManager.connect();
         }

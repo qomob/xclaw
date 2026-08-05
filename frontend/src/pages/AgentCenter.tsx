@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import {
   fetchOnlineAgents, fetchAgentDetail, fetchAgentProfile,
   fetchAgentSkills, fetchAgentMemories, fetchAgentMemoryStats,
