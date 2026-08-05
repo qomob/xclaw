@@ -154,21 +154,28 @@ export async function dequeueOfflineMessages(agent_id, limit = 50) {
       return formatResponse(true, { messages: [], count: 0 });
     }
     
-    const decrypted = messages.map(m => {
+    const decrypted = [];
+    let successfulCount = 0;
+    for (const m of messages) {
       try {
         const parsed = JSON.parse(m);
         if (parsed.encrypted) {
           const decryptedData = encryptionService.decryptMessage(parsed.encrypted, agent_id);
-          return { ...parsed, decrypted_content: decryptedData };
+          decrypted.push({ ...parsed, decrypted_content: decryptedData });
+        } else {
+          decrypted.push(parsed);
         }
-        return parsed;
+        successfulCount++;
       } catch {
-        return { raw: m, error: 'parse_failed' };
+        // 解析/解密失败的消息保留在队列中，避免数据丢失
+        logger.warn('Failed to parse/dequeue offline message', { agent_id });
       }
-    });
+    }
     
-    // 移除已取回的消息
-    await redis.ltrim(queueKey, limit, -1);
+    // 仅移除成功交付的消息
+    if (successfulCount > 0) {
+      await redis.ltrim(queueKey, successfulCount, -1);
+    }
     
     return formatResponse(true, { messages: decrypted, count: decrypted.length });
   } catch (error) {

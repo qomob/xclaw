@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import cacheService from './cacheService.js';
 import logger from './loggerService.js';
 import { generateText } from './aiService.js';
+import crypto from 'crypto';
 
 dotenv.config();
 
@@ -38,7 +39,8 @@ const agentSchema = {
 export async function parseAgentFromText(rawText) {
   try {
     // 生成缓存键
-    const cacheKey = `agent_parser:${rawText.trim().substring(0, 100)}`;
+    const textHash = crypto.createHash('sha256').update(rawText.trim()).digest('hex');
+    const cacheKey = `agent_parser:${textHash}`;
     
     // 检查缓存
     const cachedResult = await cacheService.get(cacheKey);

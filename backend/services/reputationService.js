@@ -298,7 +298,7 @@ export async function updateReputation(nodeId, reason = 'periodic', details = {}
   // 更新 Redis 排行榜
   try {
     const redis = getRedis();
-    await redis.zAdd(LEADERBOARD_KEY, [{ score: newScore, value: nodeId }]);
+    await redis.zadd(LEADERBOARD_KEY, newScore, nodeId);
     // 缓存详细数据
     await redis.set(`${CACHE_PREFIX}${nodeId}`, JSON.stringify(reputation), { EX: CACHE_TTL });
   } catch (e) {

@@ -620,9 +620,13 @@ class EventsModule {
 class AuthModule {
   constructor(http) { this._ = http; }
 
-  /** 登录获取 JWT（使用 API Key） */
-  async login() {
-    const res = await this._.post('/v1/auth/login');
+  /**
+   * 登录获取 JWT（使用 API Key）
+   * @param {string} [apiKey] 显式传入 API Key；缺省时使用 HttpClient 已配置的 Key
+   */
+  async login(apiKey) {
+    const key = apiKey || this._._headers['Authorization'] || '';
+    const res = await this._.post('/v1/auth/login', { api_key: key });
     if (res.success && res.data?.token) {
       this._.setJwt(res.data.token);
     }

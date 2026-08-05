@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import cacheService from './cacheService.js';
 import logger from './loggerService.js';
 import CircuitBreaker from 'opossum';
+import crypto from 'crypto';
 
 dotenv.config();
 
@@ -89,7 +90,8 @@ initBreaker();
 
 export async function generateText(prompt, options = {}) {
   try {
-    const cacheKey = `generate:${prompt.substring(0, 200)}:${options.model || AI_CONFIG.model}`;
+    const promptHash = crypto.createHash('sha256').update(String(prompt)).digest('hex');
+    const cacheKey = `generate:${promptHash}:${options.model || AI_CONFIG.model}`;
 
     const cachedResult = await cacheService.get(cacheKey);
     if (cachedResult) {
@@ -114,7 +116,8 @@ export async function generateText(prompt, options = {}) {
 
 export async function generateEmbedding(text) {
   try {
-    const cacheKey = `embedding:${text.trim().substring(0, 200)}:${AI_CONFIG.embeddingModel}`;
+    const textHash = crypto.createHash('sha256').update(String(text).trim()).digest('hex');
+    const cacheKey = `embedding:${textHash}:${AI_CONFIG.embeddingModel}`;
 
     const cachedResult = await cacheService.get(cacheKey);
     if (cachedResult) {
