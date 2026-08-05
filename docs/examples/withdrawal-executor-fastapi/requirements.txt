@@ -1,0 +1,7 @@
+# 必装
+fastapi>=0.111
+uvicorn[standard]>=0.30
+
+# 可选：真实以太坊广播（web3.py）
+# web3>=6.15
+

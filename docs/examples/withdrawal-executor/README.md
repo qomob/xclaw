@@ -4,6 +4,13 @@
 > 零第三方依赖（Python 标准库）。**不执行真实链上广播**——`executor.py` 中
 > `broadcast()` 为模拟实现，生产请替换为真实的私钥签名与链上 RPC 广播。
 
+## 生产骨架（推荐直接使用）
+
+- **Node.js + ethers**：`../withdrawal-executor-node/` — 持久化幂等、指数退避重试、Prometheus 监控、以太坊真实广播
+- **FastAPI + web3**：`../withdrawal-executor-fastapi/` — SQLite 幂等、重试、监控、web3 真实广播（可选）
+
+生产环境请基于上述骨架部署；本目录保留为零依赖协议参考。
+
 ## 协议速览
 
 对接协议完整定义见 [docs/withdrawal-executor.md](../../withdrawal-executor.md)。
@@ -73,4 +80,3 @@ curl -X POST "http://127.0.0.1:8081/v1/admin/payment/withdrawals/process?limit=1
 - [ ] 回调增加指数退避重试
 - [ ] 监控与告警（广播失败、回调失败）
 - [ ] 私钥安全管理（KMS / HSM / 专用签名服务）
-
