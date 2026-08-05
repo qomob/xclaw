@@ -55,11 +55,12 @@ def save_state(path, data):
 class XClawClient:
     def __init__(self, base_url, api_key=None, jwt=None, state_file=None):
         self.base_url = base_url.rstrip("/")
-        self.api_key = api_key or os.environ.get("XCLAW_API_KEY", "")
-        self.jwt = jwt or os.environ.get("XCLAW_JWT", "")
         self.state_file = state_file
 
         state = load_state(state_file) if state_file else {}
+        # 优先级：显式参数 > 环境变量 > 状态文件持久化的 API Key
+        self.api_key = api_key or os.environ.get("XCLAW_API_KEY", "") or state.get("api_key", "")
+        self.jwt = jwt or os.environ.get("XCLAW_JWT", "")
         self.agent_id = state.get("agent_id")
         pk_bytes = state.get("private_key_bytes")
 
@@ -160,6 +161,7 @@ class XClawClient:
             ).decode("utf-8")
         save_state(self.state_file, {
             "agent_id": self.agent_id,
+            "api_key": self.api_key,
             "public_key_pem": self.public_key_pem,
             "private_key_bytes": pk_bytes,
         })
@@ -381,7 +383,8 @@ def action_health(client, **_kw):
 
 def action_gap_analysis(client, **_kw):
     categories = client.get("/v1/skills/categories")
-    online = client.get("/v1/agents/online")
+    if not categories.get("success"):
+        return fail("gap-analysis", categories.get("error", "Cannot fetch skill categories"))
 
     cat_list = categories.get("data", [])
     if cat_list and isinstance(cat_list[0], dict):
@@ -389,16 +392,26 @@ def action_gap_analysis(client, **_kw):
     else:
         cat_names = cat_list
 
-    agents = online.get("data", [])
+    # 能力分布以拓扑节点 tags 为准（/v1/agents/online 不返回 capabilities/tags）
+    topo = client.get("/v1/topology")
+    if not topo.get("success") and not (isinstance(topo, dict) and "nodes" in topo):
+        return fail("gap-analysis", topo.get("error", "Cannot fetch topology"))
+    nodes = []
+    if topo.get("success") and topo.get("data"):
+        nodes = topo["data"].get("nodes", [])
+    elif isinstance(topo, dict) and "nodes" in topo:
+        nodes = topo["nodes"]
+
     agent_skills = {}
-    if agents and isinstance(agents[0], dict):
-        for a in agents:
-            a_cats = a.get("categories", [])
-            if not a_cats:
-                caps = a.get("capabilities", "") or a.get("tags", [])
-                a_cats = [caps] if isinstance(caps, str) else caps
-            for c in a_cats:
-                agent_skills[c] = agent_skills.get(c, 0) + 1
+    for n in nodes:
+        tags = n.get("tags") or []
+        if isinstance(tags, str):
+            try:
+                tags = json.loads(tags)
+            except (json.JSONDecodeError, TypeError):
+                tags = []
+        for t in tags:
+            agent_skills[t] = agent_skills.get(t, 0) + 1
 
     well_served = []
     under_served = []
@@ -415,7 +428,7 @@ def action_gap_analysis(client, **_kw):
 
     data = {
         "total_categories": len(cat_names),
-        "total_online_agents": len(agents),
+        "total_online_agents": len(nodes),
         "well_served": sorted(well_served, key=lambda x: -x["agent_count"]),
         "under_served": sorted(under_served, key=lambda x: x["agent_count"]),
         "gaps": gaps,
@@ -433,14 +446,16 @@ def action_gap_analysis(client, **_kw):
 
 
 def action_reputation(client, limit=20, **_kw):
-    leaderboard = client.get("/v1/reputation/leaderboard", params={"limit": str(limit)})
-    if not leaderboard.get("success"):
-        err = leaderboard.get("error", "Cannot fetch leaderboard")
+    raw = client.get("/v1/reputation/leaderboard", params={"limit": str(limit)})
+    if raw.get("success") is False:
+        err = raw.get("error", "Cannot fetch leaderboard")
         if "401" in err or "API key" in err:
             err += " — this endpoint requires --api-key"
         return fail("reputation", err)
 
-    agents = leaderboard.get("data", [])
+    # 兼容两种返回：{ success, data: { leaderboard, total } } 或直返 { leaderboard, total }
+    payload = raw.get("data", raw)
+    agents = payload.get("leaderboard", []) if isinstance(payload, dict) else []
     ranked = []
     if agents and isinstance(agents[0], dict):
         ranked = [
@@ -478,7 +493,7 @@ def action_task_market(client, **_kw):
         if isinstance(tasks, list):
             categories = {}
             for t in tasks:
-                cat = t.get("category", "uncategorized")
+                cat = t.get("type", "uncategorized")
                 categories[cat] = categories.get(cat, 0) + 1
             data["popular_categories"] = sorted(categories.items(), key=lambda x: -x[1])
             data["recent_tasks_count"] = len(tasks)

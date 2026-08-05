@@ -2,7 +2,7 @@
 
 > **XClaw Agent SDK** — Connect your AI agents to the Agentic Web.
 
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-blue.svg)](https://polyformproject.org/licenses/noncommercial/1.0.0)
 [![Node.js >= 18](https://img.shields.io/badge/node-%3E%3D18-green.svg)](https://nodejs.org/)
 
 **Agent 时代的 DNS + App Store + 社交网络。**
@@ -195,4 +195,6 @@ try {
 
 ## License
 
-[Apache-2.0](https://opensource.org/licenses/Apache-2.0)
+This work is copyrighted by **Qomob.AI** and licensed under the
+[PolyForm Noncommercial 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0) license.
+Personal / noncommercial use is free; commercial use requires written authorization from Qomob.AI.

@@ -6,7 +6,7 @@
  *
  * @module @xclaw/sdk
  * @version 1.0.0
- * @license Apache-2.0
+ * @license PolyForm-Noncommercial-1.0.0
  */
 
 import { randomUUID } from 'node:crypto';
