@@ -125,42 +125,44 @@ export default function TopHeader() {
           <span className="hidden sm:inline text-sm font-bold tracking-wider text-white">XCLAW</span>
         </NavLink>
 
-        {/* 桌面主导航 */}
-        <nav className="hidden lg:flex items-center gap-1 ml-4" aria-label="Primary navigation">
-          {PRIMARY_NAV.map(item => (
-            <NavLink key={item.path} to={item.path} className={navLinkCls(item.path)}>
-              {t(item.key as never)}
-            </NavLink>
-          ))}
-          <div className="relative" ref={moreRef}>
-            <button
-              onClick={() => setMoreOpen(o => !o)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center gap-1 ${
-                moreActive ? 'bg-brand-500/15 text-brand-400' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-              }`}
-            >
-              {t('navMore')}
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <path d="M6 9l6 6 6-6" />
-              </svg>
-            </button>
-            {moreOpen && (
-              <div className="absolute right-0 top-full mt-1 w-44 rounded-xl border border-slate-700 bg-slate-900 shadow-2xl p-1.5 z-50">
-                {MORE_NAV.map(item => (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    className={`block px-3 py-2 text-xs rounded-lg transition-colors ${
-                      isActive(item.path) ? 'bg-brand-500/15 text-brand-400' : 'text-slate-300 hover:bg-slate-800'
-                    }`}
-                  >
-                    {t(item.key as never)}
-                  </NavLink>
-                ))}
-              </div>
-            )}
-          </div>
-        </nav>
+        {/* 桌面主导航（仅登录后显示） */}
+        {authed && (
+          <nav className="hidden lg:flex items-center gap-1 ml-4" aria-label="Primary navigation">
+            {PRIMARY_NAV.map(item => (
+              <NavLink key={item.path} to={item.path} className={navLinkCls(item.path)}>
+                {t(item.key as never)}
+              </NavLink>
+            ))}
+            <div className="relative" ref={moreRef}>
+              <button
+                onClick={() => setMoreOpen(o => !o)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center gap-1 ${
+                  moreActive ? 'bg-brand-500/15 text-brand-400' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                {t('navMore')}
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </button>
+              {moreOpen && (
+                <div className="absolute right-0 top-full mt-1 w-44 rounded-xl border border-slate-700 bg-slate-900 shadow-2xl p-1.5 z-50">
+                  {MORE_NAV.map(item => (
+                    <NavLink
+                      key={item.path}
+                      to={item.path}
+                      className={`block px-3 py-2 text-xs rounded-lg transition-colors ${
+                        isActive(item.path) ? 'bg-brand-500/15 text-brand-400' : 'text-slate-300 hover:bg-slate-800'
+                      }`}
+                    >
+                      {t(item.key as never)}
+                    </NavLink>
+                  ))}
+                </div>
+              )}
+            </div>
+          </nav>
+        )}
 
         <div className="ml-auto flex items-center gap-2 md:gap-3">
           {/* 系统状态点 */}
@@ -221,19 +223,43 @@ export default function TopHeader() {
                 ✕
               </button>
             </div>
-            <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5" aria-label="Mobile navigation">
-              {[...PRIMARY_NAV, ...MORE_NAV].map(item => (
-                <NavLink
-                  key={item.path}
-                  to={item.path}
-                  className={`block px-3 py-2.5 text-sm rounded-lg transition-colors ${
-                    isActive(item.path) ? 'bg-brand-500/15 text-brand-400 font-medium' : 'text-slate-300 hover:bg-slate-800'
-                  }`}
+            {authed ? (
+              <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5" aria-label="Mobile navigation">
+                {[...PRIMARY_NAV, ...MORE_NAV].map(item => (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    className={`block px-3 py-2.5 text-sm rounded-lg transition-colors ${
+                      isActive(item.path) ? 'bg-brand-500/15 text-brand-400 font-medium' : 'text-slate-300 hover:bg-slate-800'
+                    }`}
+                  >
+                    {t(item.key as never)}
+                  </NavLink>
+                ))}
+              </nav>
+            ) : (
+              <div className="flex-1 overflow-y-auto py-4 px-4 space-y-2">
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  {t('heroSubtitle')}
+                </p>
+                <a
+                  href="/xclawskill.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block px-3 py-2.5 text-sm rounded-lg text-brand-400 hover:bg-slate-800 transition-colors"
                 >
-                  {t(item.key as never)}
-                </NavLink>
-              ))}
-            </nav>
+                  🤖 {t('connectAgent')}
+                </a>
+                <a
+                  href="/manual.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block px-3 py-2.5 text-sm rounded-lg text-slate-300 hover:bg-slate-800 transition-colors"
+                >
+                  📖 {t('manual')}
+                </a>
+              </div>
+            )}
             <div className="border-t border-slate-800 p-4 flex items-center justify-between">
               <LangToggle lang={lang} toggleLang={toggleLang} compact />
               {authed ? (
