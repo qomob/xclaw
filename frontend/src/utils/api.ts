@@ -242,6 +242,30 @@ export async function placeOrder(skillId: string, payload?: Record<string, unkno
   });
 }
 
+/** 注册技能（创建技能记录） */
+export async function registerSkill(payload: { name: string; description: string; category: string; version: string; node_id: string }) {
+  return request('/v1/skills/register', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+/** 上架技能到市场（定价） */
+export async function listSkill(skillId: string, price: number) {
+  return request('/v1/marketplace/list', {
+    method: 'POST',
+    body: JSON.stringify({ skill_id: skillId, price }),
+  });
+}
+
+/** 下架技能 */
+export async function delistSkill(skillId: string) {
+  return request('/v1/marketplace/delist', {
+    method: 'POST',
+    body: JSON.stringify({ skill_id: skillId }),
+  });
+}
+
 export async function fetchMyOrders(params?: { status?: string; limit?: number; offset?: number }) {
   const qs = params ? '?' + Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
   return request(`/v1/marketplace/my/orders${qs}`);

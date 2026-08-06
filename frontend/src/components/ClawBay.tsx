@@ -4,7 +4,8 @@ import {
   fetchMyOrders, fetchSkillReviews, postReview, fetchTopRatedSkills,
   searchSkills, fetchFeaturedSkills, fetchMarketplaceStats,
   AuthError, login as apiLogin, getToken,
-  fetchOrderDetail, runTask, pollTask
+  fetchOrderDetail, runTask, pollTask,
+  registerSkill, listSkill, delistSkill, fetchAgentSkills, getAgentIdFromToken,
 } from '../utils/api';
 import { useI18n } from '../i18n/LanguageContext';
 import { useToast } from './ToastContext';
@@ -60,7 +61,7 @@ interface MarketStats {
   total_volume: number;
 }
 
-type Tab = 'discover' | 'market' | 'detail' | 'orders' | 'top';
+type Tab = 'discover' | 'market' | 'detail' | 'orders' | 'top' | 'publish';
 
 export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) {
   const { t } = useI18n();
@@ -89,6 +90,10 @@ export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) 
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [taskRunning, setTaskRunning] = useState(false);
   const [taskStatus, setTaskStatus] = useState<{ task_id: string; status: string; result?: string | Record<string, unknown>; error?: string } | null>(null);
+  const [mySkills, setMySkills] = useState<Array<{ id: string; name: string; category: string; version: string; price: number | string; is_listed: boolean; sales_count?: number }>>([]);
+  const [pubForm, setPubForm] = useState({ name: '', description: '', category: '', version: '1.0.0', price: '' });
+  const [pubStatus, setPubStatus] = useState('');
+  const [pubBusy, setPubBusy] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -239,7 +244,66 @@ export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) 
     }
   };
 
+  const loadMySkills = useCallback(async () => {
+    const agentId = getAgentIdFromToken();
+    if (!agentId) return;
+    try {
+      const res = await fetchAgentSkills(agentId);
+      if (res.success) setMySkills(res.data || []);
+    } catch { /* ignore */ }
+  }, []);
+
+  const handlePublish = async () => {
+    const agentId = getAgentIdFromToken();
+    const price = parseFloat(pubForm.price);
+    if (!agentId || !pubForm.name.trim() || !pubForm.category || !price || price <= 0) {
+      setPubStatus('error');
+      return;
+    }
+    setPubBusy(true);
+    setPubStatus('');
+    try {
+      const reg = await registerSkill({
+        name: pubForm.name.trim(),
+        description: pubForm.description.trim(),
+        category: pubForm.category,
+        version: pubForm.version || '1.0.0',
+        node_id: agentId,
+      });
+      if (!reg.success || !reg.data?.skill_id) {
+        setPubStatus('error');
+        return;
+      }
+      const listed = await listSkill(reg.data.skill_id, price);
+      if (!listed.success) {
+        setPubStatus('error');
+        return;
+      }
+      setPubStatus('success');
+      toast(`${t('cbPublishOk')} · ${pubForm.name.trim()} @ ${price} XCL`, 'success');
+      setPubForm({ name: '', description: '', category: '', version: '1.0.0', price: '' });
+      loadMySkills();
+      fetchData();
+    } catch {
+      setPubStatus('error');
+    } finally {
+      setPubBusy(false);
+    }
+  };
+
+  const handleDelist = async (skillId: string) => {
+    try {
+      const res = await delistSkill(skillId);
+      toast(res.success ? t('cbPubDelisted') : (res.error || t('cbPubDelist')), res.success ? 'success' : 'error');
+      loadMySkills();
+      fetchData();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : t('cbPubDelist'), 'error');
+    }
+  };
+
   useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { if (activeTab === 'publish') loadMySkills(); }, [activeTab, loadMySkills]);
   useEffect(() => { discoverSearch(discoverQuery); }, [discoverQuery, discoverSearch]);
   useEffect(() => { if (activeTab === 'orders') fetchOrders(); }, [activeTab, fetchOrders]);
 
@@ -296,7 +360,7 @@ export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) 
         {t('cbDesc')}
       </p>
 
-      <div className="flex gap-1 flex-wrap">{tabBtn('discover', t('cbDiscover'))}{tabBtn('market', t('cbMarket'))}{tabBtn('top', t('cbTop'))}{tabBtn('orders', t('cbOrders'))}</div>
+      <div className="flex gap-1 flex-wrap">{tabBtn('discover', t('cbDiscover'))}{tabBtn('market', t('cbMarket'))}{tabBtn('top', t('cbTop'))}{tabBtn('orders', t('cbOrders'))}{tabBtn('publish', t('cbPublish'))}</div>
 
       {stats && (
         <div className="grid grid-cols-3 gap-1.5 md:gap-2">
@@ -518,6 +582,113 @@ export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) 
             </>
           )}
         </>
+      )}
+
+      {/* ===== PUBLISH TAB ===== */}
+      {activeTab === 'publish' && (
+        <div className="space-y-3">
+          {needsAuth ? (
+            <div className="bg-black/30 rounded border border-l-2 border-l-amber-500 border-amber-800/30 p-4 text-center space-y-2">
+              <p className="text-[12px] text-gray-400">{t('cbNeedLogin')}</p>
+              <button
+                onClick={() => setActiveTab('orders')}
+                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-[11px] rounded-lg transition-colors"
+              >
+                {t('cbGoToAuth')}
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="bg-black/30 rounded border border-l-2 border-l-amber-500 border-amber-800/30 p-3 space-y-2">
+                <h3 className="text-[12px] font-semibold text-white flex items-center gap-1.5">
+                  <span className="text-amber-400">🚀</span> {t('cbPublishTitle')}
+                </h3>
+                <input
+                  type="text"
+                  value={pubForm.name}
+                  onChange={e => setPubForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder={t('cbSkillName')}
+                  className="w-full bg-slate-900/50 border border-gray-700 rounded px-2.5 py-1.5 text-[12px] text-white outline-none focus:border-amber-500 placeholder-gray-500"
+                />
+                <textarea
+                  value={pubForm.description}
+                  onChange={e => setPubForm(f => ({ ...f, description: e.target.value }))}
+                  placeholder={t('tcDescPlaceholder')}
+                  rows={3}
+                  className="w-full bg-slate-900/50 border border-gray-700 rounded px-2.5 py-1.5 text-[12px] text-white outline-none focus:border-amber-500 placeholder-gray-500 resize-none"
+                />
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                  <input
+                    type="text"
+                    value={pubForm.category}
+                    onChange={e => setPubForm(f => ({ ...f, category: e.target.value }))}
+                    placeholder={t('cbCategoryLabel')}
+                    className="w-full bg-slate-900/50 border border-gray-700 rounded px-2.5 py-1.5 text-[12px] text-white outline-none focus:border-amber-500 placeholder-gray-500"
+                  />
+                  <input
+                    type="text"
+                    value={pubForm.version}
+                    onChange={e => setPubForm(f => ({ ...f, version: e.target.value }))}
+                    placeholder={t('cbVersion')}
+                    className="w-full bg-slate-900/50 border border-gray-700 rounded px-2.5 py-1.5 text-[12px] text-white outline-none focus:border-amber-500 placeholder-gray-500"
+                  />
+                  <input
+                    type="number"
+                    value={pubForm.price}
+                    onChange={e => setPubForm(f => ({ ...f, price: e.target.value }))}
+                    placeholder={t('cbPriceLabel')}
+                    min="0"
+                    step="0.01"
+                    className="w-full bg-slate-900/50 border border-gray-700 rounded px-2.5 py-1.5 text-[12px] text-white outline-none focus:border-amber-500 placeholder-gray-500"
+                  />
+                </div>
+                <p className="text-[10px] text-gray-500">{t('cbPriceHint')}</p>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handlePublish}
+                    disabled={pubBusy || !pubForm.name.trim() || !pubForm.price}
+                    className="bg-amber-600 hover:bg-amber-700 disabled:opacity-40 text-white text-[11px] px-3 py-1.5 rounded-lg font-medium transition-colors"
+                  >
+                    {pubBusy ? '...' : t('cbPublishBtn')}
+                  </button>
+                  {pubStatus === 'success' && <span className="text-[11px] text-green-400">{t('cbPublishOk')}</span>}
+                  {pubStatus === 'error' && <span className="text-[11px] text-red-400">{t('cbPublishFail')}</span>}
+                </div>
+              </div>
+
+              <div className="bg-black/30 rounded border border-gray-800/40 p-3 space-y-1.5">
+                <h3 className="text-[12px] font-semibold text-white">{t('cbMySkills')} ({mySkills.length})</h3>
+                {mySkills.length === 0 ? (
+                  <p className="text-[11px] text-gray-500 text-center py-3">{t('cbNoListings')}</p>
+                ) : (
+                  mySkills.map(s => (
+                    <div key={s.id} className="flex items-center justify-between bg-slate-900/50 rounded px-2.5 py-2">
+                      <div className="min-w-0">
+                        <div className="text-[12px] font-medium text-white truncate">{s.name}</div>
+                        <div className="text-[10px] text-gray-500">
+                          {s.category} · v{s.version} · {Number(s.price) > 0 ? `${Number(s.price)} XCL` : '—'} · {s.sales_count ?? 0} {t('cbSalesCount')}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${s.is_listed ? 'bg-green-500/20 text-green-400' : 'bg-slate-600/30 text-gray-400'}`}>
+                          {s.is_listed ? t('cbPubListed') : t('cbPubUnlisted')}
+                        </span>
+                        {s.is_listed && (
+                          <button
+                            onClick={() => handleDelist(s.id)}
+                            className="text-[10px] text-red-400 hover:text-red-300 transition-colors"
+                          >
+                            {t('cbPubDelist')}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
+          )}
+        </div>
       )}
 
       {/* ===== DETAIL VIEW ===== */}
