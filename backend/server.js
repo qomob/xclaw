@@ -161,7 +161,15 @@ const limiter = rateLimit({
     success: false,
     error: '请求过于频繁，请稍后再试'
   },
-  skip: (req) => req.path === '/health' || req.path === '/metrics'
+  skip: (req) => {
+    // 前端常轮的公开只读接口豁免（防 UI 把自己限流打死）
+    const publicReads = new Set([
+      '/health', '/metrics',
+      '/v1/topology', '/v1/agents/online', '/v1/social-graph',
+      '/v1/social-graph/communities', '/v1/skills/categories',
+    ]);
+    return publicReads.has(req.path);
+  }
 });
 app.use(limiter);
 

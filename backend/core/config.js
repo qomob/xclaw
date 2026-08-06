@@ -59,7 +59,7 @@ const config = {
   // 速率限制配置
   rateLimit: {
     windowMs: 15 * 60 * 1000, // 15分钟
-    max: 100, // 每IP限制100次请求
+    max: 500, // 每IP 15分钟500次（前端轮询+页面加载的安全余量）
     skill: {
       windowMs: 15 * 60 * 1000,
       max: 30

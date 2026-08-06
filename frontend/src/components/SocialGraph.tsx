@@ -289,7 +289,7 @@ export default function SocialGraph() {
     };
     init();
     return () => { cancelled = true; simRef.current?.stop(); };
-  }, [dimensions.width, dimensions.height, loadStats]);
+  }, []); // 只在挂载时拉取一次；尺寸变化仅重绘，不重新请求（避免打爆限流）
 
   const handleDecay = useCallback(async () => {
     setDecaying(true);
