@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  fetchBalance, fetchTransactions, topUp,
-  request
+  fetchBalance, fetchTransactions,
+  request, getAgentIdFromToken
 } from '../utils/api';
 
 type Tab = 'overview' | 'transactions' | 'wallets' | 'topup';
@@ -39,10 +39,6 @@ export default function FinanceCenter() {
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [topupAmount, setTopupAmount] = useState('');
-  const [topupMethod, setTopupMethod] = useState('api');
-  const [topupStatus, setTopupStatus] = useState('');
-
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
@@ -63,28 +59,12 @@ export default function FinanceCenter() {
 
   const loadWallets = useCallback(async () => {
     try {
-      const res = await request('/v1/wallets');
+      const nodeId = getAgentIdFromToken();
+      if (!nodeId) return;
+      const res = await request(`/v1/payment/wallets/${nodeId}`);
       if (res.success) setWallets(res.data || []);
     } catch { /* ignore */ }
   }, []);
-
-  const handleTopup = async () => {
-    setTopupStatus('');
-    const amount = parseFloat(topupAmount);
-    if (!amount || amount <= 0) return;
-    try {
-      const res = await topUp({ amount, method: topupMethod });
-      if (res.success) {
-        setTopupStatus('success');
-        setTopupAmount('');
-        loadData();
-      } else {
-        setTopupStatus('error');
-      }
-    } catch {
-      setTopupStatus('error');
-    }
-  };
 
   useEffect(() => {
     loadData();
@@ -307,43 +287,36 @@ export default function FinanceCenter() {
       )}
 
       {tab === 'topup' && (
-        <div className={`${card} p-4 max-w-md`}>
+        <div className={`${card} p-4 max-w-lg`}>
           <h3 className="text-sm font-semibold mb-3 text-white">
             Top Up
           </h3>
-          <div className="space-y-3">
-            <input
-              type="number"
-              value={topupAmount}
-              onChange={e => setTopupAmount(e.target.value)}
-              placeholder="Top up amount"
-              min="0"
-              step="0.01"
-              className="w-full px-3 py-2 rounded-lg text-sm outline-none bg-slate-800 border border-slate-700 text-white focus:border-brand-500"
-            />
-            <select
-              value={topupMethod}
-              onChange={e => setTopupMethod(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg text-sm outline-none bg-slate-800 border border-slate-700 text-white"
-            >
-              <option value="api">API</option>
-              <option value="ethereum">ETH (Ethereum)</option>
-              <option value="bitcoin">BTC (Bitcoin)</option>
-              <option value="usdt">USDT (ERC-20)</option>
-            </select>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleTopup}
-                disabled={!topupAmount || parseFloat(topupAmount) <= 0}
-                className="px-4 py-2 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600 disabled:opacity-40 transition-colors"
+          <div className="space-y-3 text-xs text-slate-400 leading-relaxed">
+            <p>
+              余额充值由平台管理员操作：管理员通过
+              <code className="mx-1 px-1.5 py-0.5 rounded bg-slate-800 text-brand-400 font-mono">
+                POST /v1/billing/topup
+              </code>
+              为指定 Agent 记账（需管理员 API Key）。
+            </p>
+            <p>
+              Agent 侧可以发起的是链上充值申请
+              <code className="mx-1 px-1.5 py-0.5 rounded bg-slate-800 text-brand-400 font-mono">
+                POST /v1/payment/deposit
+              </code>
+              ，由管理员确认链上交易后入账。钱包地址可在「Multi-Chain Wallets」页绑定。
+            </p>
+            <p className="text-slate-500">
+              完整配置说明见
+              <a
+                href="https://github.com/qomob/xclaw/blob/main/docs/payment-config.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-1 text-brand-400 hover:underline"
               >
-                Request Top Up
-              </button>
-              {topupStatus === 'success' && <span className="text-xs text-green-400">✓ Top-up successful</span>}
-              {topupStatus === 'error' && <span className="text-xs text-red-400">✗ Top-up failed</span>}
-            </div>
-            <p className="text-[10px] text-slate-400 mt-2">
-              Top-ups are manually verified by administrators and credited to the ledger after confirmation.
+                Payment Configuration
+              </a>
+              。
             </p>
           </div>
         </div>

@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { getToken, clearToken } from '../../utils/api';
+import { useSystemHealthContext } from '../SystemHealthContext';
 
 export default function AppHeader() {
   const navigate = useNavigate();
   const [authenticated, setAuthenticated] = useState(() => !!getToken());
+  const health = useSystemHealthContext();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -49,12 +51,18 @@ export default function AppHeader() {
       role="banner"
     >
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2">
-          <img src="/XClaw_logo.png" alt="XClaw" className="h-6 w-auto" />
-        </div>
-        <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400" data-agent-role="network-status">
-          <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-          <span>NETWORK NOMINAL</span>
+        <img src="/XClaw_logo.png" alt="XClaw" className="h-6 w-auto" />
+        <div
+          className="hidden sm:flex items-center gap-2 text-[10px] text-slate-400"
+          data-agent-role="network-status"
+          title={`Backend ${health.backend} · DB ${health.database} · Redis ${health.redis} · last check ${health.lastCheck ? new Date(health.lastCheck).toLocaleTimeString() : '—'}`}
+        >
+          <StatusDot ok={health.backend === 'ok'} label="API" />
+          <StatusDot ok={health.database === 'up'} label="DB" />
+          <StatusDot ok={health.redis === 'up'} label="REDIS" />
+          <span className="text-slate-500">
+            {health.agentsOnline} AGENTS
+          </span>
         </div>
       </div>
 
@@ -124,5 +132,17 @@ export default function AppHeader() {
         </div>
       )}
     </header>
+  );
+}
+
+function StatusDot({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <span className="flex items-center gap-1 font-mono" title={label}>
+      <span
+        className={`w-1.5 h-1.5 rounded-full ${ok ? 'bg-green-500' : 'bg-red-500'}`}
+        aria-hidden="true"
+      />
+      <span className={ok ? 'text-green-500' : 'text-red-500'}>{label}</span>
+    </span>
   );
 }

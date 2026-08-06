@@ -27,6 +27,8 @@ interface MarketTaskItem {
   status: string;
   created_at: string;
   bid_count?: number;
+  caller_name?: string;
+  assignment_strategy?: string;
 }
 
 const card = 'bg-slate-900 border border-slate-800 rounded-xl';
@@ -42,6 +44,25 @@ export default function TaskCenter() {
 
   const [createForm, setCreateForm] = useState({ title: '', description: '', type: 'general', target_agent_id: '', priority: 'normal' });
   const [createStatus, setCreateStatus] = useState('');
+
+  // 市场任务：竞标
+  const [bidTaskId, setBidTaskId] = useState<string | null>(null);
+  const [bidPrice, setBidPrice] = useState('');
+  const [bidCover, setBidCover] = useState('');
+  const [bidStatus, setBidStatus] = useState('');
+
+  // 市场任务：创建
+  const [marketForm, setMarketForm] = useState({
+    title: '',
+    description: '',
+    category: 'general',
+    budget_min: '',
+    budget_max: '',
+    deadline: '',
+    capabilities: '',
+    strategy: 'auto',
+  });
+  const [marketStatus, setMarketStatus] = useState('');
 
   const loadTasks = useCallback(async () => {
     setLoading(true);
@@ -91,6 +112,63 @@ export default function TaskCenter() {
       }
     } catch {
       setCreateStatus('error');
+    }
+  };
+
+  const handleCreateMarket = async () => {
+    setMarketStatus('');
+    const min = parseFloat(marketForm.budget_min);
+    const max = parseFloat(marketForm.budget_max);
+    if (!marketForm.title.trim() || !min || !max || min > max) {
+      setMarketStatus('error');
+      return;
+    }
+    try {
+      const res = await createMarketTask({
+        title: marketForm.title.trim(),
+        description: marketForm.description.trim(),
+        category: marketForm.category,
+        budget_min: min,
+        budget_max: max,
+        deadline: marketForm.deadline || undefined,
+        required_capabilities: marketForm.capabilities.split(',').map(s => s.trim()).filter(Boolean),
+        assignment_strategy: marketForm.strategy,
+      });
+      if (res.success) {
+        setMarketStatus('success');
+        setMarketForm({ title: '', description: '', category: 'general', budget_min: '', budget_max: '', deadline: '', capabilities: '', strategy: 'auto' });
+        loadMarket();
+      } else {
+        setMarketStatus('error');
+      }
+    } catch {
+      setMarketStatus('error');
+    }
+  };
+
+  const handleBid = async (task: MarketTaskItem) => {
+    setBidStatus('');
+    const price = parseFloat(bidPrice);
+    if (!price || price <= 0) {
+      setBidStatus('error');
+      return;
+    }
+    try {
+      const res = await submitBid(task.id, {
+        proposed_price: price,
+        cover_letter: bidCover.trim() || undefined,
+      });
+      if (res.success) {
+        setBidStatus('success');
+        setBidTaskId(null);
+        setBidPrice('');
+        setBidCover('');
+        loadMarket();
+      } else {
+        setBidStatus('error');
+      }
+    } catch {
+      setBidStatus('error');
     }
   };
 
@@ -244,7 +322,62 @@ export default function TaskCenter() {
                         {task.category}
                       </span>
                     )}
+                    {task.assignment_strategy && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-500/20 text-slate-400">
+                        {task.assignment_strategy}
+                      </span>
+                    )}
                   </div>
+                  {task.status === 'open' && (
+                    <div className="mt-2">
+                      {bidTaskId === task.id ? (
+                        <div className="space-y-2 border-t border-slate-800 pt-2">
+                          <input
+                            type="number"
+                            value={bidPrice}
+                            onChange={e => setBidPrice(e.target.value)}
+                            placeholder="Proposed price (XCL)"
+                            min="0"
+                            step="0.01"
+                            className="w-full px-3 py-2 rounded-lg text-sm outline-none bg-slate-800 border border-slate-700 text-white focus:border-brand-500"
+                          />
+                          <textarea
+                            value={bidCover}
+                            onChange={e => setBidCover(e.target.value)}
+                            placeholder="Cover letter (optional)"
+                            rows={2}
+                            className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none bg-slate-800 border border-slate-700 text-white focus:border-brand-500"
+                          />
+                          {bidStatus && (
+                            <p className={`text-xs ${bidStatus === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                              {bidStatus === 'success' ? '✓ Bid submitted' : '✗ Bid failed (check your balance & login)'}
+                            </p>
+                          )}
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleBid(task)}
+                              className="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 text-white text-xs rounded-lg transition-colors"
+                            >
+                              Submit Bid
+                            </button>
+                            <button
+                              onClick={() => { setBidTaskId(null); setBidStatus(''); }}
+                              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => { setBidTaskId(task.id); setBidPrice(''); setBidCover(''); setBidStatus(''); }}
+                          className="px-3 py-1.5 bg-brand-500/20 hover:bg-brand-500/30 border border-brand-500/30 text-brand-400 text-xs rounded-lg transition-colors"
+                        >
+                          💰 Place Bid
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -253,11 +386,12 @@ export default function TaskCenter() {
       )}
 
       {tab === 'create' && (
-        <div className={`${card} p-4 max-w-lg`}>
-          <h3 className="text-sm font-semibold mb-3 text-white">
-            Create New Task
-          </h3>
-          <div className="space-y-3">
+        <div className="space-y-6 max-w-2xl">
+          <div className={`${card} p-4`}>
+            <h3 className="text-sm font-semibold mb-3 text-white">
+              Create Private Task
+            </h3>
+            <div className="space-y-3">
             <input
               type="text"
               value={createForm.title}
@@ -289,16 +423,106 @@ export default function TaskCenter() {
               <option value="high">High</option>
               <option value="critical">Critical</option>
             </select>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleCreate}
-                disabled={!createForm.title}
-                className="px-4 py-2 bg-brand-500 text-white text-sm rounded-lg hover:bg-brand-600 disabled:opacity-40 transition-colors"
-              >
-                Create Task
-              </button>
-              {createStatus === 'success' && <span className="text-xs text-green-400">✓ Created successfully</span>}
-              {createStatus === 'error' && <span className="text-xs text-red-400">✗ Creation failed</span>}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleCreate}
+                  disabled={!createForm.title}
+                  className="px-4 py-2 bg-brand-500 text-white text-sm rounded-lg hover:bg-brand-600 disabled:opacity-40 transition-colors"
+                >
+                  Create Task
+                </button>
+                {createStatus === 'success' && <span className="text-xs text-green-400">✓ Created successfully</span>}
+                {createStatus === 'error' && <span className="text-xs text-red-400">✗ Creation failed</span>}
+              </div>
+            </div>
+          </div>
+
+          <div className={`${card} p-4`}>
+            <h3 className="text-sm font-semibold mb-1 text-white">
+              Create Market Task
+            </h3>
+            <p className="text-xs text-slate-400 mb-3">
+              Publish to the task market — agents can bid on it. Escrow is charged from your balance.
+            </p>
+            <div className="space-y-3">
+              <input
+                type="text"
+                value={marketForm.title}
+                onChange={e => setMarketForm(f => ({ ...f, title: e.target.value }))}
+                placeholder="Task title"
+                className="w-full px-3 py-2 rounded-lg text-sm outline-none bg-slate-800 border border-slate-700 text-white focus:border-brand-500"
+              />
+              <textarea
+                value={marketForm.description}
+                onChange={e => setMarketForm(f => ({ ...f, description: e.target.value }))}
+                placeholder="Task description"
+                rows={3}
+                className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none bg-slate-800 border border-slate-700 text-white focus:border-brand-500"
+              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <select
+                  value={marketForm.category}
+                  onChange={e => setMarketForm(f => ({ ...f, category: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg text-sm outline-none bg-slate-800 border border-slate-700 text-white"
+                >
+                  {['general', 'development', 'research', 'writing', 'analysis', 'design', 'data'].map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+                <select
+                  value={marketForm.strategy}
+                  onChange={e => setMarketForm(f => ({ ...f, strategy: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg text-sm outline-none bg-slate-800 border border-slate-700 text-white"
+                >
+                  <option value="auto">Auto assign</option>
+                  <option value="bid">Bid (agents compete)</option>
+                  <option value="manual">Manual review</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  type="number"
+                  value={marketForm.budget_min}
+                  onChange={e => setMarketForm(f => ({ ...f, budget_min: e.target.value }))}
+                  placeholder="Budget min (XCL)"
+                  min="0"
+                  step="0.01"
+                  className="w-full px-3 py-2 rounded-lg text-sm outline-none bg-slate-800 border border-slate-700 text-white focus:border-brand-500"
+                />
+                <input
+                  type="number"
+                  value={marketForm.budget_max}
+                  onChange={e => setMarketForm(f => ({ ...f, budget_max: e.target.value }))}
+                  placeholder="Budget max (XCL)"
+                  min="0"
+                  step="0.01"
+                  className="w-full px-3 py-2 rounded-lg text-sm outline-none bg-slate-800 border border-slate-700 text-white focus:border-brand-500"
+                />
+              </div>
+              <input
+                type="text"
+                value={marketForm.capabilities}
+                onChange={e => setMarketForm(f => ({ ...f, capabilities: e.target.value }))}
+                placeholder="Required capabilities (comma-separated, optional)"
+                className="w-full px-3 py-2 rounded-lg text-sm outline-none bg-slate-800 border border-slate-700 text-white focus:border-brand-500"
+              />
+              <input
+                type="datetime-local"
+                value={marketForm.deadline}
+                onChange={e => setMarketForm(f => ({ ...f, deadline: e.target.value }))}
+                className="w-full px-3 py-2 rounded-lg text-sm outline-none bg-slate-800 border border-slate-700 text-white"
+              />
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleCreateMarket}
+                  disabled={!marketForm.title}
+                  className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white text-sm rounded-lg disabled:opacity-40 transition-colors"
+                >
+                  Publish to Market
+                </button>
+                {marketStatus === 'success' && <span className="text-xs text-green-400">✓ Published (escrow charged)</span>}
+                {marketStatus === 'error' && <span className="text-xs text-red-400">✗ Publish failed — check balance & fields</span>}
+              </div>
             </div>
           </div>
         </div>

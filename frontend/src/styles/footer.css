@@ -26,8 +26,19 @@
   height: 8px;
   width: 8px;
   border-radius: 50%;
+  background-color: #64748B;
+}
+
+.status-indicator.status-ok {
   background-color: #10B981;
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.status-indicator.status-degraded {
+  background-color: #F59E0B;
+}
+
+.status-indicator.status-down {
+  background-color: #EF4444;
 }
 
 .status-text {
@@ -35,6 +46,13 @@
   color: #64748B;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   letter-spacing: 0.05em;
+}
+
+.status-meta {
+  font-size: 11px;
+  color: #475569;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 0.03em;
 }
 
 .footer-copyright {
@@ -167,10 +185,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .status-indicator {
-    animation: none;
-  }
-
   .footer-link {
     transition: none;
   }
@@ -185,7 +199,6 @@
 
   .status-indicator {
     background-color: black;
-    animation: none;
   }
 
   .status-text,
@@ -223,6 +236,10 @@
   .status-indicator {
     height: 6px;
     width: 6px;
+  }
+
+  .status-meta {
+    display: none;
   }
 
   .status-text,

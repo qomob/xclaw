@@ -1,22 +1,23 @@
 import { useState, useEffect, useCallback } from 'react';
-import {
-  fetchMonitorHealth, fetchDatabaseStats, fetchRedisStats,
-  fetchBusinessKPIs, fetchAlerts, fetchFederationHealth,
-  fetchFederationStatus, fetchTaskMarketStats
-} from '../utils/api';
 import A2APanel from './panels/A2APanel';
 import SearchV2Panel from './panels/SearchV2Panel';
 import MCPPanel from './panels/MCPPanel';
 import DeveloperPanel from './panels/DeveloperPanel';
 import SecurityPanel from './panels/SecurityPanel';
+import {
+  adminFetch,
+  getStoredAdminKey,
+  setStoredAdminKey,
+  clearStoredAdminKey,
+} from '../utils/adminApi';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface DashboardData {
-  total_nodes: number;
-  total_skills: number;
-  total_tasks: number;
-  total_revenue: number;
+  nodes?: { total: number; active: number };
+  skills?: { total: number };
+  tasks?: { total: number; completed: number; running: number };
+  revenue?: { total: number; currency: string };
   today_events: number;
   active_webhooks: number;
 }
@@ -78,42 +79,6 @@ interface MonitorAlert {
   acknowledged: boolean;
 }
 
-// ─── Constants ───────────────────────────────────────────────────────────────
-
-const API_KEY_STORAGE = 'xclaw_admin_api_key';
-const ADMIN_API_BASE = import.meta.env.VITE_API_URL || '';
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function getStoredKey(): string {
-  return localStorage.getItem(API_KEY_STORAGE) || '';
-}
-
-function setStoredKey(key: string) {
-  localStorage.setItem(API_KEY_STORAGE, key);
-}
-
-function clearStoredKey() {
-  localStorage.removeItem(API_KEY_STORAGE);
-}
-
-async function adminFetch<T>(endpoint: string, apiKey: string): Promise<T> {
-  const res = await fetch(`${ADMIN_API_BASE}${endpoint}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Admin-API-Key': apiKey,
-    },
-  });
-  if (!res.ok) {
-    if (res.status === 401 || res.status === 403) {
-      throw new Error('AUTH_FAILED');
-    }
-    const body = await res.json().catch(() => ({ message: 'Request failed' }));
-    throw new Error(body.message || `HTTP ${res.status}`);
-  }
-  return res.json();
-}
-
 /** Build mock hourly buckets from events for the last 24 hours */
 function buildHourBuckets(events: AdminEvent[]): HourBucket[] {
   const now = new Date();
@@ -170,9 +135,9 @@ const LEVEL_BG: Record<string, string> = {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function AdminDashboard() {
-  const [apiKey, setApiKey] = useState(getStoredKey);
+  const [apiKey, setApiKey] = useState(getStoredAdminKey);
   const [inputKey, setInputKey] = useState('');
-  const [authed, setAuthed] = useState(!!getStoredKey());
+  const [authed, setAuthed] = useState(!!getStoredAdminKey());
   const [authError, setAuthError] = useState('');
 
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
@@ -212,7 +177,7 @@ export default function AdminDashboard() {
     setAuthError('');
     try {
       await adminFetch<{ success: boolean }>('/v1/admin/dashboard?check=1', inputKey.trim());
-      setStoredKey(inputKey.trim());
+      setStoredAdminKey(inputKey.trim());
       setApiKey(inputKey.trim());
       setAuthed(true);
     } catch (err: unknown) {
@@ -221,7 +186,7 @@ export default function AdminDashboard() {
         setAuthError('Invalid API Key, please try again');
       } else {
         // If the endpoint just doesn't exist yet (backend in dev), accept key anyway
-        setStoredKey(inputKey.trim());
+        setStoredAdminKey(inputKey.trim());
         setApiKey(inputKey.trim());
         setAuthed(true);
       }
@@ -229,7 +194,7 @@ export default function AdminDashboard() {
   }, [inputKey]);
 
   const handleLogout = useCallback(() => {
-    clearStoredKey();
+    clearStoredAdminKey();
     setApiKey('');
     setAuthed(false);
     setDashboard(null);
@@ -257,21 +222,21 @@ export default function AdminDashboard() {
         setHourBuckets(buildHourBuckets(evData));
       }
 
-      // Phase 9 Monitor data (no auth required)
+      // 监控数据（后端 verifyApiKey 校验完整 API Key，统一走 adminFetch）
       Promise.allSettled([
-        fetchMonitorHealth(),
-        fetchDatabaseStats(),
-        fetchRedisStats(),
-        fetchBusinessKPIs(),
-        fetchAlerts({ limit: 10 }),
-        fetchFederationStatus(),
-        fetchTaskMarketStats(),
+        adminFetch<{ success: boolean; data: MonitorHealth }>('/v1/monitor/health', apiKey),
+        adminFetch<{ success: boolean; data: DatabaseStats }>('/v1/monitor/database', apiKey),
+        adminFetch<{ success: boolean; data: RedisInfo }>('/v1/monitor/redis', apiKey),
+        adminFetch<{ success: boolean; data: BusinessKPIs }>('/v1/monitor/kpis', apiKey),
+        adminFetch<{ success: boolean; data: MonitorAlert[] }>('/v1/monitor/alerts?limit=10', apiKey),
+        adminFetch<{ success: boolean; data: { total_peers: number; active_peers: number } }>('/v1/federation/status', apiKey),
+        adminFetch<{ success: boolean; data: { open_tasks: number; total_bids: number } }>('/v1/task-market/stats', apiKey),
       ]).then(([healthRes, dbRes, redisRes, kpiRes, alertsRes, fedRes, tmRes]) => {
         if (healthRes.status === 'fulfilled' && healthRes.value.success) setMonitorHealth(healthRes.value.data);
         if (dbRes.status === 'fulfilled' && dbRes.value.success) setDbStats(dbRes.value.data);
         if (redisRes.status === 'fulfilled' && redisRes.value.success) setRedisInfo(redisRes.value.data);
         if (kpiRes.status === 'fulfilled' && kpiRes.value.success) setKpis(kpiRes.value.data);
-        if (alertsRes.status === 'fulfilled' && alertsRes.value.success) setMonitorAlerts(alertsRes.value.data?.alerts || alertsRes.value.data || []);
+        if (alertsRes.status === 'fulfilled' && alertsRes.value.success) setMonitorAlerts(alertsRes.value.data || []);
         if (fedRes.status === 'fulfilled' && fedRes.value.success) setFederationStatus(fedRes.value.data);
         if (tmRes.status === 'fulfilled' && tmRes.value.success) setTaskMarketStats(tmRes.value.data);
       });
@@ -348,10 +313,10 @@ export default function AdminDashboard() {
 
   const statCards = dashboard
     ? [
-        { label: 'Total Nodes', value: dashboard.total_nodes, icon: '🖥', color: 'from-cyan-500 to-cyan-700' },
-        { label: 'Total Skills', value: dashboard.total_skills, icon: '⚡', color: 'from-blue-500 to-blue-700' },
-        { label: 'Total Tasks', value: dashboard.total_tasks, icon: '📋', color: 'from-violet-500 to-violet-700' },
-        { label: 'Total Revenue', value: formatRevenue(dashboard.total_revenue), icon: '💰', color: 'from-emerald-500 to-emerald-700' },
+        { label: 'Total Nodes', value: dashboard.nodes?.total ?? '—', icon: '🖥', color: 'from-cyan-500 to-cyan-700' },
+        { label: 'Total Skills', value: dashboard.skills?.total ?? '—', icon: '⚡', color: 'from-blue-500 to-blue-700' },
+        { label: 'Total Tasks', value: dashboard.tasks?.total ?? '—', icon: '📋', color: 'from-violet-500 to-violet-700' },
+        { label: 'Total Revenue', value: formatRevenue(dashboard.revenue?.total ?? 0), icon: '💰', color: 'from-emerald-500 to-emerald-700' },
       ]
     : [
         { label: 'Total Nodes', value: '—', icon: '🖥', color: 'from-cyan-500 to-cyan-700' },

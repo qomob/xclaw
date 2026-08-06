@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import AnimatedLogo from './AnimatedLogo';
 import { getToken, clearToken } from '../utils/api';
+import { useSystemHealth } from '../hooks/useSystemHealth';
 import '../styles/logo-animations.css';
 
 interface HeaderProps {
@@ -10,6 +11,7 @@ interface HeaderProps {
 
 export default function Header({ currentTime, sweepTime }: HeaderProps) {
   const [authenticated, setAuthenticated] = useState(() => !!getToken());
+  const health = useSystemHealth();
   const [agentIdPreview, setAgentIdPreview] = useState(() => {
     const token = getToken();
     if (token) {
@@ -84,11 +86,26 @@ export default function Header({ currentTime, sweepTime }: HeaderProps) {
         <div className="text-xs md:text-sm font-mono">
           {formattedTime}
         </div>
-        <div className="hidden md:flex items-center gap-2">
-          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-          <span className="text-xs md:text-sm text-green-500">NETWORK NOMINAL</span>
+        <div
+          className="hidden md:flex items-center gap-2 text-xs md:text-sm"
+          title={`API ${health.backend} · DB ${health.database} · Redis ${health.redis} · ${health.agentsOnline} agents online`}
+        >
+          <span className={`font-mono ${health.backend === 'ok' ? 'text-green-500' : 'text-red-500'}`}>
+            API {health.backend === 'ok' ? 'OK' : 'DOWN'}
+          </span>
+          <span className={`font-mono ${health.database === 'up' ? 'text-green-500' : 'text-red-500'}`}>
+            DB {health.database === 'up' ? 'UP' : 'DOWN'}
+          </span>
+          <span className={`font-mono ${health.redis === 'up' ? 'text-green-500' : 'text-red-500'}`}>
+            RDS {health.redis === 'up' ? 'UP' : 'DOWN'}
+          </span>
+          <span className="font-mono text-slate-400">{health.agentsOnline} AGENTS</span>
         </div>
-        <div className="md:hidden w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+        <div className="md:hidden">
+          <span className={`text-[10px] font-mono ${health.backend === 'ok' ? 'text-green-500' : 'text-red-500'}`}>
+            {health.backend === 'ok' ? 'OK' : 'DOWN'}
+          </span>
+        </div>
       </div>
     </div>
   );

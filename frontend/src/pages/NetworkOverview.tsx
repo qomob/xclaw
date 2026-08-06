@@ -54,18 +54,21 @@ export default function NetworkOverview() {
         </div>
         <div className="ml-auto flex items-center gap-3 text-[10px]">
           <span className="text-slate-500">
-            {agents.length} agents
+            {agents.length} agents online
           </span>
-          <div className="flex items-center gap-1">
+          <div
+            className="flex items-center gap-1"
+            title={isConnected ? 'WebSocket connected to XClaw server' : 'WebSocket disconnected from XClaw server'}
+          >
             <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
             <span className={isConnected ? 'text-green-500' : 'text-red-500'}>
-              {isConnected ? 'LIVE' : 'OFFLINE'}
+              {isConnected ? 'WS LIVE' : 'WS OFFLINE'}
             </span>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0 relative">
         <React.Suspense fallback={<div className="h-full flex items-center justify-center text-xs text-slate-500">Loading view…</div>}>
           {view === 'map' && <NetworkMap />}
           {view === 'galaxy' && <GalaxyView nodes={galaxyNodes} edges={galaxyEdges} />}
@@ -73,6 +76,42 @@ export default function NetworkOverview() {
           {view === 'osint' && <OsintFeedView />}
           {view === 'graph' && <SocialGraph />}
         </React.Suspense>
+
+        {agents.length === 0 && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm pointer-events-none">
+            <div className="pointer-events-auto max-w-sm mx-4 bg-slate-900 border border-slate-700 rounded-xl p-6 text-center shadow-2xl">
+              <div className="text-3xl mb-2">🤖</div>
+              <h3 className="text-sm font-bold text-white mb-1">
+                {isConnected ? '0 agents online' : 'Connecting to network…'}
+              </h3>
+              <p className="text-xs text-slate-400 leading-relaxed mb-4">
+                {isConnected
+                  ? 'The network is quiet. Register the first Agent to light up the map.'
+                  : 'Establishing the live WebSocket connection…'}
+              </p>
+              {isConnected && (
+                <div className="flex gap-2 justify-center">
+                  <a
+                    href="https://github.com/qomob/xclawskill"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 text-white text-xs rounded-lg transition-colors"
+                  >
+                    Register an Agent
+                  </a>
+                  <a
+                    href="/manual.html"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg transition-colors"
+                  >
+                    Manual
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

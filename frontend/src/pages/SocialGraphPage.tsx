@@ -1,8 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  fetchSocialGraph, fetchRelationshipStats,
-  request
-} from '../utils/api';
+import { fetchOnlineAgents, request } from '../utils/api';
 import SocialGraph from '../components/SocialGraph';
 
 type Tab = 'graph' | 'trust' | 'recommend' | 'communities';
@@ -20,32 +17,67 @@ interface Community {
   density: number;
 }
 
+interface Recommendation {
+  node_id: string;
+  name: string;
+  capabilities?: string[];
+  reputation_score?: number;
+  status?: string;
+  recommendation_score?: number;
+  recommendation_source?: string;
+  mutual_connections?: number;
+}
+
 const card = 'bg-slate-900 border border-slate-800 rounded-xl';
 const textSecondary = 'text-slate-400';
 
 export default function SocialGraphPage() {
   const [tab, setTab] = useState<Tab>('graph');
-  const [stats, setStats] = useState<Record<string, unknown> | null>(null);
   const [trustScores, setTrustScores] = useState<TrustScore[]>([]);
   const [communities, setCommunities] = useState<Community[]>([]);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [noAgents, setNoAgents] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const loadStats = useCallback(async () => {
-    try {
-      const res = await fetchRelationshipStats();
-      if (res.success) setStats(res.data || {});
-    } catch { /* ignore */ }
+  const pickFirstAgent = useCallback(async (): Promise<string | null> => {
+    const agentsRes = await fetchOnlineAgents();
+    const agents = agentsRes.success ? (agentsRes.data || []) : [];
+    return agents[0]?.id || agents[0]?.node_id || null;
   }, []);
 
   const loadTrust = useCallback(async () => {
     setLoading(true);
+    setNoAgents(false);
     try {
-      const res = await request('/v1/social-graph/trust/some-agent?limit=50');
+      const agentId = await pickFirstAgent();
+      if (!agentId) {
+        setTrustScores([]);
+        setNoAgents(true);
+        return;
+      }
+      const res = await request(`/v1/social-graph/trust/${agentId}?limit=50`);
       if (res.success) setTrustScores(res.data || []);
     } catch { /* ignore */ } finally {
       setLoading(false);
     }
-  }, []);
+  }, [pickFirstAgent]);
+
+  const loadRecommendations = useCallback(async () => {
+    setLoading(true);
+    setNoAgents(false);
+    try {
+      const agentId = await pickFirstAgent();
+      if (!agentId) {
+        setRecommendations([]);
+        setNoAgents(true);
+        return;
+      }
+      const res = await request(`/v1/social-graph/recommend/${agentId}?limit=20`);
+      if (res.success) setRecommendations(res.data || []);
+    } catch { /* ignore */ } finally {
+      setLoading(false);
+    }
+  }, [pickFirstAgent]);
 
   const loadCommunities = useCallback(async () => {
     setLoading(true);
@@ -58,13 +90,10 @@ export default function SocialGraphPage() {
   }, []);
 
   useEffect(() => {
-    loadStats();
-  }, [loadStats]);
-
-  useEffect(() => {
     if (tab === 'trust') loadTrust();
     if (tab === 'communities') loadCommunities();
-  }, [tab, loadTrust, loadCommunities]);
+    if (tab === 'recommend') loadRecommendations();
+  }, [tab, loadTrust, loadCommunities, loadRecommendations]);
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'graph', label: 'Graph' },
@@ -111,6 +140,10 @@ export default function SocialGraphPage() {
           <div className="p-4 space-y-3 overflow-y-auto">
             {loading ? (
               <div className="text-center py-12 text-slate-400">Loading...</div>
+            ) : noAgents ? (
+              <div className={`${card} p-8 text-center text-xs text-slate-400`}>
+                No agents online — register an Agent first to compute trust scores
+              </div>
             ) : trustScores.length === 0 ? (
               <div className={`${card} p-8 text-center text-xs text-slate-400`}>No trust score data</div>
             ) : (
@@ -139,10 +172,52 @@ export default function SocialGraphPage() {
         )}
 
         {tab === 'recommend' && (
-          <div className="p-4">
-            <div className={`${card} p-8 text-center text-xs text-slate-400`}>
-              Agent relationship recommendations based on social graph (login required)
-            </div>
+          <div className="p-4 space-y-3 overflow-y-auto">
+            {loading ? (
+              <div className="text-center py-12 text-slate-400">Loading...</div>
+            ) : noAgents ? (
+              <div className={`${card} p-8 text-center text-xs text-slate-400`}>
+                No agents online — recommendations are computed from existing agent relationships
+              </div>
+            ) : recommendations.length === 0 ? (
+              <div className={`${card} p-8 text-center text-xs text-slate-400`}>
+                No recommendations yet — build more relationships between agents
+              </div>
+            ) : (
+              recommendations.map((r, i) => (
+                <div key={r.node_id || i} className={`${card} p-4`}>
+                  <div className="flex items-center justify-between mb-1">
+                    <h3 className="text-sm font-semibold text-white">{r.name || r.node_id}</h3>
+                    {r.recommendation_score !== undefined && (
+                      <span className="text-xs font-bold text-brand-400">
+                        {(r.recommendation_score * 100).toFixed(0)}%
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                    <span className="font-mono">{r.node_id.slice(0, 12)}...</span>
+                    {r.status && <span>{r.status}</span>}
+                    {r.recommendation_source && (
+                      <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400">
+                        {r.recommendation_source}
+                      </span>
+                    )}
+                    {r.mutual_connections !== undefined && r.mutual_connections > 0 && (
+                      <span>{r.mutual_connections} mutual</span>
+                    )}
+                  </div>
+                  {r.capabilities && r.capabilities.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {r.capabilities.slice(0, 4).map((c, ci) => (
+                        <span key={ci} className="text-[10px] px-1.5 py-0.5 rounded bg-brand-500/10 text-brand-400">
+                          {c}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
           </div>
         )}
 

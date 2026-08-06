@@ -1,13 +1,28 @@
 import '../styles/footer.css';
+import { useSystemHealthContext } from './SystemHealthContext';
+
+const STATUS_LABEL: Record<string, string> = {
+  ok: 'SYSTEM OPERATIONAL',
+  degraded: 'SYSTEM DEGRADED',
+  down: 'SYSTEM UNREACHABLE',
+};
 
 export default function Footer() {
+  const health = useSystemHealthContext();
+
   return (
     <footer className="footer-container" role="contentinfo">
       <div className="footer-content">
         <div className="footer-status">
-          <div className="status-indicator" aria-hidden="true" />
+          <div
+            className={`status-indicator status-${health.status}`}
+            aria-hidden="true"
+          />
           <span className="status-text">
-            SYSTEM OPERATIONAL
+            {STATUS_LABEL[health.status] || 'SYSTEM UNKNOWN'}
+          </span>
+          <span className="status-meta">
+            API {health.backend.toUpperCase()} · DB {health.database.toUpperCase()} · REDIS {health.redis.toUpperCase()}
           </span>
         </div>
         

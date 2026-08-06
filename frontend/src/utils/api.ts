@@ -16,6 +16,18 @@ export function clearToken() {
   localStorage.removeItem(TOKEN_KEY);
 }
 
+/** 从已登录 JWT 中解析 Agent ID（注册接口签发的 JWT payload 含 agentId） */
+export function getAgentIdFromToken(): string | null {
+  const token = getToken();
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.agentId || payload.agent_id || payload.node_id || null;
+  } catch {
+    return null;
+  }
+}
+
 export class AuthError extends Error {
   constructor(message = 'Unauthorized') {
     super(message);
@@ -482,7 +494,7 @@ export async function routeFederatedTask(payload: { task_type: string; task_payl
 }
 
 export async function fetchFederationTopology() {
-  return request('/v1/federation/topology');
+  return request('/v1/federation/topology/summary');
 }
 
 export async function unregisterFederationPeer(peerId: string) {
