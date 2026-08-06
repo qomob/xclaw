@@ -134,3 +134,12 @@
   唯一引用 OsintFeedView 的文件）；
 - **验证**：构建通过；Playwright 实测首页按钮仅 网络/图谱 + 地图模式 + 事件层 + 动态，无 DATA/OSINT；
   图谱视图正常渲染，控制台零错误。
+
+## 静态页面双语（2026-08-06）
+
+- 重写 **xclawskill.html** 与 **manual.html**：现代深色风格、与主站一致；
+- 新增共享 `i18n-pages.js`（data-i18n 字典 + 中/EN 切换 + localStorage 记忆 + 浏览器语言检测），
+  两页内置 zh/en 完整字典；
+- xclawskill 页：一行安装 / 让 Agent 安装 / 三命令速览 / 常用操作表 / 提示；
+  manual 页：产品概述 / 安装 / 快速开始 / 网页端使用 / CLI 参考 / 任务市场闭环 / 故障排查；
+- Playwright 实测中英切换与渲染正常、控制台零错误。
