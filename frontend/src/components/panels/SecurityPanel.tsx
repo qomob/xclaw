@@ -6,6 +6,7 @@ import {
   fetchAuditStats,
   fetchRateLimits,
 } from '../../utils/api';
+import { useI18n } from '../../i18n/LanguageContext';
 
 interface SecurityStatsData {
   total_requests: number;
@@ -40,6 +41,7 @@ interface RateLimitEntry {
 }
 
 export default function SecurityPanel() {
+  const { t } = useI18n();
   const [stats, setStats] = useState<SecurityStatsData | null>(null);
   const [auditStats, setAuditStats] = useState<{ total: number; today: number; critical: number } | null>(null);
   const [clients, setClients] = useState<OAuthClient[]>([]);
@@ -69,8 +71,8 @@ export default function SecurityPanel() {
     <div className="space-y-6">
       {/* Header */}
       <div className="border-l-4 border-red-500 pl-4">
-        <h2 className="text-xl font-bold text-white">Security & Compliance</h2>
-        <p className="text-sm text-slate-400 mt-1">OAuth2 management, audit logs & rate limiting</p>
+        <h2 className="text-xl font-bold text-white">{t('secCompTitle')}</h2>
+        <p className="text-sm text-slate-400 mt-1">{t('secCompDesc')}</p>
       </div>
 
       {/* Security Stats */}
@@ -91,18 +93,18 @@ export default function SecurityPanel() {
       {/* Audit Stats */}
       {auditStats && (
         <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
-          <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">Audit Statistics</h3>
+          <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">{t('secAuditStats')}</h3>
           <div className="grid grid-cols-3 gap-3">
             <div className="rounded-lg bg-gray-900/50 p-3 text-center">
-              <div className="text-xs text-slate-500">Total Events</div>
+              <div className="text-xs text-slate-500">{t('secTotalEvents')}</div>
               <div className="text-xl font-bold text-red-400">{auditStats.total}</div>
             </div>
             <div className="rounded-lg bg-gray-900/50 p-3 text-center">
-              <div className="text-xs text-slate-500">Events Today</div>
+              <div className="text-xs text-slate-500">{t('secEventsToday')}</div>
               <div className="text-xl font-bold text-amber-400">{auditStats.today}</div>
             </div>
             <div className="rounded-lg bg-gray-900/50 p-3 text-center">
-              <div className="text-xs text-slate-500">Critical Events</div>
+              <div className="text-xs text-slate-500">{t('secCriticalEvents')}</div>
               <div className="text-xl font-bold text-red-500">{auditStats.critical}</div>
             </div>
           </div>
@@ -111,16 +113,16 @@ export default function SecurityPanel() {
 
       {/* OAuth2 Clients */}
       <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
-        <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">OAuth2 Clients ({clients.length})</h3>
+        <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">{t('secOAuthClients')} ({clients.length})</h3>
         {clients.length > 0 ? (
           <div className="bg-gray-900/50 rounded-lg overflow-x-auto">
             <table className="w-full text-sm min-w-[500px]">
               <thead>
                 <tr className="border-b border-gray-700">
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Name</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Redirect URIs</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Grant Types</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Created</th>
+                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('pnlName')}</th>
+                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('secRedirectUris')}</th>
+                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('secGrantTypes')}</th>
+                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('devCreatedAt')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -146,23 +148,23 @@ export default function SecurityPanel() {
             </table>
           </div>
         ) : (
-          <div className="text-center py-6 text-slate-600 text-sm">No OAuth2 clients</div>
+          <div className="text-center py-6 text-slate-600 text-sm">{t('secNoClients')}</div>
         )}
       </div>
 
       {/* Audit Logs */}
       <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
-        <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">Audit Logs</h3>
+        <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">{t('secAuditLogs')}</h3>
         {logs.length > 0 ? (
           <div className="bg-gray-900/50 rounded-lg overflow-x-auto">
             <table className="w-full text-sm min-w-[500px]">
               <thead>
                 <tr className="border-b border-gray-700">
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Time</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Operator</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Action</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Resource</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Status</th>
+                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('pnlTime')}</th>
+                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('secOperator')}</th>
+                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('secAction')}</th>
+                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('secResource')}</th>
+                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('pnlStatus')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -185,23 +187,23 @@ export default function SecurityPanel() {
             </table>
           </div>
         ) : (
-          <div className="text-center py-6 text-slate-600 text-sm">No audit logs</div>
+          <div className="text-center py-6 text-slate-600 text-sm">{t('secNoAudit')}</div>
         )}
       </div>
 
       {/* Rate Limits */}
       <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
-        <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">Rate Limiting</h3>
+        <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">{t('secRateLimiting')}</h3>
         {rateLimits.length > 0 ? (
           <div className="bg-gray-900/50 rounded-lg overflow-x-auto">
             <table className="w-full text-sm min-w-[450px]">
               <thead>
                 <tr className="border-b border-gray-700">
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Endpoint</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Limit</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Window</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Current Usage</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Usage</th>
+                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('secEndpoint')}</th>
+                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('secLimit')}</th>
+                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('secWindow')}</th>
+                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('secCurrentUsage')}</th>
+                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('secUsage')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -231,7 +233,7 @@ export default function SecurityPanel() {
             </table>
           </div>
         ) : (
-          <div className="text-center py-6 text-slate-600 text-sm">No rate limiting config</div>
+          <div className="text-center py-6 text-slate-600 text-sm">{t('secNoRateLimit')}</div>
         )}
       </div>
     </div>

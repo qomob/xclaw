@@ -5,6 +5,7 @@ import {
   fetchSearchV2Trending,
   fetchSearchV2Gaps,
 } from '../../utils/api';
+import { useI18n } from '../../i18n/LanguageContext';
 
 interface SearchV2Stats {
   total_searches: number;
@@ -33,6 +34,7 @@ interface GapItem {
 }
 
 export default function SearchV2Panel() {
+  const { t } = useI18n();
   const [stats, setStats] = useState<SearchV2Stats | null>(null);
   const [trending, setTrending] = useState<TrendingItem[]>([]);
   const [gaps, setGaps] = useState<GapItem[]>([]);
@@ -74,41 +76,41 @@ export default function SearchV2Panel() {
     <div className="space-y-6">
       {/* Header */}
       <div className="border-l-4 border-cyan-500 pl-4">
-        <h2 className="text-xl font-bold text-white">Search V2 Management</h2>
-        <p className="text-sm text-slate-400 mt-1">Smart search, trending analysis & capability gap detection</p>
+        <h2 className="text-xl font-bold text-white">{t('sv2ManageTitle')}</h2>
+        <p className="text-sm text-slate-400 mt-1">{t('sv2ManageDesc')}</p>
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
         <div className="bg-gray-800/50 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-700/50">
           <div className="text-lg sm:text-2xl mb-0.5 sm:mb-1">🔍</div>
-          <div className="text-[9px] sm:text-xs text-slate-500 uppercase tracking-wider">Total Searches</div>
+          <div className="text-[9px] sm:text-xs text-slate-500 uppercase tracking-wider">{t('sv2TotalSearches')}</div>
           <div className="text-xl sm:text-3xl font-bold text-cyan-400 mt-0.5 sm:mt-1">{stats?.total_searches ?? '—'}</div>
         </div>
         <div className="bg-gray-800/50 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-700/50">
           <div className="text-lg sm:text-2xl mb-0.5 sm:mb-1">🔥</div>
-          <div className="text-[9px] sm:text-xs text-slate-500 uppercase tracking-wider">Top Queries</div>
+          <div className="text-[9px] sm:text-xs text-slate-500 uppercase tracking-wider">{t('sv2TopQueries')}</div>
           <div className="mt-2 space-y-1">
             {stats?.top_queries?.slice(0, 5).map((q, i) => (
               <div key={i} className="flex justify-between text-sm">
                 <span className="text-slate-300">{q.query}</span>
                 <span className="text-cyan-400">{q.count}</span>
               </div>
-            )) ?? <div className="text-slate-600 text-sm">No data</div>}
+            )) ?? <div className="text-slate-600 text-sm">{t('pnlNoResults')}</div>}
           </div>
         </div>
       </div>
 
       {/* Search Box */}
       <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
-        <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">Search Test</h3>
+        <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">{t('sv2SearchTest')}</h3>
         <div className="flex gap-2 mb-3">
           <input
             type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSearch()}
-            placeholder="Enter search query..."
+            placeholder={t('sv2QueryPlaceholder')}
             className="flex-1 px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-cyan-500"
           />
           <button
@@ -132,13 +134,13 @@ export default function SearchV2Panel() {
             ))}
           </div>
         ) : query && !loading ? (
-          <div className="text-center py-4 text-slate-600 text-sm">No search results</div>
+          <div className="text-center py-4 text-slate-600 text-sm">{t('sv2NoResults')}</div>
         ) : null}
       </div>
 
       {/* Trending Tags Cloud */}
       <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
-        <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">Trending Tags</h3>
+        <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">{t('sv2TrendingTags')}</h3>
         {trending.length > 0 ? (
           <div className="flex flex-wrap gap-2">
             {trending.map((t, i) => {
@@ -156,22 +158,22 @@ export default function SearchV2Panel() {
             })}
           </div>
         ) : (
-          <div className="text-center py-4 text-slate-600 text-sm">No trending data</div>
+          <div className="text-center py-4 text-slate-600 text-sm">{t('sv2NoTrending')}</div>
         )}
       </div>
 
       {/* Capability Gaps */}
       <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
-        <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">Capability Gap Analysis</h3>
+        <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">{t('sv2GapAnalysis')}</h3>
         {gaps.length > 0 ? (
           <div className="bg-gray-900/50 rounded-lg overflow-x-auto">
             <table className="w-full text-sm min-w-[400px]">
               <thead>
                 <tr className="border-b border-gray-700">
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Query</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Searches</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Results</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Coverage</th>
+                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('sv2Query')}</th>
+                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('sv2Searches')}</th>
+                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('sv2ResultsCount')}</th>
+                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('sv2Coverage')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -191,7 +193,7 @@ export default function SearchV2Panel() {
             </table>
           </div>
         ) : (
-          <div className="text-center py-4 text-slate-600 text-sm">No gap data</div>
+          <div className="text-center py-4 text-slate-600 text-sm">{t('sv2NoGap')}</div>
         )}
       </div>
     </div>

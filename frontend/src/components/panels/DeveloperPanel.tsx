@@ -5,6 +5,7 @@ import {
   fetchSandboxAgents,
   fetchDeveloperApiKeys,
 } from '../../utils/api';
+import { useI18n } from '../../i18n/LanguageContext';
 
 interface SandboxStatus {
   status: string;
@@ -29,6 +30,7 @@ interface ApiKey {
 }
 
 export default function DeveloperPanel() {
+  const { t } = useI18n();
   const [sandboxStatus, setSandboxStatus] = useState<SandboxStatus | null>(null);
   const [sandboxAgents, setSandboxAgents] = useState<SandboxAgent[]>([]);
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
@@ -88,26 +90,26 @@ export default function DeveloperPanel() {
     <div className="space-y-6">
       {/* Header */}
       <div className="border-l-4 border-orange-500 pl-4">
-        <h2 className="text-xl font-bold text-white">Developer Platform</h2>
-        <p className="text-sm text-slate-400 mt-1">Developer registration, sandbox & API key management</p>
+        <h2 className="text-xl font-bold text-white">{t('devTitle')}</h2>
+        <p className="text-sm text-slate-400 mt-1">{t('devDesc')}</p>
       </div>
 
       {/* Developer Registration */}
       <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
-        <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">Developer Registration</h3>
+        <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">{t('devRegister')}</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
           <input
             type="text"
             value={regForm.name}
             onChange={e => setRegForm(f => ({ ...f, name: e.target.value }))}
-            placeholder="Developer name"
+            placeholder={t('devName')}
             className="px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-orange-500"
           />
           <input
             type="email"
             value={regForm.email}
             onChange={e => setRegForm(f => ({ ...f, email: e.target.value }))}
-            placeholder="Email"
+            placeholder={t('devEmail')}
             className="px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-orange-500"
           />
         </div>
@@ -116,26 +118,26 @@ export default function DeveloperPanel() {
             onClick={handleRegister}
             className="bg-orange-500 hover:bg-orange-600 rounded-lg px-4 py-2 text-sm text-white font-medium transition-colors"
           >
-            Register
+            {t('devRegisterBtn')}
           </button>
-          {regStatus === 'success' && <span className="text-emerald-400 text-sm">✓ Registered successfully</span>}
-          {regStatus === 'error' && <span className="text-red-400 text-sm">✗ Registration failed</span>}
+          {regStatus === 'success' && <span className="text-emerald-400 text-sm">{t('pnlRegisteredOk')}</span>}
+          {regStatus === 'error' && <span className="text-red-400 text-sm">{t('pnlRegFail')}</span>}
         </div>
       </div>
 
       {/* Sandbox Status */}
       <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
-        <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">Sandbox Status</h3>
+        <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">{t('devSandboxStatus')}</h3>
         {sandboxStatus ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="rounded-lg bg-gray-900/50 p-3 text-center">
-              <div className="text-xs text-slate-500">Status</div>
+              <div className="text-xs text-slate-500">{t('pnlStatus')}</div>
               <div className={`text-sm font-bold mt-1 ${sandboxStatus.status === 'active' ? 'text-emerald-400' : 'text-slate-400'}`}>
                 {sandboxStatus.status}
               </div>
             </div>
             <div className="rounded-lg bg-gray-900/50 p-3 text-center">
-              <div className="text-xs text-slate-500">Agents</div>
+              <div className="text-xs text-slate-500">{t('devSandboxAgents')}</div>
               <div className="text-sm font-bold text-orange-400 mt-1">{sandboxStatus.agents_count ?? 0}</div>
             </div>
             {sandboxStatus.resources && (
@@ -152,13 +154,13 @@ export default function DeveloperPanel() {
             )}
           </div>
         ) : (
-          <div className="text-center py-4 text-slate-600 text-sm">Loading...</div>
+          <div className="text-center py-4 text-slate-600 text-sm">{t('pnlLoading')}</div>
         )}
       </div>
 
       {/* Sandbox Agents */}
       <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
-        <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">Sandbox Agents ({sandboxAgents.length})</h3>
+        <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">{t('devSandboxAgents')} ({sandboxAgents.length})</h3>
         {sandboxAgents.length > 0 ? (
           <div className="space-y-2">
             {sandboxAgents.map(a => (
@@ -179,46 +181,46 @@ export default function DeveloperPanel() {
             ))}
           </div>
         ) : (
-          <div className="text-center py-4 text-slate-600 text-sm">No sandbox agents</div>
+          <div className="text-center py-4 text-slate-600 text-sm">{t('pnlNoSandboxAgents')}</div>
         )}
       </div>
 
       {/* API Keys */}
       <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
-        <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">API Keys</h3>
+        <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">{t('devApiKeys')}</h3>
         <div className="flex flex-col sm:flex-row gap-2 mb-3">
           <input
             type="text"
             value={keyForm.name}
             onChange={e => setKeyForm(f => ({ ...f, name: e.target.value }))}
-            placeholder="Key name"
+            placeholder={t('devKeyName')}
             className="flex-1 px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-orange-500"
           />
           <input
             type="text"
             value={keyForm.permissions}
             onChange={e => setKeyForm(f => ({ ...f, permissions: e.target.value }))}
-            placeholder="Permissions (comma-separated)"
+            placeholder={t('devPerms')}
             className="flex-1 px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-orange-500"
           />
           <button
             onClick={handleCreateKey}
             className="bg-orange-500 hover:bg-orange-600 rounded-lg px-4 py-2 text-sm text-white font-medium transition-colors"
           >
-            Create
+            {t('devCreate')}
           </button>
         </div>
-        {keyStatus === 'success' && <div className="text-emerald-400 text-sm mb-2">✓ Created successfully</div>}
-        {keyStatus === 'error' && <div className="text-red-400 text-sm mb-2">✗ Creation failed</div>}
+        {keyStatus === 'success' && <div className="text-emerald-400 text-sm mb-2">{t('pnlCreatedOk')}</div>}
+        {keyStatus === 'error' && <div className="text-red-400 text-sm mb-2">{t('pnlCreatedFail')}</div>}
         {apiKeys.length > 0 ? (
           <div className="bg-gray-900/50 rounded-lg overflow-x-auto">
             <table className="w-full text-sm min-w-[500px]">
               <thead>
                 <tr className="border-b border-gray-700">
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Name</th>
+                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('pnlName')}</th>
                   <th className="text-left py-2 px-3 text-slate-500 font-medium">Key</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Permissions</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Created</th>
+                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('devPermissions')}</th>
+                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('devCreatedAt')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -242,7 +244,7 @@ export default function DeveloperPanel() {
             </table>
           </div>
         ) : (
-          <div className="text-center py-4 text-slate-600 text-sm">No API keys</div>
+          <div className="text-center py-4 text-slate-600 text-sm">{t('pnlNoApiKeys')}</div>
         )}
       </div>
     </div>

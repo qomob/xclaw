@@ -5,6 +5,7 @@ import {
   publishA2AAgent,
   fetchA2AMessages,
 } from '../../utils/api';
+import { useI18n } from '../../i18n/LanguageContext';
 
 interface A2AStats {
   registered_agents: number;
@@ -27,6 +28,7 @@ interface A2AMessage {
 }
 
 export default function A2APanel() {
+  const { t } = useI18n();
   const [stats, setStats] = useState<A2AStats | null>(null);
   const [discovered, setDiscovered] = useState<AgentCard[]>([]);
   const [messages, setMessages] = useState<A2AMessage[]>([]);
@@ -91,16 +93,16 @@ export default function A2APanel() {
     <div className="space-y-6">
       {/* Header */}
       <div className="border-l-4 border-purple-500 pl-4">
-        <h2 className="text-xl font-bold text-white">A2A Protocol Management</h2>
-        <p className="text-sm text-slate-400 mt-1">Agent-to-Agent communication & collaboration protocol</p>
+        <h2 className="text-xl font-bold text-white">{t('a2aTitle')}</h2>
+        <p className="text-sm text-slate-400 mt-1">{t('a2aDesc')}</p>
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-3 gap-2 sm:gap-4">
         {[
-          { label: 'Registered Agents', value: stats?.registered_agents ?? '—', icon: '🤖' },
-          { label: 'Total Messages', value: stats?.total_messages ?? '—', icon: '💬' },
-          { label: 'Total Tasks', value: stats?.total_tasks ?? '—', icon: '📋' },
+          { label: t('a2aRegisteredAgents'), value: stats?.registered_agents ?? '—', icon: '🤖' },
+          { label: t('a2aTotalMessages'), value: stats?.total_messages ?? '—', icon: '💬' },
+          { label: t('a2aTotalTasks'), value: stats?.total_tasks ?? '—', icon: '📋' },
         ].map(c => (
           <div key={c.label} className="bg-gray-800/50 rounded-lg sm:rounded-xl p-2.5 sm:p-4 border border-gray-700/50">
             <div className="text-lg sm:text-2xl mb-0.5 sm:mb-1">{c.icon}</div>
@@ -112,14 +114,14 @@ export default function A2APanel() {
 
       {/* Agent Discovery */}
       <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
-        <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">Agent Discovery</h3>
+        <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">{t('a2aDiscover')}</h3>
         <div className="flex gap-2 mb-3">
           <input
             type="text"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleDiscover()}
-            placeholder="Search agents..."
+            placeholder={t('a2aSearchPlaceholder')}
             className="flex-1 px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-purple-500"
           />
           <button
@@ -147,33 +149,33 @@ export default function A2APanel() {
             ))}
           </div>
         ) : (
-          <div className="text-center py-6 text-slate-600 text-sm">Enter keywords to search agents</div>
+          <div className="text-center py-6 text-slate-600 text-sm">{t('a2aEnterKeywords')}</div>
         )}
       </div>
 
       {/* Publish Agent */}
       <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
-        <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">Publish New Agent</h3>
+        <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">{t('a2aPublish')}</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
           <input
             type="text"
             value={pubForm.agent_id}
             onChange={e => setPubForm(f => ({ ...f, agent_id: e.target.value }))}
-            placeholder="Agent ID"
+            placeholder={t('a2aAgentId')}
             className="px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-purple-500"
           />
           <input
             type="text"
             value={pubForm.name}
             onChange={e => setPubForm(f => ({ ...f, name: e.target.value }))}
-            placeholder="Agent name"
+            placeholder={t('a2aAgentName')}
             className="px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-purple-500"
           />
           <input
             type="text"
             value={pubForm.capabilities}
             onChange={e => setPubForm(f => ({ ...f, capabilities: e.target.value }))}
-            placeholder="Capabilities (comma-separated)"
+            placeholder={t('a2aCapsPlaceholder')}
             className="px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-purple-500"
           />
         </div>
@@ -182,29 +184,29 @@ export default function A2APanel() {
             onClick={handlePublish}
             className="bg-purple-500 hover:bg-purple-600 rounded-lg px-4 py-2 text-sm text-white font-medium transition-colors"
           >
-            Publish Agent
+            {t('a2aPublishBtn')}
           </button>
-          {pubStatus === 'success' && <span className="text-emerald-400 text-sm">✓ Published successfully</span>}
-          {pubStatus === 'error' && <span className="text-red-400 text-sm">✗ Publish failed</span>}
+          {pubStatus === 'success' && <span className="text-emerald-400 text-sm">{t('pnlRegisteredOk')}</span>}
+          {pubStatus === 'error' && <span className="text-red-400 text-sm">{t('pnlRegFail')}</span>}
         </div>
       </div>
 
       {/* Messages */}
       <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
-        <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">Message History</h3>
+        <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">{t('a2aMsgHistory')}</h3>
         <div className="flex gap-2 mb-3">
           <input
             type="text"
             value={msgAgentId}
             onChange={e => setMsgAgentId(e.target.value)}
-            placeholder="Enter Agent ID to view messages"
+            placeholder={t('a2aMsgPlaceholder')}
             className="flex-1 px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-purple-500"
           />
           <button
             onClick={handleFetchMessages}
             className="bg-purple-500 hover:bg-purple-600 rounded-lg px-4 py-2 text-sm text-white font-medium transition-colors"
           >
-            Load
+            {t('a2aLoad')}
           </button>
         </div>
         {messages.length > 0 ? (
@@ -212,10 +214,10 @@ export default function A2APanel() {
             <table className="w-full text-sm min-w-[500px]">
               <thead>
                 <tr className="border-b border-gray-700">
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Sender</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Receiver</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Content</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Time</th>
+                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('a2aSender')}</th>
+                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('a2aReceiver')}</th>
+                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('a2aContent')}</th>
+                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('pnlTime')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -233,7 +235,7 @@ export default function A2APanel() {
             </table>
           </div>
         ) : (
-          <div className="text-center py-6 text-slate-600 text-sm">Enter Agent ID to view message history</div>
+          <div className="text-center py-6 text-slate-600 text-sm">{t('a2aNoMsgHint')}</div>
         )}
       </div>
     </div>

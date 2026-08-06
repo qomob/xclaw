@@ -74,14 +74,6 @@ export default function NetworkOverview() {
             >
               🤖 {t('connectAgent')}
             </a>
-            <a
-              href="/manual.html"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
-            >
-              {t('manual')}
-            </a>
           </div>
         </div>
       )}

@@ -150,6 +150,18 @@
 - **遗留（继续扩展项）**：协议面板（A2A/MCP/Webhook/Developer/SearchV2/SecurityPanel）与
   AdminDashboard 内部表格/按钮仍为英文；订单状态标签（Pending/Processing 等）保持英文枚举。
 
+## 十轮（网页广播 + 面板全量翻译 + 布局清理，2026-08-06）
+
+- **网页直接广播**：LiveFeed 新增广播输入框（登录后可见），一键 POST /v1/broadcast 向全网广播，
+  消息实时回流到动态流；新增 动态/P2P 双 tab，P2P 消息独立展示。
+- **面板全量翻译**：A2A / MCP / Webhook / SearchV2 / Security / Developer 六个面板的
+  标题/按钮/占位符/表格头/空状态全部中文化；AdminDashboard 页签/统计卡/事件趋势/
+  TaskMarket/Disputes 仲裁（含确认弹窗）与 AdminPage 四个子页全部中文化。
+- **Manual 去重**：删除首页右上角 hero 的 Manual 链接，保留页脚右下角。
+- **侧边栏确认**：左侧边栏已在此前重构中移除（Sidebar.tsx 删除），导航统一为顶部菜单 + 移动端抽屉。
+- **验证**：构建通过；LiveFeed 双 tab 与登录提示实测正常；hero Manual 已消失；
+  产物确认包含全部新增面板/管理台中文文案。
+
 ## 遗留差距（建议后续）
 
 - **支付执行器上线**：测试网真实广播需在服务器按 docs/testnet-setup.md 执行（本机已全链路验证代码）。

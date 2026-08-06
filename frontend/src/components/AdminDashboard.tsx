@@ -10,6 +10,7 @@ import {
   setStoredAdminKey,
   clearStoredAdminKey,
 } from '../utils/adminApi';
+import { useI18n } from '../i18n/LanguageContext';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -135,6 +136,7 @@ const LEVEL_BG: Record<string, string> = {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function AdminDashboard() {
+  const { t } = useI18n();
   const [apiKey, setApiKey] = useState(getStoredAdminKey);
   const [inputKey, setInputKey] = useState('');
   const [authed, setAuthed] = useState(!!getStoredAdminKey());
@@ -159,17 +161,17 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('overview');
 
   const TABS = [
-    { id: 'overview', label: 'Overview', color: 'cyan' },
-    { id: 'monitor', label: 'Monitoring', color: 'sky' },
-    { id: 'federation', label: 'Federation', color: 'violet' },
-    { id: 'taskmarket', label: 'Task Market', color: 'amber' },
-    { id: 'disputes', label: 'Disputes', color: 'red' },
-    { id: 'settings', label: 'Settings', color: 'slate' },
-    { id: 'a2a', label: 'A2A Protocol', color: 'purple' },
-    { id: 'searchv2', label: 'Search V2', color: 'cyan' },
-    { id: 'mcp', label: 'MCP Management', color: 'green' },
-    { id: 'developer', label: 'Developer Platform', color: 'orange' },
-    { id: 'security', label: 'Security', color: 'red' },
+    { id: 'overview', label: t('admOverview'), color: 'cyan' },
+    { id: 'monitor', label: t('admMonitor'), color: 'sky' },
+    { id: 'federation', label: t('admFederation'), color: 'violet' },
+    { id: 'taskmarket', label: t('admTaskMarket'), color: 'amber' },
+    { id: 'disputes', label: t('admDisputeArbitration'), color: 'red' },
+    { id: 'settings', label: t('admSettings'), color: 'slate' },
+    { id: 'a2a', label: t('prA2A'), color: 'purple' },
+    { id: 'searchv2', label: t('prSearchV2'), color: 'cyan' },
+    { id: 'mcp', label: t('prMCP'), color: 'green' },
+    { id: 'developer', label: t('prDeveloper'), color: 'orange' },
+    { id: 'security', label: t('admSecurityTab'), color: 'red' },
   ];
 
   // ─── Auth ────────────────────────────────────────────────────────────────
@@ -314,16 +316,16 @@ export default function AdminDashboard() {
 
   const statCards = dashboard
     ? [
-        { label: 'Total Nodes', value: dashboard.nodes?.total ?? '—', icon: '🖥', color: 'from-cyan-500 to-cyan-700' },
-        { label: 'Total Skills', value: dashboard.skills?.total ?? '—', icon: '⚡', color: 'from-blue-500 to-blue-700' },
-        { label: 'Total Tasks', value: dashboard.tasks?.total ?? '—', icon: '📋', color: 'from-violet-500 to-violet-700' },
-        { label: 'Total Revenue', value: formatRevenue(dashboard.revenue?.total ?? 0), icon: '💰', color: 'from-emerald-500 to-emerald-700' },
+        { label: t('admTotalNodes'), value: dashboard.nodes?.total ?? '—', icon: '🖥', color: 'from-cyan-500 to-cyan-700' },
+        { label: t('admTotalSkills'), value: dashboard.skills?.total ?? '—', icon: '⚡', color: 'from-blue-500 to-blue-700' },
+        { label: t('admTotalTasks'), value: dashboard.tasks?.total ?? '—', icon: '📋', color: 'from-violet-500 to-violet-700' },
+        { label: t('admTotalRevenue'), value: formatRevenue(dashboard.revenue?.total ?? 0), icon: '💰', color: 'from-emerald-500 to-emerald-700' },
       ]
     : [
-        { label: 'Total Nodes', value: '—', icon: '🖥', color: 'from-cyan-500 to-cyan-700' },
-        { label: 'Total Skills', value: '—', icon: '⚡', color: 'from-blue-500 to-blue-700' },
-        { label: 'Total Tasks', value: '—', icon: '📋', color: 'from-violet-500 to-violet-700' },
-        { label: 'Total Revenue', value: '—', icon: '💰', color: 'from-emerald-500 to-emerald-700' },
+        { label: t('admTotalNodes'), value: '—', icon: '🖥', color: 'from-cyan-500 to-cyan-700' },
+        { label: t('admTotalSkills'), value: '—', icon: '⚡', color: 'from-blue-500 to-blue-700' },
+        { label: t('admTotalTasks'), value: '—', icon: '📋', color: 'from-violet-500 to-violet-700' },
+        { label: t('admTotalRevenue'), value: '—', icon: '💰', color: 'from-emerald-500 to-emerald-700' },
       ];
 
   return (
@@ -413,9 +415,9 @@ export default function AdminDashboard() {
         {/* Activity chart — takes 2 cols */}
         <div className="xl:col-span-2 rounded-lg sm:rounded-xl border border-slate-700/60 bg-[#111827] p-3 sm:p-5">
           <div className="flex items-center justify-between mb-3 sm:mb-4">
-            <h2 className="text-xs sm:text-sm font-semibold text-white uppercase tracking-wider">Event Trends (Last 24 Hours)</h2>
+            <h2 className="text-xs sm:text-sm font-semibold text-white uppercase tracking-wider">{t('admEventTrends')}</h2>
             <span className="text-[10px] sm:text-xs text-slate-500">
-              {dashboard ? `${dashboard.today_events} Events Today` : '—'}
+              {dashboard ? `${dashboard.today_events} ${t('admEventsToday')}` : '—'}
             </span>
           </div>
 
@@ -423,7 +425,7 @@ export default function AdminDashboard() {
           <div className="flex items-end gap-0.5 sm:gap-1 h-28 sm:h-40">
             {hourBuckets.length === 0 && !loading && (
               <div className="flex-1 flex items-center justify-center text-slate-600 text-xs sm:text-sm h-full">
-                No event data
+                {t('admNoEventData')}
               </div>
             )}
             {hourBuckets.map((b) => {
@@ -671,29 +673,27 @@ export default function AdminDashboard() {
 // ─── Task Market Panel ─────────────────────────────────────────────────────
 
 function TaskMarketPanel({ stats }: { stats: { open_tasks: number; total_bids: number } | null }) {
+  const { t } = useI18n();
   return (
     <div className="space-y-4">
       <div className="border-l-4 border-amber-500 pl-4">
-        <h2 className="text-xl font-bold text-white">Task Market</h2>
-        <p className="text-sm text-slate-400 mt-1">Marketplace overview — management is done in the Task Center</p>
+        <h2 className="text-xl font-bold text-white">{t('admTaskMarket')}</h2>
+        <p className="text-sm text-slate-400 mt-1">{t('admTaskMarketDesc')}</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 max-w-md">
         <div className="rounded-lg bg-[#111827] border border-slate-700/60 p-4 text-center">
           <div className="text-2xl font-bold text-amber-400">{stats?.open_tasks ?? '—'}</div>
-          <div className="text-xs text-slate-500 mt-1">Open Tasks</div>
+          <div className="text-xs text-slate-500 mt-1">{t('admOpenTasks')}</div>
         </div>
         <div className="rounded-lg bg-[#111827] border border-slate-700/60 p-4 text-center">
           <div className="text-2xl font-bold text-purple-400">{stats?.total_bids ?? '—'}</div>
-          <div className="text-xs text-slate-500 mt-1">Total Bids</div>
+          <div className="text-xs text-slate-500 mt-1">{t('admTotalBids')}</div>
         </div>
       </div>
 
       <div className="rounded-lg bg-[#111827] border border-slate-700/60 p-4 text-sm text-slate-400 max-w-xl">
-        任务市场的完整管理（发布/竞标/接标/提交/验收）请在左侧导航进入
-        <span className="text-slate-200 font-medium"> Task Center</span> 操作；
-        争议仲裁请切换到本页的
-        <span className="text-red-400 font-medium"> Disputes</span> 标签。
+        {t('admTaskMarketDesc')} · {t('pageTasks')}
       </div>
     </div>
   );
@@ -720,6 +720,7 @@ interface Dispute {
 }
 
 function DisputesPanel({ apiKey }: { apiKey: string }) {
+  const { t } = useI18n();
   const [disputes, setDisputes] = useState<Dispute[]>([]);
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(true);
@@ -743,10 +744,8 @@ function DisputesPanel({ apiKey }: { apiKey: string }) {
   useEffect(() => { load(); }, [load]);
 
   const resolve = async (dispute: Dispute, resolution: 'released_to_worker' | 'refunded_caller') => {
-    const label = resolution === 'released_to_worker'
-      ? `释放托管给执行者（${dispute.escrow_amount ?? 0} XCL）并标记任务完成`
-      : `向调用方退款（${dispute.escrow_amount ?? 0} XCL）并取消任务`;
-    if (!window.confirm(`确认仲裁该争议？将${label}。此操作不可撤销。`)) return;
+    const confirmText = resolution === 'released_to_worker' ? t('admConfirmRelease') : t('admConfirmRefund');
+    if (!window.confirm(confirmText)) return;
     setBusyId(dispute.id);
     try {
       const res = await adminFetch<{ success?: boolean; message?: string }>(
@@ -758,11 +757,11 @@ function DisputesPanel({ apiKey }: { apiKey: string }) {
         }
       );
       if (res && res.success === false) {
-        alert(res.message || '仲裁失败');
+        alert(res.message || t('pnlCreatedFail'));
       }
       load();
     } catch (e) {
-      alert(e instanceof Error ? e.message : '仲裁请求失败');
+      alert(e instanceof Error ? e.message : t('pnlCreatedFail'));
     } finally {
       setBusyId(null);
     }
@@ -784,15 +783,15 @@ function DisputesPanel({ apiKey }: { apiKey: string }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="border-l-4 border-red-500 pl-4">
-          <h2 className="text-xl font-bold text-white">Dispute Arbitration</h2>
+          <h2 className="text-xl font-bold text-white">{t('admDisputeArbitration')}</h2>
           <p className="text-sm text-slate-400 mt-1">
-            Worker submitted a result, caller rejected it — escrow is held until you decide
+            {t('admDisputeDesc')}
           </p>
         </div>
         <div className="flex gap-1.5">
-          {filterBtn('', 'All')}
-          {filterBtn('open', 'Open')}
-          {filterBtn('resolved', 'Resolved')}
+          {filterBtn('', t('admAll'))}
+          {filterBtn('open', t('admOpen'))}
+          {filterBtn('resolved', t('admResolved'))}
         </div>
       </div>
 
@@ -805,11 +804,11 @@ function DisputesPanel({ apiKey }: { apiKey: string }) {
       {loading ? (
         <div className="flex items-center justify-center py-10">
           <div className="w-6 h-6 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
-          <span className="ml-3 text-slate-500 text-sm">Loading disputes...</span>
+          <span className="ml-3 text-slate-500 text-sm">{t('pnlLoading')}</span>
         </div>
       ) : disputes.length === 0 ? (
         <div className="rounded-lg bg-[#111827] border border-slate-700/60 p-10 text-center text-sm text-slate-500">
-          No disputes{statusFilter ? ` with status "${statusFilter}"` : ''}
+          {t('admNoDisputes')}{statusFilter ? `: ${statusFilter}` : ''}
         </div>
       ) : (
         <div className="space-y-3">
@@ -827,25 +826,25 @@ function DisputesPanel({ apiKey }: { apiKey: string }) {
                     ? 'bg-red-500/20 text-red-400'
                     : 'bg-green-500/20 text-green-400'
                 }`}>
-                  {d.status === 'open' ? 'OPEN' : `RESOLVED · ${d.resolution || ''}`}
+                  {d.status === 'open' ? t('admOpen').toUpperCase() : `${t('admResolved').toUpperCase()} · ${d.resolution || ''}`}
                 </span>
               </div>
 
               {d.reason && (
                 <p className="text-xs text-slate-300 mt-2 bg-slate-900/60 rounded p-2.5">
-                  <span className="text-slate-500">Reason:</span> {d.reason}
+                  <span className="text-slate-500">{t('admReason')}:</span> {d.reason}
                 </p>
               )}
               {d.evidence && (
                 <p className="text-xs text-slate-400 mt-1.5">
-                  <span className="text-slate-500">Evidence:</span> {d.evidence}
+                  <span className="text-slate-500">{t('admEvidence')}:</span> {d.evidence}
                 </p>
               )}
 
               <div className="flex flex-wrap items-center gap-2 mt-2.5 text-[10px] text-slate-500">
-                <span>Escrow: <span className="text-amber-400 font-medium">{d.escrow_amount ?? 0} XCL</span></span>
-                <span>· Opened: {new Date(d.created_at).toLocaleString('zh-CN')}</span>
-                {d.resolved_at && <span>· Resolved: {new Date(d.resolved_at).toLocaleString('zh-CN')}</span>}
+                <span>{t('admEscrow')}: <span className="text-amber-400 font-medium">{d.escrow_amount ?? 0} XCL</span></span>
+                <span>· {t('admOpened')}: {new Date(d.created_at).toLocaleString('zh-CN')}</span>
+                {d.resolved_at && <span>· {t('admResolvedAt')}: {new Date(d.resolved_at).toLocaleString('zh-CN')}</span>}
               </div>
 
               {d.status === 'open' && (
@@ -855,14 +854,14 @@ function DisputesPanel({ apiKey }: { apiKey: string }) {
                     disabled={busyId === d.id}
                     className="px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white text-xs rounded-lg transition-colors"
                   >
-                    {busyId === d.id ? 'Processing...' : 'Release to Worker'}
+                    {busyId === d.id ? t('admProcessing') : t('admReleaseWorker')}
                   </button>
                   <button
                     onClick={() => resolve(d, 'refunded_caller')}
                     disabled={busyId === d.id}
                     className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-slate-200 text-xs rounded-lg transition-colors"
                   >
-                    {busyId === d.id ? 'Processing...' : 'Refund Caller'}
+                    {busyId === d.id ? t('admProcessing') : t('admRefundCaller')}
                   </button>
                 </div>
               )}

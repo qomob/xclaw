@@ -184,6 +184,7 @@ function AdminKeyGate({ keyInput, setKeyInput, keyError, checking, onSubmit }: {
 // ─── Monitoring ──────────────────────────────────────────────────────────────
 
 function MonitorTab({ apiKey }: { apiKey: string }) {
+  const { t } = useI18n();
   const [health, setHealth] = useState<MonitorHealth | null>(null);
   const [db, setDb] = useState<DBStats | null>(null);
   const [redis, setRedis] = useState<RedisInfo | null>(null);
@@ -220,31 +221,31 @@ function MonitorTab({ apiKey }: { apiKey: string }) {
   return (
     <div className="space-y-4">
       <div className="border-l-4 border-sky-500 pl-4">
-        <h2 className="text-xl font-bold text-white">System Monitoring</h2>
-        <p className="text-sm text-slate-400 mt-1">Service health, database & Redis monitoring</p>
+        <h2 className="text-xl font-bold text-white">{t('admMonitor')}</h2>
+        <p className="text-sm text-slate-400 mt-1">{t('pageAdminDesc')}</p>
       </div>
 
       {health && (
         <div className={`${card} p-4`}>
-          <h3 className="text-sm font-semibold mb-3 text-white">Backend Health</h3>
+          <h3 className="text-sm font-semibold mb-3 text-white">{t('admBackendHealth')}</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            <Stat label="Status" value={health.status} valueClass={health.status === 'healthy' ? 'text-green-400' : 'text-amber-400'} />
-            <Stat label="Uptime" value={formatUptime(health.uptime)} />
+            <Stat label={t('admStatus')} value={health.status} valueClass={health.status === 'healthy' ? 'text-green-400' : 'text-amber-400'} />
+            <Stat label={t('admUptime')} value={formatUptime(health.uptime)} />
             <Stat label="CPU" value={`${health.cpu_usage ?? 0}%`} />
             <Stat label="Memory" value={`${health.memory_usage ?? 0}%`} />
             <Stat label="Disk" value={`${health.disk_usage ?? 0}%`} />
-            <Stat label="Connections" value={String(health.active_connections ?? 0)} />
+            <Stat label={t('admConnections')} value={String(health.active_connections ?? 0)} />
           </div>
         </div>
       )}
 
       {db && (
         <div className={`${card} p-4`}>
-          <h3 className="text-sm font-semibold mb-3 text-white">Database</h3>
+          <h3 className="text-sm font-semibold mb-3 text-white">{t('admDatabase')}</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            <Stat label="Connections" value={String(db.total_connections)} />
-            <Stat label="Idle" value={String(db.idle_connections)} />
-            <Stat label="Size" value={`${db.database_size_mb?.toFixed(1)} MB`} />
+            <Stat label={t('admConnections')} value={String(db.total_connections)} />
+            <Stat label={t('admIdle')} value={String(db.idle_connections)} />
+            <Stat label={t('admSize')} value={`${db.database_size_mb?.toFixed(1)} MB`} />
           </div>
         </div>
       )}
@@ -257,7 +258,7 @@ function MonitorTab({ apiKey }: { apiKey: string }) {
             <Stat label="Keys" value={String(redis.total_keys ?? 0)} />
             <Stat label="Clients" value={String(redis.connected_clients ?? 0)} />
             <Stat label="Ops/sec" value={String(redis.ops_per_sec ?? 0)} />
-            <Stat label="Uptime" value={formatUptime(redis.uptime_seconds)} />
+            <Stat label={t('admUptime')} value={formatUptime(redis.uptime_seconds)} />
           </div>
         </div>
       )}
@@ -277,6 +278,7 @@ interface FederationPeer {
 }
 
 function FederationTab({ apiKey }: { apiKey: string }) {
+  const { t } = useI18n();
   const [status, setStatus] = useState<Record<string, unknown> | null>(null);
   const [peers, setPeers] = useState<FederationPeer[]>([]);
   const [error, setError] = useState('');
@@ -310,14 +312,14 @@ function FederationTab({ apiKey }: { apiKey: string }) {
   return (
     <div className="space-y-4">
       <div className="border-l-4 border-violet-500 pl-4">
-        <h2 className="text-xl font-bold text-white">Federation</h2>
-        <p className="text-sm text-slate-400 mt-1">Cross-network peer discovery & federation task routing</p>
+        <h2 className="text-xl font-bold text-white">{t('admFederation')}</h2>
+        <p className="text-sm text-slate-400 mt-1">{t('prA2A')}</p>
       </div>
 
       <div className="grid grid-cols-3 gap-3">
-        <Stat label="Total Peers" value={String(totalPeers)} />
-        <Stat label="Active Peers" value={String(activePeers)} valueClass="text-green-400" />
-        <Stat label="Status" value={String(status?.status || '—')} />
+        <Stat label={t('admTotalPeers')} value={String(totalPeers)} />
+        <Stat label={t('admActivePeers')} value={String(activePeers)} valueClass="text-green-400" />
+        <Stat label={t('admStatus')} value={String(status?.status || '—')} />
       </div>
 
       {peers.length > 0 && (
@@ -357,6 +359,7 @@ function FederationTab({ apiKey }: { apiKey: string }) {
 // ─── Nodes ──────────────────────────────────────────────────────────────────
 
 function NodesTab({ apiKey }: { apiKey: string }) {
+  const { t } = useI18n();
   const [nodes, setNodes] = useState<AdminNode[]>([]);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState('');
@@ -384,23 +387,23 @@ function NodesTab({ apiKey }: { apiKey: string }) {
   return (
     <div className="space-y-4">
       <div className="border-l-4 border-green-500 pl-4">
-        <h2 className="text-xl font-bold text-white">Node Management</h2>
-        <p className="text-sm text-slate-400 mt-1">All registered nodes ({total})</p>
+        <h2 className="text-xl font-bold text-white">{t('admNodes')}</h2>
+        <p className="text-sm text-slate-400 mt-1">{t('admAllNodes')} ({total})</p>
       </div>
 
       {nodes.length === 0 ? (
-        <div className={`${card} p-8 text-center text-xs text-slate-400`}>No nodes registered</div>
+        <div className={`${card} p-8 text-center text-xs text-slate-400`}>{t('admNoNodes')}</div>
       ) : (
         <div className={`${card} overflow-x-auto`}>
           <table className="w-full text-sm min-w-[640px]">
             <thead>
               <tr className="border-b border-slate-800">
-                <th className="text-left py-2 px-3 text-slate-500 font-medium">Name</th>
-                <th className="text-left py-2 px-3 text-slate-500 font-medium">Node ID</th>
-                <th className="text-left py-2 px-3 text-slate-500 font-medium">Status</th>
-                <th className="text-left py-2 px-3 text-slate-500 font-medium">Reputation</th>
-                <th className="text-left py-2 px-3 text-slate-500 font-medium">Earnings</th>
-                <th className="text-left py-2 px-3 text-slate-500 font-medium">Last Heartbeat</th>
+                <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('pnlName')}</th>
+                <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('admNodeId')}</th>
+                <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('pnlStatus')}</th>
+                <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('admReputation')}</th>
+                <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('admEarnings')}</th>
+                <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('admLastHeartbeat')}</th>
               </tr>
             </thead>
             <tbody>
@@ -431,6 +434,7 @@ function NodesTab({ apiKey }: { apiKey: string }) {
 // ─── Events ─────────────────────────────────────────────────────────────────
 
 function EventsTab({ apiKey }: { apiKey: string }) {
+  const { t } = useI18n();
   const [events, setEvents] = useState<AdminEvent[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -456,12 +460,12 @@ function EventsTab({ apiKey }: { apiKey: string }) {
   return (
     <div className="space-y-4">
       <div className="border-l-4 border-amber-500 pl-4">
-        <h2 className="text-xl font-bold text-white">Event Logs</h2>
-        <p className="text-sm text-slate-400 mt-1">System events & webhook delivery records</p>
+        <h2 className="text-xl font-bold text-white">{t('admEvents')}</h2>
+        <p className="text-sm text-slate-400 mt-1">{t('admEvents')}</p>
       </div>
 
       {events.length === 0 ? (
-        <div className={`${card} p-8 text-center text-xs text-slate-400`}>No events yet</div>
+        <div className={`${card} p-8 text-center text-xs text-slate-400`}>{t('admNoEvents')}</div>
       ) : (
         <div className="space-y-2">
           {events.map(ev => (

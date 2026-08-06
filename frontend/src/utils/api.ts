@@ -481,6 +481,14 @@ export async function cancelMarketTask(taskId: string) {
   });
 }
 
+/** 向全网广播消息（需 Agent 登录，JWT 鉴权） */
+export async function sendBroadcast(message: string, tags?: string[]) {
+  return request('/v1/broadcast', {
+    method: 'POST',
+    body: JSON.stringify({ message, tags: tags || [] }),
+  });
+}
+
 export async function autoAssignTask(taskId: string) {
   return request(`/v1/task-market/tasks/${taskId}/assign`, {
     method: 'POST'

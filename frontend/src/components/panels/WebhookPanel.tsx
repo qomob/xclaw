@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useThemeStore } from '../../store/useThemeStore';
 import { request } from '../../utils/api';
+import { useI18n } from '../../i18n/LanguageContext';
 
 interface Webhook {
   id: string;
@@ -20,6 +21,7 @@ interface Delivery {
 }
 
 export default function WebhookManager() {
+  const { t } = useI18n();
   const theme = useThemeStore(s => s.theme);
   const [webhooks, setWebhooks] = useState<Webhook[]>([]);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
@@ -83,32 +85,32 @@ export default function WebhookManager() {
   return (
     <div className="space-y-6">
       <div className="border-l-4 border-amber-500 pl-4">
-        <h2 className="text-xl font-bold text-white">Webhook Management</h2>
-        <p className="text-sm text-slate-400 mt-1">Event subscription & delivery management</p>
+        <h2 className="text-xl font-bold text-white">{t('whTitle')}</h2>
+        <p className="text-sm text-slate-400 mt-1">{t('whDesc')}</p>
       </div>
 
       <div className={`${card} p-4`}>
-        <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">Create Webhook</h3>
+        <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">{t('whCreate')}</h3>
         <div className="space-y-3">
           <input
             type="text"
             value={form.url}
             onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
-            placeholder="Callback URL (https://...)"
+            placeholder={t('whCallbackUrl')}
             className="w-full px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-amber-500"
           />
           <input
             type="text"
             value={form.events}
             onChange={e => setForm(f => ({ ...f, events: e.target.value }))}
-            placeholder="Event types (comma-separated, e.g. agent.online,task.completed)"
+            placeholder={t('whEventTypes')}
             className="w-full px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-amber-500"
           />
           <input
             type="text"
             value={form.description}
             onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-            placeholder="Description (optional)"
+            placeholder={t('whDescOptional')}
             className="w-full px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-amber-500"
           />
           <div className="flex items-center gap-3">
@@ -117,17 +119,17 @@ export default function WebhookManager() {
               disabled={!form.url || !form.events}
               className="bg-amber-500 hover:bg-amber-600 rounded-lg px-4 py-2 text-sm text-white font-medium disabled:opacity-40 transition-colors"
             >
-              Create
+              {t('whCreateBtn')}
             </button>
-            {formStatus === 'success' && <span className="text-emerald-400 text-sm">✓ Created successfully</span>}
-            {formStatus === 'error' && <span className="text-red-400 text-sm">✗ Creation failed</span>}
+            {formStatus === 'success' && <span className="text-emerald-400 text-sm">{t('pnlCreatedOk')}</span>}
+            {formStatus === 'error' && <span className="text-red-400 text-sm">{t('pnlCreatedFail')}</span>}
           </div>
         </div>
       </div>
 
       {events.length > 0 && (
         <div className={`${card} p-4`}>
-          <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">Available Event Types</h3>
+          <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">{t('whAvailableEvents')}</h3>
           <div className="flex flex-wrap gap-2">
             {events.map(e => (
               <span key={e} className="px-2 py-1 text-xs bg-amber-500/20 text-amber-300 rounded-full">{e}</span>
@@ -138,12 +140,12 @@ export default function WebhookManager() {
 
       <div className={`${card} p-4`}>
         <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">
-          Registered Webhooks ({webhooks.length})
+          {t('whRegistered')} ({webhooks.length})
         </h3>
         {loading ? (
-          <div className="text-center py-6 text-slate-600 text-sm animate-pulse">Loading...</div>
+          <div className="text-center py-6 text-slate-600 text-sm animate-pulse">{t('pnlLoading')}</div>
         ) : webhooks.length === 0 ? (
-          <div className="text-center py-6 text-slate-600 text-sm">No webhooks</div>
+          <div className="text-center py-6 text-slate-600 text-sm">{t('pnlNoWebhooks')}</div>
         ) : (
           <div className="space-y-2">
             {webhooks.map(wh => (
@@ -160,7 +162,7 @@ export default function WebhookManager() {
                   onClick={() => handleDelete(wh.id)}
                   className="text-xs text-red-400 hover:text-red-300 transition-colors"
                 >
-                  Delete
+                  {t('pnlDelete')}
                 </button>
               </div>
             ))}
