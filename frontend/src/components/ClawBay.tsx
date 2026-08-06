@@ -90,7 +90,7 @@ export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) 
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [taskRunning, setTaskRunning] = useState(false);
   const [taskStatus, setTaskStatus] = useState<{ task_id: string; status: string; result?: string | Record<string, unknown>; error?: string } | null>(null);
-  const [mySkills, setMySkills] = useState<Array<{ id: string; name: string; category: string; version: string; price: number | string; is_listed: boolean; sales_count?: number }>>([]);
+  const [mySkills, setMySkills] = useState<Array<{ id: string; name: string; category: string; version: string; price: number | string; is_listed: boolean; sales_count?: number; review_status?: string }>>([]);
   const [pubForm, setPubForm] = useState({ name: '', description: '', category: '', version: '1.0.0', price: '' });
   const [pubStatus, setPubStatus] = useState('');
   const [pubBusy, setPubBusy] = useState(false);
@@ -670,9 +670,17 @@ export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) 
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${s.is_listed ? 'bg-green-500/20 text-green-400' : 'bg-slate-600/30 text-gray-400'}`}>
-                          {s.is_listed ? t('cbPubListed') : t('cbPubUnlisted')}
-                        </span>
+                        {(s.review_status === 'pending') && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">{t('cbReviewPending')}</span>
+                        )}
+                        {(s.review_status === 'approved' || !s.review_status) && (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${s.is_listed ? 'bg-green-500/20 text-green-400' : 'bg-slate-600/30 text-gray-400'}`}>
+                            {s.is_listed ? t('cbPubListed') : t('cbPubUnlisted')}
+                          </span>
+                        )}
+                        {s.review_status === 'rejected' && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">{t('cbReviewRejected')}</span>
+                        )}
                         {s.is_listed && (
                           <button
                             onClick={() => handleDelist(s.id)}

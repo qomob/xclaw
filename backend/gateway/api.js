@@ -2288,6 +2288,33 @@ router.post('/v1/admin/task-market/verification/process', verifyApiKey, requireA
   }
 });
 
+// 技能上架审核（管理员）
+router.get('/v1/admin/marketplace/reviews', verifyApiKey, requireAdmin, async (req, res) => {
+  try {
+    const result = await marketplaceService.listSkillsForReview({
+      status: req.query.status || 'pending',
+      limit: req.query.limit,
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/v1/admin/marketplace/reviews/:skill_id', verifyApiKey, requireAdmin, validateUUIDParam('skill_id'), async (req, res) => {
+  try {
+    const result = await marketplaceService.reviewSkill(
+      req.params.skill_id,
+      req.body?.action,
+      req.body?.note,
+      req.agentId || null
+    );
+    res.status(result.success ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // 撤回竞标
 router.post('/v1/task-market/tasks/:task_id/bids/:bid_id/withdraw', requireAuth, validateUUIDParam('task_id'), validateUUIDParam('bid_id'), async (req, res) => {
   try {

@@ -13,6 +13,56 @@ from urllib.parse import urlencode
 
 STANDARD_TIMEOUT = 30
 DEFAULT_STATE_FILE = os.path.expanduser("~/.xclaw_agent_state.json")
+CONFIG_FILE = os.path.expanduser("~/.xclaw/config.json")
+VERSION = "1.2.0"
+
+
+def load_config():
+    """加载 ~/.xclaw/config.json（setup 写入的默认配置）"""
+    try:
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except (json.JSONDecodeError, IOError):
+        pass
+    return {}
+
+
+def save_config(cfg):
+    os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, indent=2, ensure_ascii=False)
+
+
+def render_table(data):
+    """列表型结果的简单表格输出（--format table）"""
+    if not isinstance(data, list) or not data or not isinstance(data[0], dict):
+        return None
+    keys = list(data[0].keys())[:8]
+    rows = [[str(r.get(k, ""))[:36] for k in keys] for r in data[:30]]
+    widths = [len(h) for h in keys]
+    for r in rows:
+        for i, v in enumerate(r):
+            widths[i] = max(widths[i], len(v))
+    def fmt(row):
+        return "  ".join(v.ljust(widths[i]) for i, v in enumerate(row))
+    lines = [fmt(keys), "-" * (sum(widths) + 2 * (len(widths) - 1))]
+    lines += [fmt(r) for r in rows]
+    return "\n".join(lines)
+
+
+def _encrypt_secret(plain: str) -> str:
+    from cryptography.fernet import Fernet
+    key = Fernet.generate_key()
+    token = Fernet(key).encrypt(plain.encode("utf-8")).decode("utf-8")
+    # 密钥与密文一起保存（passphrase 仅作混淆层；真正安全需外部 KMS）
+    return json.dumps({"v": 1, "key": key.decode("utf-8"), "data": token})
+
+
+def _decrypt_secret(payload: str) -> str:
+    from cryptography.fernet import Fernet
+    obj = json.loads(payload)
+    return Fernet(obj["key"].encode("utf-8")).decrypt(obj["data"].encode("utf-8")).decode("utf-8")
 
 
 def ts():
@@ -63,6 +113,11 @@ class XClawClient:
         self.jwt = jwt or os.environ.get("XCLAW_JWT", "")
         self.agent_id = state.get("agent_id")
         pk_bytes = state.get("private_key_bytes")
+        if pk_bytes and pk_bytes.startswith("{") and os.environ.get("XCLAW_STATE_PASSPHRASE"):
+            try:
+                pk_bytes = _decrypt_secret(pk_bytes)
+            except Exception:
+                pk_bytes = None
 
         if pk_bytes:
             from cryptography.hazmat.primitives import serialization
@@ -162,12 +217,15 @@ class XClawClient:
                 format=serialization.PrivateFormat.PKCS8,
                 encryption_algorithm=serialization.NoEncryption(),
             ).decode("utf-8")
+        payload_pk = pk_bytes
+        if pk_bytes and os.environ.get("XCLAW_STATE_PASSPHRASE"):
+            payload_pk = _encrypt_secret(pk_bytes)
         save_state(self.state_file, {
             "agent_id": self.agent_id,
             "api_key": self.api_key,
             "jwt": self.jwt,
             "public_key_pem": self.public_key_pem,
-            "private_key_bytes": pk_bytes,
+            "private_key_bytes": payload_pk,
         })
 
     def _ensure_jwt(self):
@@ -799,8 +857,138 @@ def action_accept_bid(client, task_id=None, bid_id=None, **_kw):
     })
 
 
+def action_setup(client, agent_name=None, capabilities=None, tags=None, **_kw):
+    """初始化配置：写入干净的默认配置（仅管理我们自己的键，不合并历史身份/密钥）"""
+    cfg = {
+        "base_url": client.base_url,
+        "agent_name": agent_name or "",
+        "capabilities": capabilities or "",
+        "tags": tags or "",
+    }
+    save_config(cfg)
+    return ok("setup", {"config_file": CONFIG_FILE, "config": cfg})
+
+
+def action_version(client, **_kw):
+    return ok("version", {"version": VERSION, "config_file": CONFIG_FILE})
+
+
+def action_register_skill(client, skill_name=None, description=None, category=None,
+                          skill_version=None, **_kw):
+    """注册技能（创建技能记录，需先 register 得到 Agent 身份）"""
+    if not skill_name or not description or not category:
+        return fail("register-skill", "skill-name / description / category 必填")
+    if not client.agent_id:
+        return fail("register-skill", "需要 Agent 身份，请先运行 register（--state-file）")
+    resp = client.post("/v1/skills/register", body={
+        "name": skill_name,
+        "description": description,
+        "category": category,
+        "version": skill_version or "1.0.0",
+        "node_id": client.agent_id,
+    })
+    if not resp.get("success"):
+        return fail("register-skill", resp.get("error", "注册失败"))
+    return ok("register-skill", {
+        "skill_id": resp["data"].get("skill_id"),
+        "status": resp["data"].get("status", "registered"),
+        "review_status": resp["data"].get("review_status", "pending"),
+    })
+
+
+def action_list_skill(client, skill_id=None, price=None, **_kw):
+    """上架技能到市场并定价（上架后进入平台审核）"""
+    if not skill_id or price is None:
+        return fail("list-skill", "skill-id 与 price 必填")
+    if not client._ensure_jwt():
+        return fail("list-skill", "需要 API Key 换取 JWT（--api-key 或状态文件）")
+    resp = client.post("/v1/marketplace/list", body={
+        "skill_id": skill_id,
+        "price": float(price),
+    })
+    if not resp.get("success"):
+        return fail("list-skill", resp.get("error", "上架失败"))
+    return ok("list-skill", {
+        "skill_id": skill_id,
+        "price": float(price),
+        "review_status": resp["data"].get("review_status", resp.get("data", {}).get("status", "pending")),
+    })
+
+
+def action_delist_skill(client, skill_id=None, **_kw):
+    """下架技能"""
+    if not skill_id:
+        return fail("delist-skill", "skill-id 必填")
+    if not client._ensure_jwt():
+        return fail("delist-skill", "需要 API Key 换取 JWT")
+    resp = client.post("/v1/marketplace/delist", body={"skill_id": skill_id})
+    if not resp.get("success"):
+        return fail("delist-skill", resp.get("error", "下架失败"))
+    return ok("delist-skill", {"skill_id": skill_id, "delisted": True})
+
+
+def action_balance(client, **_kw):
+    """查询当前 Agent 的余额与托管余额"""
+    if not client._ensure_jwt():
+        return fail("balance", "需要 API Key 换取 JWT")
+    resp = client.get("/v1/billing/balance")
+    if not resp.get("success"):
+        return fail("balance", resp.get("error", "查询失败"))
+    d = resp.get("data", {})
+    return ok("balance", {
+        "node_id": d.get("node_id"),
+        "balance": float(d.get("balance") or 0),
+        "escrow_balance": float(d.get("escrow_balance") or 0),
+        "total_balance": float(d.get("total_balance") or 0),
+        "currency": d.get("currency", "XCL"),
+    })
+
+
+def action_withdraw(client, to_address=None, amount=None, chain=None, currency=None, **_kw):
+    """发起链上提现（需余额；真实广播由平台执行器处理）"""
+    if not to_address or amount is None:
+        return fail("withdraw", "to-address 与 amount 必填")
+    if not client._ensure_jwt():
+        return fail("withdraw", "需要 API Key 换取 JWT")
+    cfg = load_config()
+    resp = client.post("/v1/payment/withdraw", body={
+        "node_id": client.agent_id,
+        "chain": chain or cfg.get("chain", "ethereum"),
+        "to_address": to_address,
+        "amount": float(amount),
+        "currency": currency or cfg.get("currency", "ETH"),
+    })
+    if not resp.get("success"):
+        return fail("withdraw", resp.get("error", "提现失败"))
+    d = resp.get("data", {})
+    return ok("withdraw", {
+        "withdrawal_id": d.get("id"),
+        "status": d.get("status"),
+        "amount": d.get("amount"),
+        "currency": d.get("currency"),
+        "to_address": d.get("to_address"),
+    })
+
+
+def action_self_upgrade(client, **_kw):
+    """一键升级：从 GitHub 拉取最新版本（仅限 git 安装）"""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_root = os.path.dirname(script_dir)
+    if not os.path.isdir(os.path.join(repo_root, ".git")):
+        return fail("self-upgrade", "非 git 安装，请重新运行 install.sh 安装最新版",
+                    hint="curl -fsSL https://raw.githubusercontent.com/qomob/xclawskill/main/install.sh | bash")
+    import subprocess
+    try:
+        subprocess.run(["git", "-C", repo_root, "pull", "--ff-only"], check=True, capture_output=True)
+        return ok("self-upgrade", {"message": "已升级到最新版，重新运行 xclaw-skill --version 确认"})
+    except Exception as e:
+        return fail("self-upgrade", f"升级失败: {e}")
+
+
 ACTIONS = {
     "register":          action_register,
+    "setup":             action_setup,
+    "version":           action_version,
     "heartbeat":         action_heartbeat,
     "discover":          action_discover,
     "send-message":      action_send_message,
@@ -819,6 +1007,12 @@ ACTIONS = {
     "create-task":       action_create_task,
     "submit-bid":        action_submit_bid,
     "accept-bid":        action_accept_bid,
+    "register-skill":    action_register_skill,
+    "list-skill":        action_list_skill,
+    "delist-skill":      action_delist_skill,
+    "balance":           action_balance,
+    "withdraw":          action_withdraw,
+    "self-upgrade":      action_self_upgrade,
     "verify":            action_verify,
     "daemon":            None,
 }
@@ -840,36 +1034,46 @@ def daemon_loop(client, interval, once=False):
     signal.signal(signal.SIGTERM, _shutdown)
 
     count = 0
+    fail_streak = 0
     while running:
-        result = action_heartbeat(client)
-        result["count"] = count + 1
-        result["interval_s"] = interval
-        print(json.dumps(result, indent=2, ensure_ascii=False), flush=True)
-        count += 1
-
-        if once:
-            break
-
-        _time.sleep(interval)
+        try:
+            result = action_heartbeat(client)
+            result["count"] = count + 1
+            result["interval_s"] = interval
+            print(json.dumps(result, indent=2, ensure_ascii=False), flush=True)
+            fail_streak = 0 if result.get("success") else fail_streak + 1
+            count += 1
+            if once:
+                break
+        except Exception as e:
+            fail_streak += 1
+            print(json.dumps(fail("daemon", f"heartbeat error: {e}"), ensure_ascii=False), flush=True)
+        # 指数退避：连续失败时逐步拉长间隔（上限 5 分钟），避免打爆限流
+        delay = interval if fail_streak == 0 else min(interval * (2 ** min(fail_streak, 5)), 300)
+        _time.sleep(delay)
 
     sys.exit(0)
 
 
 def main():
+    cfg = load_config()
     parser = argparse.ArgumentParser(description="XClawSkill — XClaw Agent & Network Toolkit")
+    parser.add_argument("--version", action="store_true", help="Show version and exit")
+    parser.add_argument("--format", choices=["json", "table"], default="json",
+                        help="Output format (default: json)")
     parser.add_argument("--base-url",
-                        default=os.environ.get("XCLAW_BASE_URL", "https://xclaw.network/api"),
+                        default=os.environ.get("XCLAW_BASE_URL", cfg.get("base_url", "https://xclaw.network/api")),
                         help="XClaw API base URL (env: XCLAW_BASE_URL)")
-    parser.add_argument("--action", required=True, choices=list(ACTIONS.keys()),
+    parser.add_argument("--action", default=None, choices=list(ACTIONS.keys()),
                         help="Action to perform")
     parser.add_argument("--state-file", default=None,
                         help="JSON file to persist agent identity across CLI calls")
     parser.add_argument("--api-key", default="", help="XClaw API key")
     parser.add_argument("--jwt", default="", help="XClaw JWT token")
-    parser.add_argument("--agent-name", default=None, help="Agent name (register)")
-    parser.add_argument("--capabilities", default=None, help="Agent capabilities text (register)")
+    parser.add_argument("--agent-name", default=cfg.get("agent_name"), help="Agent name (register)")
+    parser.add_argument("--capabilities", default=cfg.get("capabilities"), help="Agent capabilities text (register)")
     parser.add_argument("--query", default=None, help="Search query")
-    parser.add_argument("--tags", default=None, help="Comma-separated tags")
+    parser.add_argument("--tags", default=cfg.get("tags"), help="Comma-separated tags")
     parser.add_argument("--limit", type=int, default=10, help="Result limit")
     parser.add_argument("--agent-id", default=None, help="Agent UUID (profile)")
     parser.add_argument("--recipient-id", default=None, help="Recipient agent ID (send-message)")
@@ -888,10 +1092,23 @@ def main():
     parser.add_argument("--price", type=float, default=None, help="Bid price (submit-bid)")
     parser.add_argument("--proposal", default=None, help="Bid proposal text (submit-bid)")
     parser.add_argument("--bid-id", default=None, help="Bid UUID (accept-bid)")
+    parser.add_argument("--skill-name", default=None, help="Skill name (register-skill)")
+    parser.add_argument("--skill-version", default=None, help="Skill version (register-skill)")
+    parser.add_argument("--category", default=None, help="Skill category (register-skill)")
+    parser.add_argument("--to-address", default=None, help="Withdraw destination address")
+    parser.add_argument("--amount", type=float, default=None, help="Withdraw amount")
+    parser.add_argument("--chain", default=None, help="Withdraw chain (default ethereum)")
+    parser.add_argument("--currency", default=None, help="Withdraw currency (default ETH)")
     parser.add_argument("--interval", type=int, default=20,
                         help="Heartbeat interval in seconds (default: 20, TTL is 30)")
 
     args = parser.parse_args()
+    if args.version:
+        print(VERSION)
+        sys.exit(0)
+    if not args.action:
+        parser.print_help()
+        sys.exit(2)
     client = XClawClient(args.base_url, api_key=args.api_key, jwt=args.jwt,
                          state_file=args.state_file)
 
@@ -921,14 +1138,29 @@ def main():
         "price": args.price,
         "proposal": args.proposal,
         "bid_id": args.bid_id,
+        "skill_name": args.skill_name,
+        "skill_version": args.skill_version,
+        "category": args.category,
+        "to_address": args.to_address,
+        "amount": args.amount,
+        "chain": args.chain,
+        "currency": args.currency,
         "state_file": args.state_file,
     }
 
     handler = ACTIONS[args.action]
     result = handler(client, **kwargs)
 
-    json.dump(result, sys.stdout, indent=2, ensure_ascii=False)
-    print()
+    if args.format == "table":
+        table = render_table(result.get("data"))
+        if table:
+            print(table)
+        else:
+            json.dump(result, sys.stdout, indent=2, ensure_ascii=False)
+            print()
+    else:
+        json.dump(result, sys.stdout, indent=2, ensure_ascii=False)
+        print()
 
     sys.exit(0 if result.get("success") else 1)
 

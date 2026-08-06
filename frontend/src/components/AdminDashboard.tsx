@@ -167,6 +167,7 @@ export default function AdminDashboard() {
     { id: 'federation', label: t('admFederation'), color: 'violet' },
     { id: 'taskmarket', label: t('admTaskMarket'), color: 'amber' },
     { id: 'disputes', label: t('admDisputeArbitration'), color: 'red' },
+    { id: 'skillreviews', label: t('admSkillReviews'), color: 'green' },
     { id: 'settings', label: t('admSettings'), color: 'slate' },
     { id: 'a2a', label: t('prA2A'), color: 'purple' },
     { id: 'searchv2', label: t('prSearchV2'), color: 'cyan' },
@@ -392,6 +393,7 @@ export default function AdminDashboard() {
       {activeTab === 'security' && <SecurityPanel />}
       {activeTab === 'taskmarket' && <TaskMarketPanel stats={taskMarketStats} />}
       {activeTab === 'disputes' && <DisputesPanel apiKey={apiKey} />}
+      {activeTab === 'skillreviews' && <SkillReviewsPanel apiKey={apiKey} />}
 
       {/* ─── Overview Tab Content ─── */}
       {activeTab === 'overview' && (<>
@@ -863,6 +865,149 @@ function DisputesPanel({ apiKey }: { apiKey: string }) {
                     className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-slate-200 text-xs rounded-lg transition-colors"
                   >
                     {busyId === d.id ? t('admProcessing') : t('admRefundCaller')}
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── 技能审核面板 ─────────────────────────────────────────────────────────
+
+interface PendingSkill {
+  id: string;
+  name: string;
+  category: string;
+  version: string;
+  description: string;
+  price: string | number;
+  is_listed: boolean;
+  review_status: string;
+  review_note: string | null;
+  created_at: string;
+  owner_name: string | null;
+  owner_reputation: string | number | null;
+}
+
+function SkillReviewsPanel({ apiKey }: { apiKey: string }) {
+  const { t } = useI18n();
+  const [items, setItems] = useState<PendingSkill[]>([]);
+  const [statusFilter, setStatusFilter] = useState('pending');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await adminFetch<{ data: PendingSkill[] }>(
+        `/v1/admin/marketplace/reviews?status=${statusFilter}&limit=50`,
+        apiKey
+      );
+      setItems(res.data || []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '加载失败');
+    } finally {
+      setLoading(false);
+    }
+  }, [apiKey, statusFilter]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const review = async (skill: PendingSkill, action: 'approve' | 'reject') => {
+    const note = action === 'reject' ? (window.prompt(t('admReviewNote')) || '') : '';
+    setBusyId(skill.id);
+    try {
+      await adminFetch(`/v1/admin/marketplace/reviews/${skill.id}`, apiKey, {
+        method: 'POST',
+        body: JSON.stringify({ action, note }),
+      });
+      load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '操作失败');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const filterBtn = (key: string, label: string) => (
+    <button
+      key={key}
+      onClick={() => setStatusFilter(key)}
+      className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+        statusFilter === key ? 'bg-green-500 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
+      }`}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="border-l-4 border-green-500 pl-4">
+          <h2 className="text-xl font-bold text-white">{t('admSkillReviews')}</h2>
+          <p className="text-sm text-slate-400 mt-1">{t('admSkillDesc')}</p>
+        </div>
+        <div className="flex gap-1.5">
+          {filterBtn('pending', t('cbReviewPending'))}
+          {filterBtn('approved', t('cbReviewApproved'))}
+          {filterBtn('rejected', t('cbReviewRejected'))}
+        </div>
+      </div>
+
+      {error && (
+        <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-400">
+          {error === 'AUTH_FAILED' ? 'Invalid admin API key' : error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex items-center justify-center py-10 text-slate-400 text-sm">{t('pnlLoading')}</div>
+      ) : items.length === 0 ? (
+        <div className="rounded-lg bg-[#111827] border border-slate-700/60 p-10 text-center text-sm text-slate-500">
+          {t('admNoPending')}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {items.map(s => (
+            <div key={s.id} className="rounded-lg bg-[#111827] border border-slate-700/60 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold text-white truncate">{s.name}</h3>
+                  <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">{s.description}</p>
+                  <div className="flex flex-wrap gap-2 mt-2 text-[10px] text-slate-500">
+                    <span className="px-1.5 py-0.5 rounded bg-slate-800">{s.category} · v{s.version}</span>
+                    <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">{Number(s.price) > 0 ? `${Number(s.price)} XCL` : '未定价'}</span>
+                    <span>{t('admOwner')}: {s.owner_name || s.id.slice(0, 8)}</span>
+                    {s.owner_reputation != null && <span>★ {Number(s.owner_reputation).toFixed(2)}</span>}
+                    <span>{new Date(s.created_at).toLocaleString()}</span>
+                  </div>
+                  {s.review_note && (
+                    <p className="text-xs text-red-300 mt-1.5">{t('admReviewNote')}: {s.review_note}</p>
+                  )}
+                </div>
+              </div>
+              {s.review_status === 'pending' && (
+                <div className="flex gap-2 mt-3">
+                  <button
+                    onClick={() => review(s, 'approve')}
+                    disabled={busyId === s.id}
+                    className="px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white text-xs rounded-lg transition-colors"
+                  >
+                    {busyId === s.id ? t('admProcessing') : t('admApprove')}
+                  </button>
+                  <button
+                    onClick={() => review(s, 'reject')}
+                    disabled={busyId === s.id}
+                    className="px-3 py-1.5 bg-red-600/80 hover:bg-red-600 disabled:opacity-40 text-white text-xs rounded-lg transition-colors"
+                  >
+                    {busyId === s.id ? t('admProcessing') : t('admReject')}
                   </button>
                 </div>
               )}

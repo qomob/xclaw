@@ -14,7 +14,7 @@ export async function listSkill(skillId, nodeId, price) {
   try {
     const result = await pgPool.query(
       `UPDATE skills SET 
-         price = $1, is_listed = TRUE, updated_at = NOW() 
+         price = $1, is_listed = TRUE, review_status = 'pending', reviewed_at = NULL, updated_at = NOW() 
        WHERE id = $2 AND node_id = $3
        RETURNING *`,
       [price, skillId, nodeId]
@@ -36,6 +36,58 @@ export async function listSkill(skillId, nodeId, price) {
     logger.error('List skill failed', { error: error.message, skillId });
     return formatResponse(false, null, '上架失败');
   }
+}
+
+/**
+ * 管理员：列出待审核/已审核的技能（含卖家信息）
+ */
+export async function listSkillsForReview({ status = 'pending', limit = 50 } = {}) {
+  const pgPool = getPostgres();
+  const result = await pgPool.query(
+    `SELECT s.id, s.name, s.category, s.version, s.description, s.price, s.is_listed,
+            s.review_status, s.review_note, s.created_at, s.reviewed_at,
+            n.name AS owner_name, n.reputation_score AS owner_reputation
+     FROM skills s
+     LEFT JOIN nodes n ON n.node_id = s.node_id
+     WHERE s.review_status = $1
+     ORDER BY s.created_at DESC
+     LIMIT $2`,
+    [status, Math.min(Math.max(parseInt(limit) || 50, 1), 200)]
+  );
+  return formatResponse(true, result.rows);
+}
+
+/**
+ * 管理员：审核技能（approve 通过上架可见；reject 拒绝并强制下架）
+ */
+export async function reviewSkill(skillId, action, note, adminId) {
+  if (!['approve', 'reject'].includes(action)) {
+    return formatResponse(false, null, 'action 必须是 approve 或 reject');
+  }
+  const pgPool = getPostgres();
+  const redisClient = getRedis();
+  const status = action === 'approve' ? 'approved' : 'rejected';
+  const result = await pgPool.query(
+    `UPDATE skills SET
+       review_status = $2,
+       review_note = $3,
+       reviewed_at = NOW(),
+       updated_at = NOW(),
+       is_listed = CASE WHEN $2 = 'approved' THEN is_listed ELSE FALSE END
+     WHERE id = $1
+     RETURNING id, name, review_status, review_note, is_listed`,
+    [skillId, status, note || null]
+  );
+  if (!result.rows.length) {
+    return formatResponse(false, null, '技能不存在');
+  }
+  // 同步 Redis 市场索引
+  if (status === 'approved' && result.rows[0].is_listed) {
+    await redisClient.sadd('marketplace:listed', skillId);
+  } else {
+    await redisClient.srem('marketplace:listed', skillId);
+  }
+  return formatResponse(true, result.rows[0]);
 }
 
 export async function delistSkill(skillId, nodeId) {
@@ -74,7 +126,7 @@ export async function getMarketplaceListings(filters = {}) {
              n.status as seller_status
       FROM skills s
       LEFT JOIN nodes n ON s.node_id = n.node_id
-      WHERE s.is_listed = TRUE
+      WHERE s.is_listed = TRUE AND s.review_status = 'approved'
     `;
     const params = [];
     const conditions = [];
@@ -168,8 +220,8 @@ export async function placeOrder(buyerId, skillId, payload = {}) {
     await client.query('BEGIN');
 
     const skillResult = await client.query(
-      'SELECT * FROM skills WHERE id = $1 AND is_listed = TRUE FOR UPDATE',
-      [skillId]
+      'SELECT * FROM skills WHERE id = $1 AND is_listed = TRUE AND review_status = $2 FOR UPDATE',
+      [skillId, 'approved']
     );
 
     if (skillResult.rows.length === 0) {

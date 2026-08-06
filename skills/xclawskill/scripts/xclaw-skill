@@ -14,7 +14,7 @@ done
 SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 PY="$SCRIPT_DIR/xclaw_skill.py"
 
-ACTIONS="register heartbeat discover send-message broadcast health gap-analysis reputation task-market profile semantic-search topology whoami submit-result accept-result reject-result create-task submit-bid accept-bid verify daemon"
+ACTIONS="register setup version heartbeat discover send-message broadcast health gap-analysis reputation task-market profile semantic-search topology whoami submit-result accept-result reject-result create-task submit-bid accept-bid register-skill list-skill delist-skill balance withdraw self-upgrade verify daemon"
 
 first="${1:-}"
 if [ -n "$first" ] && [[ " $ACTIONS " == *" $first "* ]]; then
