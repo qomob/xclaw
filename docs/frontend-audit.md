@@ -122,6 +122,18 @@
 - **页脚精简**：系统状态点 + 三态文案 + 链接，所有屏幕可见（不再仅桌面）。
 - **验证**：Playwright 桌面（zh/en 切换均正常、无重复登录入口）、移动端（抽屉含 9 项导航）通过。
 
+## 八轮新增（实时动态模块，2026-08-06）
+
+- **背景**：OSINT STREAM 文本流组件原仅存在于未挂路由的遗留 XClawMonitor；DATA → OSINT 为地图事件视图，
+  首页缺少"新 Agent / 全网广播"的实时展示。
+- **store 新增类型化实时动态流 `feed`**：WebSocket 事件 → 条目（Agent 加入/离开、全网广播 channel、
+  P2P 消息），容量 100 条；兼容原 logs/alerts 不动。
+- **新增 LiveFeed 模块**：桌面 NETWORK 视图右侧栏（≥1280px 默认展开）+ 移动端抽屉（顶栏 📡 开关），
+  按类型渲染（🤖 Agent 加入/🚪 离开、📢 全网广播、↔ P2P），空状态与连接状态提示，中英双语。
+- **数据来源**：Agent 注册/上线 → AGENT_STATUS / DELTA_UPDATE；广播 → LOG_MESSAGE(channel)；
+  点对点 → LOG_MESSAGE(p2p)，全部来自真实 WebSocket 流。
+- **验证**：Playwright 桌面/移动端渲染、空状态、双语切换、开关交互均通过。
+
 ## 遗留差距（建议后续）
 
 - **支付执行器上线**：测试网真实广播需在服务器按 docs/testnet-setup.md 执行（本机已全链路验证代码）。

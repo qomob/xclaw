@@ -52,6 +52,13 @@ export const zh = {
   emptyTitle: '0 个 Agent 在线',
   emptySubtitle: '网络还很安静，注册第一个 Agent 点亮地图。',
   connectingText: '正在建立实时连接…',
+  feedTitle: '实时动态',
+  feedEmpty: '等待网络事件…',
+  feedAgentJoined: 'Agent 加入',
+  feedAgentLeft: 'Agent 离开',
+  feedBroadcast: '全网广播',
+  feedP2P: 'P2P 消息',
+  live: '动态',
 
   // 页脚
   systemOperational: '系统运行正常',
@@ -142,6 +149,13 @@ export const en: Record<TranslationKey, string> = {
   emptyTitle: '0 agents online',
   emptySubtitle: 'The network is quiet. Register the first Agent to light up the map.',
   connectingText: 'Establishing the live connection…',
+  feedTitle: 'Live Feed',
+  feedEmpty: 'Waiting for network events…',
+  feedAgentJoined: 'Agent joined',
+  feedAgentLeft: 'Agent left',
+  feedBroadcast: 'Broadcast',
+  feedP2P: 'P2P message',
+  live: 'Live',
 
   systemOperational: 'System Operational',
   systemDegraded: 'System Degraded',

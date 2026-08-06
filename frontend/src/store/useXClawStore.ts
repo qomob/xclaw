@@ -17,6 +17,18 @@ export interface Alert {
   time: string;
 }
 
+// 实时动态流条目（新 Agent 加入/离开、全网广播、P2P 消息）
+export interface FeedItem {
+  id: string;
+  kind: 'agent' | 'broadcast' | 'p2p' | 'system';
+  /** agent: 名称；broadcast/p2p: 发送方短 ID */
+  who?: string;
+  /** agent: joined | left */
+  sub?: string;
+  content?: string;
+  time: string;
+}
+
 // Agent 分组类型定义
 export interface AgentGroup {
   id: number;
@@ -93,6 +105,11 @@ interface XClawState {
   alerts: Alert[];
   addAlert: (alert: Alert) => void;
   clearAlerts: () => void;
+
+  // 实时动态流
+  feed: FeedItem[];
+  addFeed: (item: Omit<FeedItem, 'id' | 'time'> & { time?: string }) => void;
+  clearFeed: () => void;
   
   // Agent 分组相关
   agentGroups: AgentGroup[];
@@ -262,6 +279,7 @@ export const useXClawStore = create<XClawState>((set, get) => {
     // 初始状态
     logs: [],
     alerts: [],
+    feed: [],
     agentGroups: [],
     agents: [],
     selectedAgentId: null,
@@ -371,6 +389,11 @@ export const useXClawStore = create<XClawState>((set, get) => {
                         level: 'low',
                         time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
                       });
+                      get().addFeed({
+                        kind: 'agent',
+                        who: agent.name || agent.id,
+                        sub: 'joined',
+                      });
                     });
                   }
                   if (data.links) {
@@ -407,16 +430,39 @@ export const useXClawStore = create<XClawState>((set, get) => {
                     time: timeString,
                     type: logType as 'p2p' | 'channel'
                   });
+
+                  if (logType === 'channel') {
+                    get().addFeed({
+                      kind: 'broadcast',
+                      who: data.sender_id?.slice(0, 8) || 'unknown',
+                      content: data.content,
+                      time: timeString,
+                    });
+                  } else if (logType === 'p2p') {
+                    get().addFeed({
+                      kind: 'p2p',
+                      who: `${(data.sender_id || '?').slice(0, 6)}→${(data.recipient_id || '?').slice(0, 6)}`,
+                      content: data.content,
+                      time: timeString,
+                    });
+                  }
                   break;
                 }
 
                 case 'AGENT_STATUS': {
                   const isOnline = data.status === 'online';
+                  const knownAgent = get().agents.find(a => a.id === data.agent_id);
+                  const agentName = knownAgent?.name || data.agent_name || data.agent_id;
                   get().addAlert({
                     id: Date.now() + Math.random(),
                     message: `${data.agent_name} ${isOnline ? 'connected' : 'disconnected'}`,
                     level: isOnline ? 'info' : 'medium',
                     time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                  });
+                  get().addFeed({
+                    kind: 'agent',
+                    who: agentName,
+                    sub: isOnline ? 'joined' : 'left',
                   });
                   if (!isOnline) {
                     set(state => ({
@@ -494,6 +540,24 @@ export const useXClawStore = create<XClawState>((set, get) => {
     // 清空警报
     clearAlerts: () => {
       set({ alerts: [] });
+    },
+
+    // 添加实时动态
+    addFeed: (item) => {
+      const time = item.time || new Date().toLocaleTimeString('en-US', {
+        hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+      set(state => ({
+        feed: [
+          { ...item, time, id: `${Date.now()}-${Math.random()}` },
+          ...state.feed,
+        ].slice(0, 100),
+      }));
+    },
+
+    // 清空实时动态
+    clearFeed: () => {
+      set({ feed: [] });
     },
     
     // 设置 Agent 分组
