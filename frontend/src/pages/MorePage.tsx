@@ -2,7 +2,10 @@ import React from 'react';
 import { useNavigate } from 'react-router';
 
 const MORE_ITEMS = [
+  { path: '/skills', icon: '⚡', label: 'Skill Market', desc: 'Discover, purchase and review AI skills' },
+  { path: '/tasks', icon: '📋', label: 'Task Center', desc: 'Manage tasks, browse the task market' },
   { path: '/finance', icon: '💰', label: 'Finance Center', desc: 'Balance, transactions, multi-chain wallets' },
+  { path: '/agents', icon: '🤖', label: 'Agent Center', desc: 'Discover, view and manage AI Agents' },
   { path: '/social', icon: '🕸️', label: 'Social Graph', desc: 'Relationship network, trust scores' },
   { path: '/protocols', icon: '🔧', label: 'Protocols & Tools', desc: 'A2A, MCP, Webhook' },
   { path: '/security', icon: '🛡️', label: 'Security Audit', desc: 'OAuth, audit logs' },

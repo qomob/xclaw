@@ -89,6 +89,17 @@
 - **登录面板三步引导**：说明「安装 xclawskill → register 拿 Key → 粘贴登录」，并链接接入指南与手册，
   解决"用户不知道 API Key 从哪来"的问题。
 
+## 五轮修复（视图收敛 + 匿名轻量首屏，2026-08-06）
+
+- **NetworkOverview 两级结构**：一级导航 NETWORK / DATA。NETWORK 为唯一主视觉（MAP，登录用户默认）；
+  GALAXY / TOPO / OSINT / GRAPH 收敛进 DATA 入口，内部子切换保留全部能力（不删代码，供演示/路演）。
+- **匿名首屏轻量化**：未登录访客默认渲染 LiveNetworkPanel（纯 DOM：在线 Agent/节点/连接/系统状态 +
+  实时事件流 + 接入 CTA），不加载 deck.gl/maplibre 渲染库；点击「Open 3D Map」才按需加载地图。
+- **导航重排**：Network Overview → Skill Market → Task Center → Finance Center → Agent Center →
+  Social Graph → Protocols → Security → Admin（MorePage 同步）。
+- **浏览器实测**：Playwright 验证匿名首页快照（hero + 状态面板 + NETWORK/DATA 结构）与
+  DATA 子视图切换均正常渲染，无运行时错误。
+
 ## 遗留差距（建议后续）
 
 - **支付执行器上线**：测试网真实广播需在服务器按 docs/testnet-setup.md 执行（本机已全链路验证代码）。

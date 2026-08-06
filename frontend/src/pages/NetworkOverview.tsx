@@ -2,18 +2,23 @@ import React, { useState, useEffect } from 'react';
 import { useXClawStore } from '../store/useXClawStore';
 import { getToken } from '../utils/api';
 import { useSystemHealthContext } from '../components/SystemHealthContext';
+import LiveNetworkPanel from '../components/LiveNetworkPanel';
 
-// 重型可视化组件全部懒加载，初始只加载默认视图（MAP）
+// 重型可视化组件全部懒加载：匿名访客默认不加载地图渲染库
 const NetworkMap = React.lazy(() => import('../components/NetworkMap'));
 const SocialGraph = React.lazy(() => import('../components/SocialGraph'));
 const TopologyView = React.lazy(() => import('../components/TopologyView'));
 const OsintFeedView = React.lazy(() => import('../components/OsintFeedView'));
 const GalaxyView = React.lazy(() => import('../components/GalaxyView'));
 
-type ViewMode = 'map' | 'galaxy' | 'topology' | 'osint' | 'graph';
+type PrimaryView = 'network' | 'data';
+type DataView = 'galaxy' | 'topology' | 'osint' | 'graph';
 
 export default function NetworkOverview() {
-  const [view, setView] = useState<ViewMode>('map');
+  const [primary, setPrimary] = useState<PrimaryView>('network');
+  const [dataView, setDataView] = useState<DataView>('galaxy');
+  const [showMap, setShowMap] = useState(() => !!getToken());
+
   const health = useSystemHealthContext();
   const agents = useXClawStore(s => s.agents);
   const galaxyNodes = useXClawStore(s => s.galaxyNodes);
@@ -29,8 +34,7 @@ export default function NetworkOverview() {
     return () => { destroy(); };
   }, [init, destroy, fetchGalaxyData]);
 
-  const tabs: { key: ViewMode; label: string }[] = [
-    { key: 'map', label: 'MAP' },
+  const dataTabs: { key: DataView; label: string }[] = [
     { key: 'galaxy', label: 'GALAXY' },
     { key: 'topology', label: 'TOPO' },
     { key: 'osint', label: 'OSINT' },
@@ -79,22 +83,47 @@ export default function NetworkOverview() {
       )}
 
       <div className="flex items-center gap-1 px-3 py-2 border-b shrink-0 border-slate-800 bg-slate-900/50">
-        <span className="text-[9px] text-slate-600 font-mono tracking-wider mr-1 hidden md:inline">VIEWS</span>
         <div className="flex items-center gap-1">
-          {tabs.map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => setView(tab.key)}
-              className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-colors ${
-                view === tab.key
-                  ? 'bg-brand-500 text-white'
-                  : 'text-slate-500 hover:text-brand-400'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+          <button
+            onClick={() => setPrimary('network')}
+            className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-colors ${
+              primary === 'network'
+                ? 'bg-brand-500 text-white'
+                : 'text-slate-500 hover:text-brand-400'
+            }`}
+          >
+            NETWORK
+          </button>
+          <button
+            onClick={() => setPrimary('data')}
+            className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-colors ${
+              primary === 'data'
+                ? 'bg-brand-500 text-white'
+                : 'text-slate-500 hover:text-brand-400'
+            }`}
+          >
+            DATA
+          </button>
         </div>
+
+        {primary === 'data' && (
+          <div className="flex items-center gap-1 ml-2 pl-2 border-l border-slate-700">
+            {dataTabs.map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setDataView(tab.key)}
+                className={`px-2 py-1 text-[10px] font-medium rounded-md transition-colors ${
+                  dataView === tab.key
+                    ? 'bg-slate-700 text-white'
+                    : 'text-slate-500 hover:text-brand-400'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="ml-auto flex items-center gap-3 text-[10px]">
           <span className="text-slate-500">
             {agents.length} agents online
@@ -112,15 +141,24 @@ export default function NetworkOverview() {
       </div>
 
       <div className="flex-1 min-h-0 relative">
-        <React.Suspense fallback={<div className="h-full flex items-center justify-center text-xs text-slate-500">Loading view…</div>}>
-          {view === 'map' && <NetworkMap />}
-          {view === 'galaxy' && <GalaxyView nodes={galaxyNodes} edges={galaxyEdges} />}
-          {view === 'topology' && <TopologyView />}
-          {view === 'osint' && <OsintFeedView />}
-          {view === 'graph' && <SocialGraph />}
-        </React.Suspense>
+        {primary === 'network' ? (
+          !getToken() && !showMap ? (
+            <LiveNetworkPanel onOpenMap={() => setShowMap(true)} />
+          ) : (
+            <React.Suspense fallback={<div className="h-full flex items-center justify-center text-xs text-slate-500">Loading map…</div>}>
+              <NetworkMap />
+            </React.Suspense>
+          )
+        ) : (
+          <React.Suspense fallback={<div className="h-full flex items-center justify-center text-xs text-slate-500">Loading view…</div>}>
+            {dataView === 'galaxy' && <GalaxyView nodes={galaxyNodes} edges={galaxyEdges} />}
+            {dataView === 'topology' && <TopologyView />}
+            {dataView === 'osint' && <OsintFeedView />}
+            {dataView === 'graph' && <SocialGraph />}
+          </React.Suspense>
+        )}
 
-        {agents.length === 0 && (
+        {primary === 'network' && showMap && agents.length === 0 && (
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm pointer-events-none">
             <div className="pointer-events-auto max-w-sm mx-4 bg-slate-900 border border-slate-700 rounded-xl p-6 text-center shadow-2xl">
               <div className="text-3xl mb-2">🤖</div>

@@ -11,10 +11,10 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { path: '/', icon: '🗺️', label: 'Network Overview' },
-  { path: '/agents', icon: '🤖', label: 'Agent Center' },
   { path: '/skills', icon: '⚡', label: 'Skill Market' },
   { path: '/tasks', icon: '📋', label: 'Task Center' },
   { path: '/finance', icon: '💰', label: 'Finance Center' },
+  { path: '/agents', icon: '🤖', label: 'Agent Center' },
   { path: '/social', icon: '🕸️', label: 'Social Graph' },
   { path: '/protocols', icon: '🔧', label: 'Protocols & Tools' },
   { path: '/security', icon: '🛡️', label: 'Security Audit' },
