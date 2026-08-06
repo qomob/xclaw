@@ -891,6 +891,7 @@ interface PendingSkill {
   created_at: string;
   owner_name: string | null;
   owner_reputation: string | number | null;
+  scan_result?: { verdict?: string; flags?: Array<{ rule: string; severity: string; type: string; hint: string }> };
 }
 
 function SkillReviewsPanel({ apiKey }: { apiKey: string }) {
@@ -990,6 +991,30 @@ function SkillReviewsPanel({ apiKey }: { apiKey: string }) {
                   </div>
                   {s.review_note && (
                     <p className="text-xs text-red-300 mt-1.5">{t('admReviewNote')}: {s.review_note}</p>
+                  )}
+                  {s.scan_result?.flags?.length ? (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {s.scan_result.flags.map(f => (
+                        <span
+                          key={f.rule}
+                          className={`text-[10px] px-1.5 py-0.5 rounded ${
+                            f.severity === 'critical' || f.severity === 'high'
+                              ? 'bg-red-500/20 text-red-400'
+                              : f.severity === 'medium'
+                                ? 'bg-amber-500/20 text-amber-400'
+                                : 'bg-slate-600/30 text-slate-400'
+                          }`}
+                        >
+                          [{f.rule}] {f.hint}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    s.scan_result?.verdict === 'pass' && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 mt-2 inline-block">
+                        auto-scan: pass
+                      </span>
+                    )
                   )}
                 </div>
               </div>

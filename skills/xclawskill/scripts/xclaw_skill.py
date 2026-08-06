@@ -893,6 +893,9 @@ def action_register_skill(client, skill_name=None, description=None, category=No
         "skill_id": resp["data"].get("skill_id"),
         "status": resp["data"].get("status", "registered"),
         "review_status": resp["data"].get("review_status", "pending"),
+        "scan_verdict": resp["data"].get("scan_verdict", "unknown"),
+        "scan_flags": resp["data"].get("scan_flags", []),
+        "scan_note": resp["data"].get("scan_note"),
     })
 
 

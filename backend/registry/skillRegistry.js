@@ -1,6 +1,7 @@
 // 技能注册管理文件
 import { getPostgres, getRedis } from '../core/dependencies.js';
 import { generateUUID, formatResponse } from '../core/utils.js';
+import { scanSkill } from '../services/skillScanner.js';
 import eventBus from '../services/eventBus.js';
 
 // 注册技能
@@ -72,11 +73,31 @@ export async function registerSkill(skillData, nodeId) {
     
     // 将技能添加到节点技能集合
     await redisClient.sadd(`node:${nodeId}:skills`, skillId);
+
+    // ── 自动安全扫描（静态 + 可选沙箱试跑）────────────────────────────
+    // 高风险（注入/密钥/外传/欺诈/提示词注入）→ 直接拒绝并隐藏，无法上架
+    const scan = await scanSkill({
+      ...skillData,
+      id: skillId,
+      node_id: nodeId,
+    });
+    const reviewStatus = scan.verdict === 'reject' ? 'rejected' : 'pending';
+    const reviewNote = scan.verdict === 'reject'
+      ? `自动扫描拒绝：${scan.flags.map(f => `[${f.rule}] ${f.hint}`).join('；')}`
+      : null;
+    await pgPool.query(
+      `UPDATE skills SET scan_result = $2, review_status = $3, review_note = $4, updated_at = NOW() WHERE id = $1`,
+      [skillId, JSON.stringify(scan), reviewStatus, reviewNote]
+    );
     
     eventBus.emit('skill.registered', { skill_id: skillId, name: skillData.name, category: skillData.category, node_id: nodeId }, { sourceId: nodeId });
     return formatResponse(true, {
       skill_id: skillId,
-      status: 'registered'
+      status: 'registered',
+      review_status: reviewStatus,
+      scan_verdict: scan.verdict,
+      scan_flags: scan.flags,
+      scan_note: reviewNote,
     });
   } catch (error) {
     console.error('技能注册错误:', error);

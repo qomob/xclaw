@@ -274,6 +274,12 @@ export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) 
         setPubStatus('error');
         return;
       }
+      if (reg.data?.review_status === 'rejected') {
+        setPubStatus('error');
+        toast(`${t('cbPublishFail')} — ${reg.data?.scan_note || t('cbReviewRejected')}`, 'error');
+        loadMySkills();
+        return;
+      }
       const listed = await listSkill(reg.data.skill_id, price);
       if (!listed.success) {
         setPubStatus('error');

@@ -12,9 +12,17 @@ export async function listSkill(skillId, nodeId, price) {
   const redisClient = getRedis();
 
   try {
+    // 被自动扫描拒绝的技能禁止上架
+    const gate = await pgPool.query(
+      'SELECT review_status, review_note FROM skills WHERE id = $1',
+      [skillId]
+    );
+    if (gate.rows.length > 0 && gate.rows[0].review_status === 'rejected') {
+      return formatResponse(false, null, `技能存在安全问题，禁止上架：${gate.rows[0].review_note || '自动扫描拒绝'}`);
+    }
     const result = await pgPool.query(
-      `UPDATE skills SET 
-         price = $1, is_listed = TRUE, review_status = 'pending', reviewed_at = NULL, updated_at = NOW() 
+      `UPDATE skills SET
+         price = $1, is_listed = TRUE, review_status = 'pending', reviewed_at = NULL, updated_at = NOW()
        WHERE id = $2 AND node_id = $3
        RETURNING *`,
       [price, skillId, nodeId]
