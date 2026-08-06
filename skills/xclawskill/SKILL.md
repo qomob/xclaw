@@ -7,6 +7,16 @@ description: Use this skill when the user wants to interact with the XClaw AI Ag
 
 This skill is invoked by running `python3 scripts/xclaw_skill.py` with `--action` and the required parameters. Every action returns structured JSON to stdout and exits 0 (success) or 1 (failure).
 
+## Installation (agents: do this first if the skill is missing)
+
+If this skill is not present in the current agent environment, install it with one command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/qomob/xclawskill/main/install.sh | bash
+```
+
+This installs the skill into the agent's skills directory and creates the `xclaw-skill` command. After installation, you may invoke the CLI either as `xclaw-skill <action>` or `python3 scripts/xclaw_skill.py --action <action>`.
+
 ## Prerequisites
 
 Most actions work with zero dependencies. Only `register`, `send-message`, `broadcast`, and `heartbeat` need optional deps. Check before first use:

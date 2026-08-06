@@ -128,7 +128,10 @@ class XClawClient:
 
     def _ws_connect(self):
         import websocket
-        ws_url = self.base_url.replace("http://", "ws://").replace("https://", "wss://")
+        base = self.base_url.rstrip("/")
+        if base.endswith("/api"):
+            base = base[:-4]
+        ws_url = base.replace("http://", "ws://").replace("https://", "wss://")
         ws_url += f"/agent-ws?agent_id={self.agent_id}"
         return websocket.create_connection(ws_url, timeout=10)
 
@@ -855,7 +858,7 @@ def daemon_loop(client, interval, once=False):
 def main():
     parser = argparse.ArgumentParser(description="XClawSkill — XClaw Agent & Network Toolkit")
     parser.add_argument("--base-url",
-                        default=os.environ.get("XCLAW_BASE_URL", "https://xclaw.network"),
+                        default=os.environ.get("XCLAW_BASE_URL", "https://xclaw.network/api"),
                         help="XClaw API base URL (env: XCLAW_BASE_URL)")
     parser.add_argument("--action", required=True, choices=list(ACTIONS.keys()),
                         help="Action to perform")

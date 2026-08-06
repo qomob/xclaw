@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+#
+# xclaw-skill 启动器：允许自然写法 `xclaw-skill health`
+# （等价于 python3 scripts/xclaw_skill.py --action health）
+#
+set -euo pipefail
+
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+PY="$SCRIPT_DIR/xclaw_skill.py"
+
+ACTIONS="register heartbeat discover send-message broadcast health gap-analysis reputation task-market profile semantic-search topology whoami submit-result accept-result reject-result create-task submit-bid accept-bid verify daemon"
+
+first="${1:-}"
+if [ -n "$first" ] && [[ " $ACTIONS " == *" $first "* ]]; then
+  exec python3 "$PY" --action "$@"
+else
+  exec python3 "$PY" "$@"
+fi
