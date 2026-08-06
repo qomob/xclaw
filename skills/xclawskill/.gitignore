@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 打包产物
+*.zip
+*.tar.gz
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# 本地状态
+*.json.swp
