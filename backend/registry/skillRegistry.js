@@ -44,7 +44,8 @@ export async function registerSkill(skillData, nodeId) {
       await pgPool.query(
         `INSERT INTO skills (
          id, name, description, category, version, node_id, schema
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+         , execution
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [
           skillId,
           skillData.name,
@@ -52,7 +53,8 @@ export async function registerSkill(skillData, nodeId) {
           skillData.category,
           skillData.version,
           nodeId,
-          skillData.schema || {}
+          skillData.schema || {},
+          skillData.execution || null
         ]
       );
     }

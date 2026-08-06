@@ -6,6 +6,7 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { runInStrongSandbox, isDockerAvailable } from './codeSandbox.js';
 
 const RULES = [
   { id: 'INJ_SHELL', severity: 'critical', type: 'code_injection',
@@ -53,13 +54,13 @@ export function scanSkillMetadata(skill) {
   return { verdict, score, flags };
 }
 
-/** 沙箱试跑：仅当技能携带 execution 规格时执行（timeout + 隔离目录 + 最小环境） */
-export async function sandboxRun(execution, timeoutMs = 5000) {
+/** 兜底沙箱试跑（无 Docker 时）：timeout + 隔离目录 + 最小环境 */
+export async function sandboxRunLegacy(execution, timeoutMs = 5000) {
   if (!execution || typeof execution !== 'object') {
     return { ok: false, skipped: true, reason: 'no execution spec' };
   }
   const { type, command, script } = execution;
-  if (type !== 'shell' && type !== 'node') {
+  if (type !== 'shell' && type !== 'node' && type !== 'python') {
     return { ok: false, skipped: true, reason: `unsupported type: ${type}` };
   }
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'xclaw-sandbox-'));
@@ -75,7 +76,9 @@ export async function sandboxRun(execution, timeoutMs = 5000) {
       };
       const child = type === 'shell'
         ? execFile('/bin/sh', ['-c', String(code)], opts, cb)
-        : execFile(process.execPath, ['-e', String(code)], opts, cb);
+        : type === 'python'
+          ? execFile('python3', ['-c', String(code)], opts, cb)
+          : execFile(process.execPath, ['-e', String(code)], opts, cb);
       function cb(err, stdout, stderr) {
         resolve({
           exit: err ? (err.killed ? 124 : (err.code ?? 1)) : 0,
@@ -89,6 +92,30 @@ export async function sandboxRun(execution, timeoutMs = 5000) {
   } finally {
     await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
   }
+}
+
+/**
+ * 沙箱试跑：优先 Docker 强沙箱（断网/资源限制/禁提权/超时强杀），
+ * 服务器无 Docker 或显式 SANDBOX_ENGINE=legacy 时回退轻量兜底。
+ */
+export async function sandboxRun(execution, timeoutMs = 5000) {
+  if (!execution || typeof execution !== 'object') {
+    return { ok: false, skipped: true, reason: 'no execution spec' };
+  }
+  const { type } = execution;
+  if (!['shell', 'node', 'python'].includes(type)) {
+    return { ok: false, skipped: true, reason: `unsupported type: ${type}` };
+  }
+  if (process.env.SANDBOX_ENGINE !== 'legacy') {
+    try {
+      if (await isDockerAvailable()) {
+        const code = type === 'shell' ? execution.command : execution.script;
+        const r = await runInStrongSandbox({ language: type, code, timeoutMs });
+        return { ...r, engine: 'docker' };
+      }
+    } catch { /* 回退 legacy */ }
+  }
+  return { ...(await sandboxRunLegacy(execution, timeoutMs)), engine: 'legacy' };
 }
 
 /** 综合扫描：静态检查 + 沙箱试跑，产出评审摘要 */

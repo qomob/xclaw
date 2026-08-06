@@ -39,6 +39,7 @@ services:
           memory: 512M
     volumes:
       - ./backend/data:/app/data:ro
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - xclaw-network
     healthcheck:
