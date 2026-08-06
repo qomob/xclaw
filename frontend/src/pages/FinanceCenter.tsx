@@ -32,6 +32,37 @@ interface Wallet {
   verified_at?: string;
 }
 
+/**
+ * 归一化后端钱包返回（兼容数组 / {wallets:[...]} / {wallets:{chain:[...]}} 三种形态）
+ */
+function normalizeWallets(data: unknown): Wallet[] {
+  if (Array.isArray(data)) return data as Wallet[];
+  if (!data || typeof data !== 'object') return [];
+  const w = (data as { wallets?: unknown }).wallets;
+  if (Array.isArray(w)) return w as Wallet[];
+  if (w && typeof w === 'object') {
+    const out: Wallet[] = [];
+    for (const [chain, items] of Object.entries(w as Record<string, unknown>)) {
+      const arr = Array.isArray(items) ? items : [items];
+      for (const it of arr) {
+        if (it && typeof it === 'object') {
+          const row = it as Partial<Wallet>;
+          out.push({
+            wallet_id: row.wallet_id || `${chain}-${row.address || Date.now()}`,
+            chain: row.chain || chain,
+            address: row.address || '',
+            label: row.label,
+            is_primary: !!row.is_primary,
+            verified_at: row.verified_at,
+          });
+        }
+      }
+    }
+    return out;
+  }
+  return [];
+}
+
 const card = 'bg-slate-900 border border-slate-800 rounded-xl';
 const textSecondary = 'text-slate-400';
 
@@ -56,7 +87,7 @@ export default function FinanceCenter() {
         setBalance(balRes.value.data || {});
       }
       if (txRes.status === 'fulfilled' && txRes.value.success) {
-        setTransactions(txRes.value.data || []);
+        setTransactions(Array.isArray(txRes.value.data) ? txRes.value.data : []);
       }
     } catch {
       setLoadError(true);
@@ -70,7 +101,7 @@ export default function FinanceCenter() {
       const nodeId = getAgentIdFromToken();
       if (!nodeId) return;
       const res = await request(`/v1/payment/wallets/${nodeId}`);
-      if (res.success) setWallets(res.data || []);
+      if (res.success) setWallets(normalizeWallets(res.data));
     } catch { /* ignore */ }
   }, []);
 
