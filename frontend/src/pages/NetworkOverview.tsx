@@ -4,6 +4,7 @@ import { getToken } from '../utils/api';
 import { useSystemHealthContext } from '../components/SystemHealthContext';
 import LiveFeed from '../components/LiveFeed';
 import { useI18n } from '../i18n/LanguageContext';
+import MapPreview from '../components/MapPreview';
 
 // 重型可视化组件全部懒加载
 const NetworkMap = React.lazy(() => import('../components/NetworkMap'));
@@ -139,7 +140,7 @@ export default function NetworkOverview() {
           <div className="h-full flex">
             <div className="flex-1 min-h-0 relative">
               {mapMode === 'map' && (
-                <React.Suspense fallback={<div className="h-full flex items-center justify-center text-xs text-slate-400">{t('loading')}</div>}>
+                <React.Suspense fallback={<MapPreview />}>
                   <NetworkMap showEvents={showEvents} />
                 </React.Suspense>
               )}
