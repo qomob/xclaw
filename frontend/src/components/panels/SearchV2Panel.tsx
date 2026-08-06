@@ -84,19 +84,19 @@ export default function SearchV2Panel() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
         <div className="bg-gray-800/50 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-700/50">
           <div className="text-lg sm:text-2xl mb-0.5 sm:mb-1">🔍</div>
-          <div className="text-[9px] sm:text-xs text-slate-500 uppercase tracking-wider">{t('sv2TotalSearches')}</div>
+          <div className="text-[11px] sm:text-xs text-slate-400 uppercase tracking-wider">{t('sv2TotalSearches')}</div>
           <div className="text-xl sm:text-3xl font-bold text-cyan-400 mt-0.5 sm:mt-1">{stats?.total_searches ?? '—'}</div>
         </div>
         <div className="bg-gray-800/50 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-700/50">
           <div className="text-lg sm:text-2xl mb-0.5 sm:mb-1">🔥</div>
-          <div className="text-[9px] sm:text-xs text-slate-500 uppercase tracking-wider">{t('sv2TopQueries')}</div>
+          <div className="text-[11px] sm:text-xs text-slate-400 uppercase tracking-wider">{t('sv2TopQueries')}</div>
           <div className="mt-2 space-y-1">
             {stats?.top_queries?.slice(0, 5).map((q, i) => (
               <div key={i} className="flex justify-between text-sm">
                 <span className="text-slate-300">{q.query}</span>
                 <span className="text-cyan-400">{q.count}</span>
               </div>
-            )) ?? <div className="text-slate-600 text-sm">{t('pnlNoResults')}</div>}
+            )) ?? <div className="text-slate-400 text-sm">{t('pnlNoResults')}</div>}
           </div>
         </div>
       </div>
@@ -111,7 +111,7 @@ export default function SearchV2Panel() {
             onChange={e => setQuery(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSearch()}
             placeholder={t('sv2QueryPlaceholder')}
-            className="flex-1 px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-cyan-500"
+            className="flex-1 px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-400 text-sm focus:outline-none focus:border-cyan-500"
           />
           <button
             onClick={handleSearch}
@@ -127,14 +127,14 @@ export default function SearchV2Panel() {
               <div key={r.id || i} className="flex items-center justify-between bg-gray-900/50 rounded-lg p-3">
                 <div>
                   <div className="text-sm text-white font-medium">{r.name}</div>
-                  <div className="text-xs text-slate-500">{r.type} · {r.id}</div>
+                  <div className="text-xs text-slate-400">{r.type} · {r.id}</div>
                 </div>
                 <div className="text-sm font-bold text-cyan-400">{r.score?.toFixed(2) ?? '—'}</div>
               </div>
             ))}
           </div>
         ) : query && !loading ? (
-          <div className="text-center py-4 text-slate-600 text-sm">{t('sv2NoResults')}</div>
+          <div className="text-center py-4 text-slate-400 text-sm">{t('sv2NoResults')}</div>
         ) : null}
       </div>
 
@@ -158,7 +158,7 @@ export default function SearchV2Panel() {
             })}
           </div>
         ) : (
-          <div className="text-center py-4 text-slate-600 text-sm">{t('sv2NoTrending')}</div>
+          <div className="text-center py-4 text-slate-400 text-sm">{t('sv2NoTrending')}</div>
         )}
       </div>
 
@@ -170,10 +170,10 @@ export default function SearchV2Panel() {
             <table className="w-full text-sm min-w-[400px]">
               <thead>
                 <tr className="border-b border-gray-700">
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('sv2Query')}</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('sv2Searches')}</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('sv2ResultsCount')}</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('sv2Coverage')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('sv2Query')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('sv2Searches')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('sv2ResultsCount')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('sv2Coverage')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -193,7 +193,7 @@ export default function SearchV2Panel() {
             </table>
           </div>
         ) : (
-          <div className="text-center py-4 text-slate-600 text-sm">{t('sv2NoGap')}</div>
+          <div className="text-center py-4 text-slate-400 text-sm">{t('sv2NoGap')}</div>
         )}
       </div>
     </div>

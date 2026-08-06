@@ -15,14 +15,14 @@ function FeedRow({ item, label, icon, tone }: {
       <span className="text-xs mt-0.5 shrink-0">{icon}</span>
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
-          <span className={`text-[10px] font-semibold truncate ${tone}`}>
+          <span className={`text-[12px] font-semibold truncate ${tone}`}>
             {label}
             {item.who ? ` · ${item.who}` : ''}
           </span>
-          <span className="text-[9px] text-slate-600 whitespace-nowrap shrink-0">{item.time}</span>
+          <span className="text-[11px] text-slate-400 whitespace-nowrap shrink-0">{item.time}</span>
         </div>
         {item.content && (
-          <p className="text-[10px] text-slate-400 leading-relaxed break-all line-clamp-2 mt-0.5">
+          <p className="text-[12px] text-slate-400 leading-relaxed break-all line-clamp-2 mt-0.5">
             {item.content}
           </p>
         )}
@@ -80,7 +80,7 @@ export default function LiveFeed() {
               <span className={`absolute inline-flex h-full w-full rounded-full opacity-60 animate-ping ${isConnected ? 'bg-cyan-400' : 'bg-slate-600'}`} />
               <span className={`relative inline-flex w-2 h-2 rounded-full ${isConnected ? 'bg-cyan-400' : 'bg-slate-600'}`} />
             </span>
-            <span className={`text-[9px] font-mono ${isConnected ? 'text-green-500' : 'text-red-500'}`}>
+            <span className={`text-[11px] font-mono ${isConnected ? 'text-green-500' : 'text-red-500'}`}>
               {isConnected ? t('connected').toUpperCase() : t('connecting').toUpperCase()}
             </span>
           </span>
@@ -91,8 +91,8 @@ export default function LiveFeed() {
             <button
               key={k}
               onClick={() => setTab(k)}
-              className={`px-2 py-0.5 text-[10px] font-medium rounded-md transition-colors ${
-                tab === k ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-500 hover:text-cyan-400'
+              className={`px-2 py-0.5 text-[12px] font-medium rounded-md transition-colors ${
+                tab === k ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-400 hover:text-cyan-400'
               }`}
             >
               {k === 'all' ? t('lfTabAll') : t('lfTabP2P')}
@@ -108,7 +108,7 @@ export default function LiveFeed() {
                 onChange={e => setDraft(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleSend()}
                 placeholder={t('lfBroadcastPlaceholder')}
-                className="flex-1 min-w-0 bg-slate-900/80 border border-slate-700 rounded-lg px-2.5 py-1.5 text-[11px] text-white outline-none focus:border-cyan-500 placeholder-slate-600"
+                className="flex-1 min-w-0 bg-slate-900/80 border border-slate-700 rounded-lg px-2.5 py-1.5 text-[11px] text-white outline-none focus:border-cyan-500 placeholder-slate-400"
               />
               <button
                 onClick={handleSend}
@@ -119,7 +119,7 @@ export default function LiveFeed() {
               </button>
             </div>
             {sendMsg && (
-              <p className={`text-[10px] ${sendMsg.startsWith('✓') ? 'text-green-400' : 'text-red-400'}`}>
+              <p className={`text-[12px] ${sendMsg.startsWith('✓') ? 'text-green-400' : 'text-red-400'}`}>
                 {sendMsg}
               </p>
             )}
@@ -129,12 +129,12 @@ export default function LiveFeed() {
 
       <div className="flex-1 overflow-y-auto px-2 py-1.5 space-y-0.5">
         {!authed && (
-          <p className="text-[9px] text-slate-600 text-center py-1">{t('lfNeedLogin')}</p>
+          <p className="text-[11px] text-slate-400 text-center py-1">{t('lfNeedLogin')}</p>
         )}
         {rows.length === 0 ? (
           <div className="text-center py-10 px-4">
             <div className="text-2xl mb-2">📡</div>
-            <p className="text-[10px] text-slate-600 leading-relaxed">
+            <p className="text-[12px] text-slate-400 leading-relaxed">
               {t('feedEmpty')}
               <br />
               {isConnected ? t('networkQuiet') : t('connectingText')}

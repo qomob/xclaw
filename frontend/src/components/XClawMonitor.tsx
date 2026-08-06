@@ -71,17 +71,17 @@ export default function XClawMonitor() {
         <div className="md:hidden absolute top-1.5 right-1.5 sm:top-2 sm:right-2 z-30 flex gap-1.5">
           <button
             onClick={() => { setLeftPanelOpen(true); setRightPanelOpen(false); }}
-            className="px-2.5 py-1 bg-cyan-600 hover:bg-cyan-700 text-white text-[10px] rounded font-bold"
+            className="px-2.5 py-1 bg-cyan-600 hover:bg-cyan-700 text-white text-[12px] rounded font-bold"
           >
             PANELS
           </button>
           <button
             onClick={() => { setRightPanelOpen(true); setLeftPanelOpen(false); }}
-            className="px-2.5 py-1 bg-violet-600 hover:bg-violet-700 text-white text-[10px] rounded font-bold relative"
+            className="px-2.5 py-1 bg-violet-600 hover:bg-violet-700 text-white text-[12px] rounded font-bold relative"
           >
             ALERTS
             {alerts.length > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[8px] rounded-full flex items-center justify-center font-bold">
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[12px] rounded-full flex items-center justify-center font-bold">
                 {alerts.length > 9 ? '9+' : alerts.length}
               </span>
             )}
@@ -97,7 +97,7 @@ export default function XClawMonitor() {
           {/* Toggle 按钮 */}
           <button
             onClick={toggleSidebar}
-            className={`flex items-center transition-all duration-300 h-8 mb-1 text-gray-500 hover:text-cyan-400 rounded hover:bg-slate-800/50 ${
+            className={`flex items-center transition-all duration-300 h-8 mb-1 text-gray-400 hover:text-cyan-400 rounded hover:bg-slate-800/50 ${
               sidebarCollapsed ? 'justify-center mx-auto' : 'justify-end pr-2'
             }`}
             title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -198,32 +198,32 @@ export default function XClawMonitor() {
           <div className="flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-1 border-b border-[#1E293B] bg-[#0B0F19]/80 shrink-0 overflow-x-auto no-scrollbar">
             <button
               onClick={() => setCenterView('map')}
-              className={`px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-mono rounded transition-colors whitespace-nowrap ${
-                centerView === 'map' ? 'bg-cyan-600 text-white' : 'text-gray-500 hover:text-cyan-400'
+              className={`px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-[12px] font-mono rounded transition-colors whitespace-nowrap ${
+                centerView === 'map' ? 'bg-cyan-600 text-white' : 'text-gray-400 hover:text-cyan-400'
               }`}
             >
               MAP
             </button>
             <button
               onClick={() => setCenterView('topology')}
-              className={`px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-mono rounded transition-colors whitespace-nowrap ${
-                centerView === 'topology' ? 'bg-cyan-600 text-white' : 'text-gray-500 hover:text-cyan-400'
+              className={`px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-[12px] font-mono rounded transition-colors whitespace-nowrap ${
+                centerView === 'topology' ? 'bg-cyan-600 text-white' : 'text-gray-400 hover:text-cyan-400'
               }`}
             >
               TOPO
             </button>
             <button
               onClick={() => setCenterView('osint')}
-              className={`px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-mono rounded transition-colors whitespace-nowrap ${
-                centerView === 'osint' ? 'bg-cyan-600 text-white' : 'text-gray-500 hover:text-cyan-400'
+              className={`px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-[12px] font-mono rounded transition-colors whitespace-nowrap ${
+                centerView === 'osint' ? 'bg-cyan-600 text-white' : 'text-gray-400 hover:text-cyan-400'
               }`}
             >
               OSINT
             </button>
             <button
               onClick={() => setCenterView('graph')}
-              className={`px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-mono rounded transition-colors whitespace-nowrap ${
-                centerView === 'graph' ? 'bg-cyan-600 text-white' : 'text-gray-500 hover:text-cyan-400'
+              className={`px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-[12px] font-mono rounded transition-colors whitespace-nowrap ${
+                centerView === 'graph' ? 'bg-cyan-600 text-white' : 'text-gray-400 hover:text-cyan-400'
               }`}
             >
               GRAPH

@@ -97,21 +97,21 @@ export default function WebhookManager() {
             value={form.url}
             onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
             placeholder={t('whCallbackUrl')}
-            className="w-full px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-amber-500"
+            className="w-full px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-400 text-sm focus:outline-none focus:border-amber-500"
           />
           <input
             type="text"
             value={form.events}
             onChange={e => setForm(f => ({ ...f, events: e.target.value }))}
             placeholder={t('whEventTypes')}
-            className="w-full px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-amber-500"
+            className="w-full px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-400 text-sm focus:outline-none focus:border-amber-500"
           />
           <input
             type="text"
             value={form.description}
             onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
             placeholder={t('whDescOptional')}
-            className="w-full px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-amber-500"
+            className="w-full px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-400 text-sm focus:outline-none focus:border-amber-500"
           />
           <div className="flex items-center gap-3">
             <button
@@ -143,9 +143,9 @@ export default function WebhookManager() {
           {t('whRegistered')} ({webhooks.length})
         </h3>
         {loading ? (
-          <div className="text-center py-6 text-slate-600 text-sm animate-pulse">{t('pnlLoading')}</div>
+          <div className="text-center py-6 text-slate-400 text-sm animate-pulse">{t('pnlLoading')}</div>
         ) : webhooks.length === 0 ? (
-          <div className="text-center py-6 text-slate-600 text-sm">{t('pnlNoWebhooks')}</div>
+          <div className="text-center py-6 text-slate-400 text-sm">{t('pnlNoWebhooks')}</div>
         ) : (
           <div className="space-y-2">
             {webhooks.map(wh => (
@@ -154,7 +154,7 @@ export default function WebhookManager() {
                   <div className="text-sm text-white font-medium font-mono">{wh.url}</div>
                   <div className="flex gap-1 mt-1">
                     {wh.events.map(e => (
-                      <span key={e} className="px-1.5 py-0.5 text-[10px] bg-amber-500/20 text-amber-300 rounded">{e}</span>
+                      <span key={e} className="px-1.5 py-0.5 text-[12px] bg-amber-500/20 text-amber-300 rounded">{e}</span>
                     ))}
                   </div>
                 </div>

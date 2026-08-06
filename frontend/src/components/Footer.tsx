@@ -10,16 +10,16 @@ export default function Footer() {
       role="contentinfo"
     >
       <div className="flex items-center gap-3 shrink-0">
-        <span className="hidden md:inline text-[10px] text-slate-600">
+        <span className="hidden md:inline text-[12px] text-slate-400">
           © 2026 XClaw.Network · {t('rights')}
         </span>
-        <a href="/privacy.html" target="_blank" rel="noopener noreferrer" className="text-[11px] text-slate-500 hover:text-slate-300 transition-colors">
+        <a href="/privacy.html" target="_blank" rel="noopener noreferrer" className="text-[11px] text-slate-400 hover:text-slate-300 transition-colors">
           {t('privacy')}
         </a>
-        <a href="/terms.html" target="_blank" rel="noopener noreferrer" className="text-[11px] text-slate-500 hover:text-slate-300 transition-colors">
+        <a href="/terms.html" target="_blank" rel="noopener noreferrer" className="text-[11px] text-slate-400 hover:text-slate-300 transition-colors">
           {t('terms')}
         </a>
-        <a href="/manual.html" target="_blank" rel="noopener noreferrer" className="text-[11px] text-slate-500 hover:text-slate-300 transition-colors">
+        <a href="/manual.html" target="_blank" rel="noopener noreferrer" className="text-[11px] text-slate-400 hover:text-slate-300 transition-colors">
           {t('manual')}
         </a>
       </div>

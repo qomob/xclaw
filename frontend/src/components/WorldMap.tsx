@@ -307,7 +307,7 @@ export default function WorldMap({ flyTo, onFlyComplete }: WorldMapProps) {
       <div className="absolute bottom-2 md:bottom-4 left-2 md:left-4 z-20 flex flex-col gap-1 md:gap-2">
         <button 
           onClick={() => setDebugMode(!debugMode)}
-          className={`px-2 md:px-3 py-0.5 md:py-1 rounded text-[9px] md:text-[10px] font-mono border transition-all whitespace-nowrap ${
+          className={`px-2 md:px-3 py-0.5 md:py-1 rounded text-[11px] md:text-[12px] font-mono border transition-all whitespace-nowrap ${
             debugMode 
               ? 'bg-cyan-500/20 border-cyan-400 text-cyan-400' 
               : 'bg-slate-800 border-slate-700 text-gray-400'
@@ -316,7 +316,7 @@ export default function WorldMap({ flyTo, onFlyComplete }: WorldMapProps) {
           {debugMode ? 'DISABLE DEBUG' : 'ENABLE DEBUG'}
         </button>
         {debugMode && (
-          <div className="bg-slate-900/80 border border-cyan-500/30 p-1.5 md:p-2 rounded text-[8px] md:text-[9px] font-mono text-cyan-300">
+          <div className="bg-slate-900/80 border border-cyan-500/30 p-1.5 md:p-2 rounded text-[12px] md:text-[11px] font-mono text-cyan-300">
             <div>AGENTS: {agents.length}</div>
             <div>TIME: {animationTime.toFixed(2)}s</div>
             <div>FPS: 60 (RAF)</div>
@@ -335,7 +335,7 @@ export default function WorldMap({ flyTo, onFlyComplete }: WorldMapProps) {
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={() => setSelectedAgentId(selectedNode.id)}
-                  className="text-[10px] px-1.5 py-0.5 bg-cyan-500/20 border border-cyan-700/50 rounded hover:bg-cyan-500/30 text-cyan-300"
+                  className="text-[12px] px-1.5 py-0.5 bg-cyan-500/20 border border-cyan-700/50 rounded hover:bg-cyan-500/30 text-cyan-300"
                 >MSG</button>
                 <button
                   onClick={() => { setSelectedNode(null); setDetail(null); setSkills([]); setProfile(null); setRelLines([]); }}
@@ -344,71 +344,71 @@ export default function WorldMap({ flyTo, onFlyComplete }: WorldMapProps) {
               </div>
             </div>
             <div className="p-3 text-[11px] font-mono text-cyan-300 space-y-1.5 max-h-[60vh] overflow-y-auto">
-              <div className="text-gray-500">ID: <span className="text-cyan-400">{selectedNode.id}</span></div>
-              <div className="text-gray-500">LNG: <span className="text-cyan-400">{selectedNode.position[0].toFixed(4)}</span>  LAT: <span className="text-cyan-400">{selectedNode.position[1].toFixed(4)}</span></div>
+              <div className="text-gray-400">ID: <span className="text-cyan-400">{selectedNode.id}</span></div>
+              <div className="text-gray-400">LNG: <span className="text-cyan-400">{selectedNode.position[0].toFixed(4)}</span>  LAT: <span className="text-cyan-400">{selectedNode.position[1].toFixed(4)}</span></div>
 
               {loading && <div className="text-cyan-500 animate-pulse pt-1">Loading...</div>}
 
               {detail && (<>
                 <div className="border-t border-cyan-900/50 pt-1.5 mt-1.5">
-                  <span className="text-gray-500">Status: </span>
+                  <span className="text-gray-400">Status: </span>
                   <span className={detail.status === 'online' ? 'text-green-400' : 'text-red-400'}>{detail.status}</span>
                 </div>
                 {detail.last_heartbeat && (
-                  <div className="text-gray-500">Last Heartbeat: <span className="text-cyan-400">{new Date(detail.last_heartbeat).toLocaleString()}</span></div>
+                  <div className="text-gray-400">Last Heartbeat: <span className="text-cyan-400">{new Date(detail.last_heartbeat).toLocaleString()}</span></div>
                 )}
                 {detail.capabilities && (
                   <div className="border-t border-cyan-900/50 pt-1.5 mt-1.5">
-                    <div className="text-gray-500 mb-1">Capabilities:</div>
+                    <div className="text-gray-400 mb-1">Capabilities:</div>
                     <div className="text-cyan-400 break-all">{detail.capabilities}</div>
                   </div>
                 )}
                 {detail.tags && detail.tags.length > 0 && (
                   <div className="border-t border-cyan-900/50 pt-1.5 mt-1.5">
-                    <div className="text-gray-500 mb-1">Tags:</div>
+                    <div className="text-gray-400 mb-1">Tags:</div>
                     <div className="flex flex-wrap gap-1">
                       {detail.tags.map((tag, i) => (
-                        <span key={i} className="px-1.5 py-0.5 bg-cyan-500/10 border border-cyan-800/50 rounded text-[10px] text-cyan-400">{tag}</span>
+                        <span key={i} className="px-1.5 py-0.5 bg-cyan-500/10 border border-cyan-800/50 rounded text-[12px] text-cyan-400">{tag}</span>
                       ))}
                     </div>
                   </div>
                 )}
                 {detail.endpoint_url && (
-                  <div className="text-gray-500">Endpoint: <span className="text-cyan-400 break-all">{detail.endpoint_url}</span></div>
+                  <div className="text-gray-400">Endpoint: <span className="text-cyan-400 break-all">{detail.endpoint_url}</span></div>
                 )}
                 {detail.reputation_score != null && (
-                  <div className="text-gray-500">Reputation: <span className="text-cyan-400">{detail.reputation_score}</span></div>
+                  <div className="text-gray-400">Reputation: <span className="text-cyan-400">{detail.reputation_score}</span></div>
                 )}
               </>)}
 
               {profile && (<>
                 <div className="border-t border-cyan-900/50 pt-1.5 mt-1.5">
-                  <div className="text-gray-500 mb-1">Task Stats:</div>
+                  <div className="text-gray-400 mb-1">Task Stats:</div>
                   <div className="grid grid-cols-2 gap-1">
-                    <span className="text-cyan-400">{profile.task_stats?.completed_tasks || 0}<span className="text-gray-600"> done</span></span>
-                    <span className="text-red-400">{profile.task_stats?.failed_tasks || 0}<span className="text-gray-600"> fail</span></span>
-                    <span className="text-yellow-400">{profile.task_stats?.pending_tasks || 0}<span className="text-gray-600"> pend</span></span>
-                    <span className="text-gray-400">{profile.task_stats?.total_tasks || 0}<span className="text-gray-600"> total</span></span>
+                    <span className="text-cyan-400">{profile.task_stats?.completed_tasks || 0}<span className="text-gray-400"> done</span></span>
+                    <span className="text-red-400">{profile.task_stats?.failed_tasks || 0}<span className="text-gray-400"> fail</span></span>
+                    <span className="text-yellow-400">{profile.task_stats?.pending_tasks || 0}<span className="text-gray-400"> pend</span></span>
+                    <span className="text-gray-400">{profile.task_stats?.total_tasks || 0}<span className="text-gray-400"> total</span></span>
                   </div>
                 </div>
                 {profile.memory_stats && profile.memory_stats.length > 0 && (
                   <div className="border-t border-cyan-900/50 pt-1.5 mt-1.5">
-                    <div className="text-gray-500 mb-1">Memories:</div>
+                    <div className="text-gray-400 mb-1">Memories:</div>
                     <div className="flex flex-wrap gap-1">
                       {profile.memory_stats.map((m, i) => (
-                        <span key={i} className="px-1.5 py-0.5 bg-purple-500/10 border border-purple-800/50 rounded text-[10px] text-purple-400">{m.type}: {m.count}</span>
+                        <span key={i} className="px-1.5 py-0.5 bg-purple-500/10 border border-purple-800/50 rounded text-[12px] text-purple-400">{m.type}: {m.count}</span>
                       ))}
                     </div>
                   </div>
                 )}
                 {profile.relationships && profile.relationships.length > 0 && (
                   <div className="border-t border-cyan-900/50 pt-1.5 mt-1.5">
-                    <div className="text-gray-500 mb-1">Relationships ({profile.relationships.length}):</div>
+                    <div className="text-gray-400 mb-1">Relationships ({profile.relationships.length}):</div>
                     <div className="space-y-1">
                       {profile.relationships.map((r, i) => (
                         <div key={i} className="flex items-center justify-between bg-slate-800/60 border border-cyan-900/40 rounded px-2 py-0.5">
-                          <span className="text-cyan-400 text-[10px]">{r.related_name || r.related_agent_id.slice(0, 8)}</span>
-                          <span className={`text-[10px] px-1 rounded ${r.type === 'trusted' ? 'text-green-400 bg-green-500/10' : r.type === 'blocked' ? 'text-red-400 bg-red-500/10' : 'text-gray-400 bg-gray-500/10'}`}>{r.type}</span>
+                          <span className="text-cyan-400 text-[12px]">{r.related_name || r.related_agent_id.slice(0, 8)}</span>
+                          <span className={`text-[12px] px-1 rounded ${r.type === 'trusted' ? 'text-green-400 bg-green-500/10' : r.type === 'blocked' ? 'text-red-400 bg-red-500/10' : 'text-gray-400 bg-gray-500/10'}`}>{r.type}</span>
                         </div>
                       ))}
                     </div>
@@ -418,13 +418,13 @@ export default function WorldMap({ flyTo, onFlyComplete }: WorldMapProps) {
 
               {skills.length > 0 && (
                 <div className="border-t border-cyan-900/50 pt-1.5 mt-1.5">
-                  <div className="text-gray-500 mb-1">Skills ({skills.length}):</div>
+                  <div className="text-gray-400 mb-1">Skills ({skills.length}):</div>
                   <div className="space-y-1.5">
                     {skills.map((s, i) => (
                       <div key={i} className="bg-slate-800/60 border border-cyan-900/40 rounded px-2 py-1">
-                        <div className="text-cyan-400 font-bold">{s.name} <span className="text-gray-600 font-normal">v{s.version}</span></div>
-                        <div className="text-gray-400 text-[10px]">{s.description}</div>
-                        <div className="text-cyan-700 text-[10px]">{s.category}</div>
+                        <div className="text-cyan-400 font-bold">{s.name} <span className="text-gray-400 font-normal">v{s.version}</span></div>
+                        <div className="text-gray-400 text-[12px]">{s.description}</div>
+                        <div className="text-cyan-700 text-[12px]">{s.category}</div>
                       </div>
                     ))}
                   </div>

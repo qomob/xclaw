@@ -532,8 +532,8 @@ export default function SocialGraph() {
   if (error) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center bg-[#0f172a] gap-3">
-        <span className="text-gray-500 text-xs font-mono">{error}</span>
-        <button onClick={() => window.location.reload()} className="px-3 py-1 text-[10px] bg-cyan-600 hover:bg-cyan-700 text-white rounded font-bold">
+        <span className="text-gray-400 text-xs font-mono">{error}</span>
+        <button onClick={() => window.location.reload()} className="px-3 py-1 text-[12px] bg-cyan-600 hover:bg-cyan-700 text-white rounded font-bold">
           RETRY
         </button>
       </div>
@@ -543,21 +543,21 @@ export default function SocialGraph() {
   return (
     <div ref={containerRef} className="w-full h-full relative" style={{ touchAction: 'none', overflow: 'hidden' }}>
       <div className="absolute top-2 left-2 z-10 flex gap-2 items-center">
-        <span className="text-[10px] text-gray-500 font-mono">
+        <span className="text-[12px] text-gray-400 font-mono">
           {nodes.length} AGENTS · {edges.length} CONNECTIONS
         </span>
-        <button onClick={() => window.location.reload()} className="text-[10px] text-gray-500 hover:text-cyan-400 font-mono" title="Refresh">↻</button>
+        <button onClick={() => window.location.reload()} className="text-[12px] text-gray-400 hover:text-cyan-400 font-mono" title="Refresh">↻</button>
         <button 
           onClick={handleDecay} 
           disabled={decaying}
-          className="text-[10px] text-amber-500 hover:text-amber-400 font-mono disabled:opacity-30" 
+          className="text-[12px] text-amber-500 hover:text-amber-400 font-mono disabled:opacity-30" 
           title="Decay stale relationships"
         >
           {decaying ? '⏳' : '⟳'}
         </button>
       </div>
       <div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-1">
-        <div className="flex gap-3 text-[9px] text-gray-500 font-mono">
+        <div className="flex gap-3 text-[11px] text-gray-400 font-mono">
           <span className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-cyan-400 inline-block" /> TRUSTED
           </span>
@@ -569,7 +569,7 @@ export default function SocialGraph() {
           </span>
         </div>
         {stats && (
-          <div className="flex gap-3 text-[9px] text-gray-400 font-mono bg-slate-800/80 px-2 py-1 rounded border border-slate-700">
+          <div className="flex gap-3 text-[11px] text-gray-400 font-mono bg-slate-800/80 px-2 py-1 rounded border border-slate-700">
             <span title="Total Nodes">◉ {stats.total_nodes}</span>
             <span title="Total Edges">⟷ {stats.total_edges}</span>
             <span title="Avg Trust Score">⌀ {(stats.avg_trust_score ?? 0).toFixed(2)}</span>
@@ -585,7 +585,7 @@ export default function SocialGraph() {
         >
           +
         </button>
-        <div className="text-center text-[9px] text-gray-400 font-mono bg-slate-800/90 px-2 py-0.5 rounded border border-slate-600">
+        <div className="text-center text-[11px] text-gray-400 font-mono bg-slate-800/90 px-2 py-0.5 rounded border border-slate-600">
           {(zoomLevel * 100).toFixed(0)}%
         </div>
         <button
@@ -598,7 +598,7 @@ export default function SocialGraph() {
         </button>
         <button
           onClick={handleResetView}
-          className="w-8 h-8 bg-slate-800/90 hover:bg-slate-700 border border-slate-600 rounded text-white text-[10px] font-bold transition-colors"
+          className="w-8 h-8 bg-slate-800/90 hover:bg-slate-700 border border-slate-600 rounded text-white text-[12px] font-bold transition-colors"
           title="Reset View"
         >
           ⟲

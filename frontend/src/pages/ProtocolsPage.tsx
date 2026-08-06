@@ -116,7 +116,7 @@ function AIServicePanel() {
           onChange={e => setPrompt(e.target.value)}
           placeholder={mode === 'generate' ? 'Enter prompt...' : 'Enter text to vectorize...'}
           rows={4}
-          className="w-full px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-blue-500 resize-none mb-3"
+          className="w-full px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-400 text-sm focus:outline-none focus:border-blue-500 resize-none mb-3"
         />
 
         <button

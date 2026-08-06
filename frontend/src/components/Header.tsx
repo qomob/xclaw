@@ -68,10 +68,10 @@ export default function Header({ currentTime, sweepTime }: HeaderProps) {
         {/* Agent 身份状态指示器 */}
         <button
           onClick={authenticated ? handleLogout : handleLoginRequest}
-          className={`hidden md:flex items-center gap-1.5 px-2 py-0.5 rounded text-[9px] md:text-[10px] font-mono transition-colors ${
+          className={`hidden md:flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] md:text-[12px] font-mono transition-colors ${
             authenticated
               ? 'bg-green-900/20 border border-green-800/40 text-green-400 hover:bg-green-900/30'
-              : 'bg-gray-800/30 border border-gray-700/40 text-gray-500 hover:text-cyan-400 hover:border-cyan-800/40'
+              : 'bg-gray-800/30 border border-gray-700/40 text-gray-400 hover:text-cyan-400 hover:border-cyan-800/40'
           }`}
           title={authenticated ? `Logged in as ${agentIdPreview}... (Click to logout)` : 'Click to login with API Key'}
         >
@@ -102,7 +102,7 @@ export default function Header({ currentTime, sweepTime }: HeaderProps) {
           <span className="font-mono text-slate-400">{health.agentsOnline} AGENTS</span>
         </div>
         <div className="md:hidden">
-          <span className={`text-[10px] font-mono ${health.backend === 'ok' ? 'text-green-500' : 'text-red-500'}`}>
+          <span className={`text-[12px] font-mono ${health.backend === 'ok' ? 'text-green-500' : 'text-red-500'}`}>
             {health.backend === 'ok' ? 'OK' : 'DOWN'}
           </span>
         </div>

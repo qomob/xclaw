@@ -7,6 +7,8 @@ import {
   searchGlobal
 } from '../utils/api';
 import { useI18n } from '../i18n/LanguageContext';
+import { fmtDateTime } from '../utils/format';
+import { ErrorState, EmptyState } from '../components/StateNotice';
 
 type SubView = 'list' | 'detail' | 'messages' | 'memory';
 
@@ -42,12 +44,13 @@ const card = 'bg-slate-900 border border-slate-800 rounded-xl';
 const textSecondary = 'text-slate-400';
 
 export default function AgentCenter() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [searchParams] = useSearchParams();
   const [subView, setSubView] = useState<SubView>('list');
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [profile, setProfile] = useState<AgentProfileData | null>(null);
   const [skills, setSkills] = useState<Array<{ id: string; name: string; category: string; description: string }>>([]);
@@ -56,6 +59,7 @@ export default function AgentCenter() {
 
   const loadAgents = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const res = await fetchOnlineAgents();
       if (res.success && res.data) {
@@ -68,6 +72,8 @@ export default function AgentCenter() {
           tags: a.tags,
         })));
       }
+    } catch {
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -76,6 +82,7 @@ export default function AgentCenter() {
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) { loadAgents(); return; }
     setLoading(true);
+    setLoadError(false);
     try {
       const res = await searchGlobal(searchQuery.trim());
       if (res.success && res.data?.agents) {
@@ -85,6 +92,8 @@ export default function AgentCenter() {
           capabilities: a.capabilities ? (typeof a.capabilities === 'string' ? a.capabilities.split(',') : a.capabilities) : [],
         })));
       }
+    } catch {
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -161,7 +170,7 @@ export default function AgentCenter() {
             onChange={e => setSearchQuery(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSearch()}
             placeholder={t('acSearchPlaceholder')}
-            className="flex-1 bg-transparent text-sm outline-none text-white placeholder-slate-500"
+            className="flex-1 bg-transparent text-sm outline-none text-white placeholder-slate-400"
           />
         </div>
         <button
@@ -202,13 +211,29 @@ export default function AgentCenter() {
 
       {subView === 'list' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {loading ? (
+          {loadError ? (
+            <div className="col-span-full">
+              <ErrorState onRetry={handleSearch} />
+            </div>
+          ) : loading ? (
             <div className="col-span-full text-center py-12 text-slate-400">
               {t('acLoading')}
             </div>
           ) : agents.length === 0 ? (
-            <div className="col-span-full text-center py-12 text-slate-400">
-              {t('acNoOnline')}
+            <div className="col-span-full">
+              <EmptyState
+                message={t('emptyAgents')}
+                action={
+                  <a
+                    href="https://github.com/qomob/xclawskill"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 text-white text-[11px] rounded-lg transition-colors"
+                  >
+                    {t('registerAgent')}
+                  </a>
+                }
+              />
             </div>
           ) : agents.map(agent => (
             <button
@@ -230,11 +255,11 @@ export default function AgentCenter() {
                     <div className={`w-1.5 h-1.5 rounded-full ${
                       agent.status === 'online' ? 'bg-green-500' : 'bg-gray-400'
                     }`} />
-                    <span className="text-[10px] text-slate-400">
+                    <span className="text-[12px] text-slate-400">
                       {agent.status || 'unknown'}
                     </span>
                     {agent.reputation_score !== undefined && (
-                      <span className={`text-[10px] ml-2 ${
+                      <span className={`text-[12px] ml-2 ${
                         agent.reputation_score >= 0.8 ? 'text-green-500' : 'text-yellow-500'
                       }`}>
                         ★ {agent.reputation_score.toFixed(2)}
@@ -246,12 +271,12 @@ export default function AgentCenter() {
               {agent.capabilities && agent.capabilities.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-2">
                   {agent.capabilities.slice(0, 4).map(cap => (
-                    <span key={cap} className="text-[10px] px-1.5 py-0.5 rounded bg-brand-500/10 text-brand-400">
+                    <span key={cap} className="text-[12px] px-1.5 py-0.5 rounded bg-brand-500/10 text-brand-400">
                       {cap}
                     </span>
                   ))}
                   {agent.capabilities.length > 4 && (
-                    <span className="text-[10px] text-slate-400">
+                    <span className="text-[12px] text-slate-400">
                       +{agent.capabilities.length - 4}
                     </span>
                   )}
@@ -274,7 +299,7 @@ function AgentDetailView({ agentId, profile, skills, memories, onBack, onOpenMes
   onOpenMessages: () => void;
   onOpenMemory: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   return (
     <div className="space-y-4">
       <button
@@ -330,7 +355,7 @@ function AgentDetailView({ agentId, profile, skills, memories, onBack, onOpenMes
             ].map(stat => (
               <div key={stat.label} className="text-center p-2 rounded-lg bg-slate-800">
                 <div className={`text-lg font-bold ${stat.color}`}>{stat.value}</div>
-                <div className="text-[10px] text-slate-400">{stat.label}</div>
+                <div className="text-[12px] text-slate-400">{stat.label}</div>
               </div>
             ))}
           </div>
@@ -349,7 +374,7 @@ function AgentDetailView({ agentId, profile, skills, memories, onBack, onOpenMes
                   <div className="text-xs font-medium text-white">
                     {skill.name}
                   </div>
-                  <div className="text-[10px] text-slate-400">{skill.category}</div>
+                  <div className="text-[12px] text-slate-400">{skill.category}</div>
                 </div>
               </div>
             ))}
@@ -365,15 +390,15 @@ function AgentDetailView({ agentId, profile, skills, memories, onBack, onOpenMes
           <div className="space-y-1">
             {profile.relationships.slice(0, 10).map((rel, i) => (
               <div key={i} className="flex items-center justify-between text-xs text-slate-300">
-                <span className="font-mono text-[10px]">{rel.related_agent_id.slice(0, 8)}...</span>
-                <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                <span className="font-mono text-[12px]">{rel.related_agent_id.slice(0, 8)}...</span>
+                <span className={`px-1.5 py-0.5 rounded text-[12px] ${
                   rel.type === 'ally' ? 'bg-green-500/20 text-green-400' :
                   rel.type === 'rival' ? 'bg-red-500/20 text-red-400' :
                   'bg-slate-500/20 text-slate-400'
                 }`}>
                   {rel.type}
                 </span>
-                <span className="text-[10px] text-slate-400">×{rel.interaction_count}</span>
+                <span className="text-[12px] text-slate-400">×{rel.interaction_count}</span>
               </div>
             ))}
           </div>
@@ -388,7 +413,7 @@ function AgentMessagesView({ agentId, messages, onBack }: {
   messages: Array<{ message_id: string; sender_id: string; content: string; created_at: string; read: boolean }>;
   onBack: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   return (
     <div className="space-y-3">
       <button
@@ -401,7 +426,7 @@ function AgentMessagesView({ agentId, messages, onBack }: {
         💬 {t('acMessageHistory')}
       </h2>
       {messages.length === 0 ? (
-        <div className={`${card} p-8 text-center text-xs text-slate-500`}>
+        <div className={`${card} p-8 text-center text-xs text-slate-400`}>
           {t('acNoMessages')}
         </div>
       ) : (
@@ -409,11 +434,11 @@ function AgentMessagesView({ agentId, messages, onBack }: {
           {messages.map(msg => (
             <div key={msg.message_id} className={`${card} p-3`}>
               <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] font-mono text-slate-500">
+                <span className="text-[12px] font-mono text-slate-400">
                   {msg.sender_id.slice(0, 8)}...
                 </span>
-                <span className="text-[10px] text-slate-600">
-                  {new Date(msg.created_at).toLocaleString('zh-CN')}
+                <span className="text-[12px] text-slate-400">
+                  {fmtDateTime(msg.created_at, lang)}
                 </span>
               </div>
               <p className="text-xs text-slate-300">
@@ -432,7 +457,7 @@ function AgentMemoryView({ agentId, memories, onBack }: {
   memories: Memory[];
   onBack: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   return (
     <div className="space-y-3">
       <button
@@ -445,7 +470,7 @@ function AgentMemoryView({ agentId, memories, onBack }: {
         🧠 {t('acMemory')} ({memories.length})
       </h2>
       {memories.length === 0 ? (
-        <div className={`${card} p-8 text-center text-xs text-slate-500`}>
+        <div className={`${card} p-8 text-center text-xs text-slate-400`}>
           {t('acNoMemories')}
         </div>
       ) : (
@@ -453,18 +478,18 @@ function AgentMemoryView({ agentId, memories, onBack }: {
           {memories.map(mem => (
             <div key={mem.memory_id} className={`${card} p-3`}>
               <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400">
+                <span className="text-[12px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400">
                   {mem.type}
                 </span>
-                <span className="text-[10px] text-slate-600">
-                  {new Date(mem.created_at).toLocaleString('zh-CN')}
+                <span className="text-[12px] text-slate-400">
+                  {fmtDateTime(mem.created_at, lang)}
                 </span>
               </div>
               <p className="text-xs text-slate-300">
                 {mem.content}
               </p>
               {mem.importance !== undefined && (
-                <div className="text-[10px] mt-1 text-slate-500">
+                <div className="text-[12px] mt-1 text-slate-400">
                   {t('acImportance')}: {(mem.importance * 100).toFixed(0)}%
                 </div>
               )}

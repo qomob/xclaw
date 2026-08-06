@@ -189,8 +189,8 @@ export default function TopologyView() {
       {agents.length === 0 && (
         <div className="absolute inset-0 z-30 flex items-center justify-center bg-[#0B0F19]">
           <div className="text-center">
-            <div className="text-gray-500 text-xs font-mono mb-2">AWAITING TOPOLOGY DATA</div>
-            <div className="text-gray-600 text-[10px] font-mono">Waiting for WebSocket feed...</div>
+            <div className="text-gray-400 text-xs font-mono mb-2">AWAITING TOPOLOGY DATA</div>
+            <div className="text-gray-400 text-[12px] font-mono">Waiting for WebSocket feed...</div>
           </div>
         </div>
       )}
@@ -200,7 +200,7 @@ export default function TopologyView() {
             {Object.keys(CONTINENTS).map(tab => (
               <button
                 key={tab}
-                className={`px-3 py-1 md:px-4 border text-[10px] md:text-xs font-semibold whitespace-nowrap transition-all ${
+                className={`px-3 py-1 md:px-4 border text-[12px] md:text-xs font-semibold whitespace-nowrap transition-all ${
                   activeTab === tab
                     ? 'border-cyan-400 bg-cyan-900/30 text-cyan-400'
                     : 'border-gray-600 bg-gray-900/30 text-gray-400 hover:border-gray-500'
@@ -243,7 +243,7 @@ export default function TopologyView() {
       </DeckGL>
 
       <div className="absolute bottom-2 md:bottom-4 left-2 md:left-4 z-20 flex flex-col gap-1">
-        <div className="bg-slate-900/80 border border-cyan-500/30 p-1.5 md:p-2 rounded text-[8px] md:text-[9px] font-mono text-cyan-300 space-y-0.5">
+        <div className="bg-slate-900/80 border border-cyan-500/30 p-1.5 md:p-2 rounded text-[12px] md:text-[11px] font-mono text-cyan-300 space-y-0.5">
           <div style={{ display: 'flex', gap: '0.75rem' }}>
             <span>ROUTES: <b style={{ color: '#22d3ee' }}>{stats.validArcs}</b></span>
             <span>AGENTS: <b style={{ color: '#22c55e' }}>{stats.activeAgents}/{stats.totalAgents}</b></span>
@@ -254,11 +254,11 @@ export default function TopologyView() {
 
       {hoveredTask && (
         <div className="absolute top-3 right-3 z-30 w-64 bg-slate-900/95 border border-cyan-500/60 rounded-lg shadow-lg shadow-cyan-500/10 p-3">
-          <div className="text-[10px] font-mono text-cyan-400 space-y-1">
+          <div className="text-[12px] font-mono text-cyan-400 space-y-1">
             <div className="font-bold border-b border-cyan-800/50 pb-1">TASK ROUTE</div>
-            <div><span className="text-gray-500">FROM:</span> <span className="text-cyan-300">{hoveredTask.sourceName}</span></div>
-            <div><span className="text-gray-500">TO:</span> <span className="text-cyan-300">{hoveredTask.targetName}</span></div>
-            <div><span className="text-gray-500">ID:</span> <span className="text-gray-400">{hoveredTask.id.slice(0, 16)}...</span></div>
+            <div><span className="text-gray-400">FROM:</span> <span className="text-cyan-300">{hoveredTask.sourceName}</span></div>
+            <div><span className="text-gray-400">TO:</span> <span className="text-cyan-300">{hoveredTask.targetName}</span></div>
+            <div><span className="text-gray-400">ID:</span> <span className="text-gray-400">{hoveredTask.id.slice(0, 16)}...</span></div>
           </div>
         </div>
       )}

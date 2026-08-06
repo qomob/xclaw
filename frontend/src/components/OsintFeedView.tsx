@@ -223,7 +223,7 @@ export default function OsintFeedView() {
             {Object.keys(CONTINENTS).map(tab => (
               <button
                 key={tab}
-                className={`px-3 py-1 md:px-4 border text-[10px] md:text-xs font-semibold whitespace-nowrap transition-all ${
+                className={`px-3 py-1 md:px-4 border text-[12px] md:text-xs font-semibold whitespace-nowrap transition-all ${
                   activeTab === tab
                     ? 'border-cyan-400 bg-cyan-900/30 text-cyan-400'
                     : 'border-gray-600 bg-gray-900/30 text-gray-400 hover:border-gray-500'
@@ -235,7 +235,7 @@ export default function OsintFeedView() {
             ))}
           </div>
           <div className="flex space-x-1.5 md:space-x-2 min-w-max items-center">
-            <span className="text-[9px] text-gray-600 font-mono mr-1">FILTER:</span>
+            <span className="text-[11px] text-gray-400 font-mono mr-1">FILTER:</span>
             {filterOptions.map(ft => {
               const cfg = EVENT_TYPE_CONFIG[ft] || { label: ft.toUpperCase(), color: [148, 163, 184] };
               const count = ft === 'all' ? stats.total :
@@ -244,10 +244,10 @@ export default function OsintFeedView() {
               return (
                 <button
                   key={ft}
-                  className={`px-2 py-0.5 border text-[9px] md:text-[10px] font-mono whitespace-nowrap transition-all ${
+                  className={`px-2 py-0.5 border text-[11px] md:text-[12px] font-mono whitespace-nowrap transition-all ${
                     filterType === ft
                       ? 'border-cyan-400 bg-cyan-900/20 text-cyan-400'
-                      : 'border-gray-700/50 bg-gray-900/20 text-gray-500 hover:border-gray-600'
+                      : 'border-gray-700/50 bg-gray-900/20 text-gray-400 hover:border-gray-600'
                   }`}
                   onClick={() => setFilterType(ft)}
                 >
@@ -284,7 +284,7 @@ export default function OsintFeedView() {
             html: `<div class="p-2 bg-slate-900 border border-slate-600 text-gray-300 text-xs font-mono rounded max-w-[280px]">
               <div class="font-bold mb-1" style="color:rgb(${cfg.color.join(',')})">${cfg.icon} ${cfg.label}</div>
               <div class="text-gray-400 truncate">${obj.message}</div>
-              <div class="text-gray-600 mt-1">${obj.time}</div>
+              <div class="text-gray-400 mt-1">${obj.time}</div>
             </div>`
           };
         }}
@@ -295,12 +295,12 @@ export default function OsintFeedView() {
       <div className="absolute bottom-2 left-2 right-2 md:left-4 md:right-80 z-20">
         <div className="bg-slate-900/90 border border-slate-700/50 rounded max-h-[180px] overflow-hidden backdrop-blur-sm">
           <div className="flex items-center justify-between px-2 py-1 border-b border-slate-800/50 bg-slate-800/50">
-            <span className="text-[9px] font-mono text-gray-400">OSINT STREAM · {filteredEvents.length} EVENTS</span>
-            <span className="text-[8px] font-mono text-gray-600">{new Date().toLocaleTimeString()}</span>
+            <span className="text-[11px] font-mono text-gray-400">OSINT STREAM · {filteredEvents.length} EVENTS</span>
+            <span className="text-[12px] font-mono text-gray-400">{new Date().toLocaleTimeString()}</span>
           </div>
           <div className="overflow-y-auto max-h-[150px] scrollbar-thin">
             {filteredEvents.length === 0 && (
-              <div className="px-3 py-4 text-[10px] font-mono text-gray-600 text-center">NO SIGNALS</div>
+              <div className="px-3 py-4 text-[12px] font-mono text-gray-400 text-center">NO SIGNALS</div>
             )}
             {filteredEvents.slice(0, 20).map(evt => {
               const cfg = EVENT_TYPE_CONFIG[evt.eventType] || EVENT_TYPE_CONFIG.default;
@@ -313,10 +313,10 @@ export default function OsintFeedView() {
                   }`}
                   onClick={() => setSelectedEvent(isSelected ? null : evt)}
                 >
-                  <span className="text-[10px] mt-0.5 shrink-0" style={{ color: `rgb(${cfg.color.join(',')})` }}>{cfg.icon}</span>
+                  <span className="text-[12px] mt-0.5 shrink-0" style={{ color: `rgb(${cfg.color.join(',')})` }}>{cfg.icon}</span>
                   <div className="min-w-0 flex-1">
-                    <div className={`text-[10px] font-mono truncate ${isSelected ? 'text-cyan-300' : 'text-gray-400'}`}>{evt.message}</div>
-                    <div className="text-[8px] font-mono text-gray-600 mt-0.5">{evt.time}{evt.agentName ? ` · ${evt.agentName}` : ''}</div>
+                    <div className={`text-[12px] font-mono truncate ${isSelected ? 'text-cyan-300' : 'text-gray-400'}`}>{evt.message}</div>
+                    <div className="text-[12px] font-mono text-gray-400 mt-0.5">{evt.time}{evt.agentName ? ` · ${evt.agentName}` : ''}</div>
                   </div>
                 </div>
               );
@@ -334,15 +334,15 @@ export default function OsintFeedView() {
                 return (
                   <>
                     <span style={{ color: `rgb(${cfg.color.join(',')})` }}>{cfg.icon}</span>
-                    <span className="text-[10px] font-bold font-mono" style={{ color: `rgb(${cfg.color.join(',')})` }}>{cfg.label}</span>
+                    <span className="text-[12px] font-bold font-mono" style={{ color: `rgb(${cfg.color.join(',')})` }}>{cfg.label}</span>
                   </>
                 );
               })()}
             </div>
-            <button onClick={() => setSelectedEvent(null)} className="text-gray-600 hover:text-gray-400 text-sm leading-none">✕</button>
+            <button onClick={() => setSelectedEvent(null)} className="text-gray-400 hover:text-gray-400 text-sm leading-none">✕</button>
           </div>
           <div className="text-[11px] font-mono text-gray-300 break-all leading-relaxed">{selectedEvent.message}</div>
-          <div className="mt-2 pt-1.5 border-t border-slate-800/50 flex justify-between text-[9px] font-mono text-gray-500">
+          <div className="mt-2 pt-1.5 border-t border-slate-800/50 flex justify-between text-[11px] font-mono text-gray-400">
             <span>{selectedEvent.time}</span>
             {selectedEvent.agentName && <span>{selectedEvent.agentName}</span>}
           </div>

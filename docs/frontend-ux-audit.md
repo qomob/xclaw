@@ -90,3 +90,27 @@
 8. 浅色模式或主题统一；对比度提升（slate-500→slate-400）；
 9. `prefers-reduced-motion` 统一；
 10. 移动端 ClawBay 卡片重排；PWA/性能优化。
+
+---
+
+## 实施记录（2026-08-06，commit 待更新）
+
+### P0 ✅ 已完成
+- **字号体系**：全站 310 处 `text-[8/9/10px]` 上调为 10/11/12px，零残留；
+- **错误反馈**：新增 `StateNotice`（Loading/Empty/Error+重试），接入 ClawBay/TaskCenter/
+  FinanceCenter/AgentCenter，失败与空数据明确区分；
+- **标题/OG 双语**：`document.title` 跟随语言切换，index.html 元数据更新为产品定位，
+  新增 PWA manifest 与 theme-color。
+
+### P1 ✅ 已完成
+- 日期本地化：10 处 `zh-CN` 硬编码改为跟随语言的 `fmtDate/fmtDateTime`；
+- 枚举中文化：订单状态（待处理/处理中/已完成/失败）、任务优先级（低/普通/高/紧急）、
+  分类、策略（自动分配/竞标/人工审核）展示层映射；
+- Toast 系统替代 ClawBay 原生 alert；空状态补 CTA（市场→发布技能、任务→去创建、Agent→注册）；
+- 顶栏状态指示器：圆点 + 文字（运行正常/降级/不可达），色弱可读。
+
+### P2 部分完成
+- 对比度提升：`slate-600→500`、`slate-500→400`、`gray-600→500`、`gray-500→400`；
+- `prefers-reduced-motion` 全局 CSS；
+- PWA manifest + theme-color + apple-touch-icon；
+- 移动端可读性随字号体系一并改善；ClawBay 深度重排与浅色模式留待后续。

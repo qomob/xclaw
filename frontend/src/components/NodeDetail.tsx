@@ -37,7 +37,7 @@ function StarRating({ score, max = 5 }: { score: number; max?: number }) {
   return (
     <span className="inline-flex gap-0.5">
       {Array.from({ length: max }, (_, i) => (
-        <span key={i} className={i < stars ? 'text-yellow-400' : 'text-gray-600'}>
+        <span key={i} className={i < stars ? 'text-yellow-400' : 'text-gray-400'}>
           ★
         </span>
       ))}
@@ -87,7 +87,7 @@ const NodeDetail: React.FC<NodeDetailProps> = ({
                   background: node.online ? '#00ff88' : '#666',
                 }}
               />
-              <span className={node.online ? 'text-green-400' : 'text-gray-500'}>
+              <span className={node.online ? 'text-green-400' : 'text-gray-400'}>
                 {node.online ? 'Online' : 'Offline'}
               </span>
             </div>
@@ -95,7 +95,7 @@ const NodeDetail: React.FC<NodeDetailProps> = ({
         </div>
         <button
           onClick={onClose}
-          className="text-gray-500 hover:text-white transition text-lg leading-none"
+          className="text-gray-400 hover:text-white transition text-lg leading-none"
         >
           ✕
         </button>
@@ -136,13 +136,13 @@ const NodeDetail: React.FC<NodeDetailProps> = ({
       <div className="grid grid-cols-2 gap-2">
         <div className="rounded-lg bg-gray-900/60 p-2 text-center">
           <div className="text-white font-bold text-lg">{connectionCount}</div>
-          <div className="text-gray-500 text-xs">Connections</div>
+          <div className="text-gray-400 text-xs">Connections</div>
         </div>
         <div className="rounded-lg bg-gray-900/60 p-2 text-center">
           <div className={`text-white font-bold text-lg ${node.online ? 'text-green-400' : 'text-red-400'}`}>
             {node.online ? 'ONLINE' : 'OFFLINE'}
           </div>
-          <div className="text-gray-500 text-xs">Status</div>
+          <div className="text-gray-400 text-xs">Status</div>
         </div>
       </div>
 

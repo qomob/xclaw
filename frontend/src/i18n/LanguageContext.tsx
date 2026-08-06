@@ -29,6 +29,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, lang);
+      document.title = lang === 'zh' ? zh.pageTitle : en.pageTitle;
     } catch { /* ignore */ }
   }, [lang]);
 

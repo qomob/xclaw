@@ -106,7 +106,7 @@ export default function A2APanel() {
         ].map(c => (
           <div key={c.label} className="bg-gray-800/50 rounded-lg sm:rounded-xl p-2.5 sm:p-4 border border-gray-700/50">
             <div className="text-lg sm:text-2xl mb-0.5 sm:mb-1">{c.icon}</div>
-            <div className="text-[9px] sm:text-xs text-slate-500 uppercase tracking-wider">{c.label}</div>
+            <div className="text-[11px] sm:text-xs text-slate-400 uppercase tracking-wider">{c.label}</div>
             <div className="text-xl sm:text-3xl font-bold text-purple-400 mt-0.5 sm:mt-1">{c.value}</div>
           </div>
         ))}
@@ -122,7 +122,7 @@ export default function A2APanel() {
             onChange={e => setSearchQuery(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleDiscover()}
             placeholder={t('a2aSearchPlaceholder')}
-            className="flex-1 px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-purple-500"
+            className="flex-1 px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-400 text-sm focus:outline-none focus:border-purple-500"
           />
           <button
             onClick={handleDiscover}
@@ -138,7 +138,7 @@ export default function A2APanel() {
               <div key={a.agent_id || i} className="flex items-center justify-between bg-gray-900/50 rounded-lg p-3">
                 <div>
                   <div className="text-sm text-white font-medium">{a.name}</div>
-                  <div className="text-xs text-slate-500 font-mono">{a.agent_id}</div>
+                  <div className="text-xs text-slate-400 font-mono">{a.agent_id}</div>
                 </div>
                 <div className="flex gap-1 flex-wrap justify-end max-w-[50%]">
                   {a.capabilities?.map((cap, ci) => (
@@ -149,7 +149,7 @@ export default function A2APanel() {
             ))}
           </div>
         ) : (
-          <div className="text-center py-6 text-slate-600 text-sm">{t('a2aEnterKeywords')}</div>
+          <div className="text-center py-6 text-slate-400 text-sm">{t('a2aEnterKeywords')}</div>
         )}
       </div>
 
@@ -162,21 +162,21 @@ export default function A2APanel() {
             value={pubForm.agent_id}
             onChange={e => setPubForm(f => ({ ...f, agent_id: e.target.value }))}
             placeholder={t('a2aAgentId')}
-            className="px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-purple-500"
+            className="px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-400 text-sm focus:outline-none focus:border-purple-500"
           />
           <input
             type="text"
             value={pubForm.name}
             onChange={e => setPubForm(f => ({ ...f, name: e.target.value }))}
             placeholder={t('a2aAgentName')}
-            className="px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-purple-500"
+            className="px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-400 text-sm focus:outline-none focus:border-purple-500"
           />
           <input
             type="text"
             value={pubForm.capabilities}
             onChange={e => setPubForm(f => ({ ...f, capabilities: e.target.value }))}
             placeholder={t('a2aCapsPlaceholder')}
-            className="px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-purple-500"
+            className="px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-400 text-sm focus:outline-none focus:border-purple-500"
           />
         </div>
         <div className="flex items-center gap-3">
@@ -200,7 +200,7 @@ export default function A2APanel() {
             value={msgAgentId}
             onChange={e => setMsgAgentId(e.target.value)}
             placeholder={t('a2aMsgPlaceholder')}
-            className="flex-1 px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-purple-500"
+            className="flex-1 px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-400 text-sm focus:outline-none focus:border-purple-500"
           />
           <button
             onClick={handleFetchMessages}
@@ -214,10 +214,10 @@ export default function A2APanel() {
             <table className="w-full text-sm min-w-[500px]">
               <thead>
                 <tr className="border-b border-gray-700">
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('a2aSender')}</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('a2aReceiver')}</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('a2aContent')}</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('pnlTime')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('a2aSender')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('a2aReceiver')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('a2aContent')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('pnlTime')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -226,7 +226,7 @@ export default function A2APanel() {
                     <td className="py-2 px-3 text-purple-300 font-mono text-xs">{msg.from_agent_id}</td>
                     <td className="py-2 px-3 text-cyan-300 font-mono text-xs">{msg.to_agent_id}</td>
                     <td className="py-2 px-3 text-slate-300 max-w-xs truncate">{msg.content}</td>
-                    <td className="py-2 px-3 text-slate-500 text-xs whitespace-nowrap">
+                    <td className="py-2 px-3 text-slate-400 text-xs whitespace-nowrap">
                       {new Date(msg.timestamp).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                     </td>
                   </tr>
@@ -235,7 +235,7 @@ export default function A2APanel() {
             </table>
           </div>
         ) : (
-          <div className="text-center py-6 text-slate-600 text-sm">{t('a2aNoMsgHint')}</div>
+          <div className="text-center py-6 text-slate-400 text-sm">{t('a2aNoMsgHint')}</div>
         )}
       </div>
     </div>

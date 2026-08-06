@@ -4,6 +4,7 @@ import TopHeader from './TopHeader';
 import Footer from '../Footer';
 import { SystemHealthProvider } from '../SystemHealthContext';
 import { LanguageProvider, useI18n } from '../../i18n/LanguageContext';
+import { ToastProvider } from '../ToastContext';
 import { login as apiLogin } from '../../utils/api';
 
 function LoginModal() {
@@ -65,7 +66,7 @@ function LoginModal() {
           <h2 className="text-sm font-bold text-white">{t('loginTitle')}</h2>
           <button
             onClick={() => setLoginOpen(false)}
-            className="w-6 h-6 flex items-center justify-center rounded text-slate-500 hover:text-slate-300 transition-colors"
+            className="w-6 h-6 flex items-center justify-center rounded text-slate-400 hover:text-slate-300 transition-colors"
             aria-label="Close"
           >
             ✕
@@ -99,7 +100,7 @@ function LoginModal() {
               href="/manual.html"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[11px] text-slate-500 hover:underline"
+              className="text-[11px] text-slate-400 hover:underline"
             >
               {t('manual')}
             </a>
@@ -114,7 +115,7 @@ function LoginModal() {
             placeholder={t('apiKeyPlaceholder')}
             type="password"
             autoFocus
-            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-brand-500 placeholder-slate-500 transition-colors"
+            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-brand-500 placeholder-slate-400 transition-colors"
             aria-label={t('apiKeyPlaceholder')}
           />
           {loginError && (
@@ -138,14 +139,16 @@ export default function AppShell() {
   return (
     <SystemHealthProvider>
       <LanguageProvider>
-        <div className="w-screen h-screen overflow-hidden flex flex-col bg-slate-950 text-slate-300">
-          <TopHeader />
-          <main className="flex-1 overflow-y-auto bg-slate-950" data-agent-role="main-content">
-            <Outlet />
-          </main>
-          <Footer />
-          <LoginModal />
-        </div>
+        <ToastProvider>
+          <div className="w-screen h-screen overflow-hidden flex flex-col bg-slate-950 text-slate-300">
+            <TopHeader />
+            <main className="flex-1 overflow-y-auto bg-slate-950" data-agent-role="main-content">
+              <Outlet />
+            </main>
+            <Footer />
+            <LoginModal />
+          </div>
+        </ToastProvider>
       </LanguageProvider>
     </SystemHealthProvider>
   );

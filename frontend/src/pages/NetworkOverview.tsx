@@ -60,7 +60,7 @@ export default function NetworkOverview() {
               {t('heroSubtitle')}
             </p>
           </div>
-          <div className="flex items-center gap-3 text-[10px] text-slate-400 shrink-0">
+          <div className="flex items-center gap-3 text-[12px] text-slate-400 shrink-0">
             <span className="hidden sm:inline font-mono">
               API <b className={health.backend === 'ok' ? 'text-green-400' : 'text-red-400'}>{health.backend === 'ok' ? 'OK' : 'DOWN'}</b>
               {' · '}DB <b className={health.database === 'up' ? 'text-green-400' : 'text-red-400'}>{health.database === 'up' ? 'UP' : 'DOWN'}</b>
@@ -82,20 +82,20 @@ export default function NetworkOverview() {
         <div className="flex items-center gap-1">
           <button
             onClick={() => setPrimary('network')}
-            className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-colors ${
+            className={`px-2.5 py-1 text-[12px] font-medium rounded-md transition-colors ${
               primary === 'network'
                 ? 'bg-brand-500 text-white'
-                : 'text-slate-500 hover:text-brand-400'
+                : 'text-slate-400 hover:text-brand-400'
             }`}
           >
             {t('network').toUpperCase()}
           </button>
           <button
             onClick={() => setPrimary('data')}
-            className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-colors ${
+            className={`px-2.5 py-1 text-[12px] font-medium rounded-md transition-colors ${
               primary === 'data'
                 ? 'bg-brand-500 text-white'
-                : 'text-slate-500 hover:text-brand-400'
+                : 'text-slate-400 hover:text-brand-400'
             }`}
           >
             {t('data').toUpperCase()}
@@ -108,10 +108,10 @@ export default function NetworkOverview() {
               <button
                 key={tab.key}
                 onClick={() => setDataView(tab.key)}
-                className={`px-2 py-1 text-[10px] font-medium rounded-md transition-colors ${
+                className={`px-2 py-1 text-[12px] font-medium rounded-md transition-colors ${
                   dataView === tab.key
                     ? 'bg-slate-700 text-white'
-                    : 'text-slate-500 hover:text-brand-400'
+                    : 'text-slate-400 hover:text-brand-400'
                 }`}
               >
                 {tab.label}
@@ -120,16 +120,16 @@ export default function NetworkOverview() {
           </div>
         )}
 
-        <div className="ml-auto flex items-center gap-3 text-[10px]">
+        <div className="ml-auto flex items-center gap-3 text-[12px]">
           <button
             onClick={() => setFeedOpen(o => !o)}
-            className={`flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-md transition-colors ${
-              feedOpen ? 'bg-cyan-500/15 text-cyan-400' : 'text-slate-500 hover:text-cyan-400'
+            className={`flex items-center gap-1 px-2 py-1 text-[12px] font-medium rounded-md transition-colors ${
+              feedOpen ? 'bg-cyan-500/15 text-cyan-400' : 'text-slate-400 hover:text-cyan-400'
             }`}
           >
             📡 {t('live')}
           </button>
-          <span className="text-slate-500">
+          <span className="text-slate-400">
             {agents.length} {t('agentsOnline')}
           </span>
           <div
@@ -151,7 +151,7 @@ export default function NetworkOverview() {
               {!getToken() && !showMap ? (
                 <LiveNetworkPanel onOpenMap={() => setShowMap(true)} />
               ) : (
-                <React.Suspense fallback={<div className="h-full flex items-center justify-center text-xs text-slate-500">{t('loading')}</div>}>
+                <React.Suspense fallback={<div className="h-full flex items-center justify-center text-xs text-slate-400">{t('loading')}</div>}>
                   <NetworkMap />
                 </React.Suspense>
               )}
@@ -203,7 +203,7 @@ export default function NetworkOverview() {
             )}
           </div>
         ) : (
-          <React.Suspense fallback={<div className="h-full flex items-center justify-center text-xs text-slate-500">{t('loading')}</div>}>
+          <React.Suspense fallback={<div className="h-full flex items-center justify-center text-xs text-slate-400">{t('loading')}</div>}>
             {dataView === 'galaxy' && <GalaxyView nodes={galaxyNodes} edges={galaxyEdges} />}
             {dataView === 'topology' && <TopologyView />}
             {dataView === 'osint' && <OsintFeedView />}

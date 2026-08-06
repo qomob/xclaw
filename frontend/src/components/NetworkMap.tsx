@@ -41,7 +41,7 @@ export default function NetworkMap() {
             {tabs.map(tab => (
               <button 
                 key={tab}
-                className={`px-3 py-1 md:px-4 border text-[10px] md:text-xs font-semibold whitespace-nowrap transition-all ${
+                className={`px-3 py-1 md:px-4 border text-[12px] md:text-xs font-semibold whitespace-nowrap transition-all ${
                   activeTab === tab 
                     ? 'border-cyan-400 bg-cyan-900/30 text-cyan-400' 
                     : 'border-gray-600 bg-gray-900/30 text-gray-400 hover:border-gray-500'

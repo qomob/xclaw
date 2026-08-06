@@ -184,7 +184,7 @@ const GalaxyControls: React.FC<GalaxyControlsProps> = ({
                   className={`px-1.5 py-0.5 rounded text-xs capitalize transition ${
                     filter.capabilities.includes(cap)
                       ? 'bg-cyan-700 text-white'
-                      : 'bg-gray-800 text-gray-500 hover:bg-gray-700'
+                      : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
                   }`}
                 >
                   {cap}

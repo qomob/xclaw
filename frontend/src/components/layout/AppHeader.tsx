@@ -53,14 +53,14 @@ export default function AppHeader() {
       <div className="flex items-center gap-3">
         <img src="/XClaw_logo.png" alt="XClaw" className="h-6 w-auto" />
         <div
-          className="hidden sm:flex items-center gap-2 text-[10px] text-slate-400"
+          className="hidden sm:flex items-center gap-2 text-[12px] text-slate-400"
           data-agent-role="network-status"
           title={`Backend ${health.backend} · DB ${health.database} · Redis ${health.redis} · last check ${health.lastCheck ? new Date(health.lastCheck).toLocaleTimeString() : '—'}`}
         >
           <StatusDot ok={health.backend === 'ok'} label="API" />
           <StatusDot ok={health.database === 'up'} label="DB" />
           <StatusDot ok={health.redis === 'up'} label="REDIS" />
-          <span className="text-slate-500">
+          <span className="text-slate-400">
             {health.agentsOnline} AGENTS
           </span>
         </div>
@@ -74,7 +74,7 @@ export default function AppHeader() {
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             placeholder="Search agents, skills, tasks..."
-            className="flex-1 bg-transparent text-xs outline-none text-white placeholder-slate-500"
+            className="flex-1 bg-transparent text-xs outline-none text-white placeholder-slate-400"
             aria-label="Search keywords"
           />
         </div>
@@ -88,7 +88,7 @@ export default function AppHeader() {
         {authenticated ? (
           <button
             onClick={handleLogout}
-            className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] transition-colors bg-green-900/20 border border-green-800/40 text-green-400 hover:bg-green-900/30"
+            className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[12px] transition-colors bg-green-900/20 border border-green-800/40 text-green-400 hover:bg-green-900/30"
             aria-label="Authenticated, click to logout"
             data-agent-role="auth-status"
           >
@@ -98,7 +98,7 @@ export default function AppHeader() {
         ) : (
           <button
             onClick={() => window.dispatchEvent(new CustomEvent('xclaw:request-login'))}
-            className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] transition-colors bg-slate-800 text-slate-400 hover:text-brand-400"
+            className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[12px] transition-colors bg-slate-800 text-slate-400 hover:text-brand-400"
             aria-label="Open login dialog"
           >
             LOGIN

@@ -11,6 +11,7 @@ import {
   clearStoredAdminKey,
 } from '../utils/adminApi';
 import { useI18n } from '../i18n/LanguageContext';
+import { fmtDateTime } from '../utils/format';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -279,7 +280,7 @@ export default function AdminDashboard() {
               </svg>
             </div>
             <h1 className="text-lg sm:text-xl font-bold text-white tracking-wide">XClaw Admin Console</h1>
-            <p className="text-slate-500 text-xs sm:text-sm mt-1">Enter admin API Key to continue</p>
+            <p className="text-slate-400 text-xs sm:text-sm mt-1">Enter admin API Key to continue</p>
           </div>
 
           {authError && (
@@ -295,7 +296,7 @@ export default function AdminDashboard() {
               onChange={(e) => setInputKey(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
               placeholder="Enter Admin API Key"
-              className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg bg-[#0B0F19] border border-slate-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/30 transition-colors"
+              className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg bg-[#0B0F19] border border-slate-700 text-white placeholder-slate-400 text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/30 transition-colors"
             />
             <button
               onClick={handleLogin}
@@ -339,7 +340,7 @@ export default function AdminDashboard() {
             </span>{' '}
             Admin Dashboard
           </h1>
-          <p className="text-slate-500 text-xs sm:text-sm mt-1">System Admin Console · Real-time Monitoring</p>
+          <p className="text-slate-400 text-xs sm:text-sm mt-1">System Admin Console · Real-time Monitoring</p>
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
           <button
@@ -374,7 +375,7 @@ export default function AdminDashboard() {
               className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-medium rounded-t-lg whitespace-nowrap transition-colors shrink-0 ${
                 activeTab === tab.id
                   ? `text-white bg-slate-800/60 border-b-2 border-${tab.color}-500`
-                  : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/30'
+                  : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/30'
               }`}
             >
               {tab.label}
@@ -404,7 +405,7 @@ export default function AdminDashboard() {
           >
             <div className={`absolute top-0 right-0 w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br ${card.color} opacity-10 -translate-y-4 translate-x-4 group-hover:opacity-20 transition-opacity`} />
             <div className="text-xl sm:text-2xl mb-1 sm:mb-2">{card.icon}</div>
-            <div className="text-[10px] sm:text-xs text-slate-500 uppercase tracking-wider mb-0.5 sm:mb-1">{card.label}</div>
+            <div className="text-[12px] sm:text-xs text-slate-400 uppercase tracking-wider mb-0.5 sm:mb-1">{card.label}</div>
             <div className="text-lg sm:text-2xl font-bold text-white">{card.value}</div>
           </div>
         ))}
@@ -416,7 +417,7 @@ export default function AdminDashboard() {
         <div className="xl:col-span-2 rounded-lg sm:rounded-xl border border-slate-700/60 bg-[#111827] p-3 sm:p-5">
           <div className="flex items-center justify-between mb-3 sm:mb-4">
             <h2 className="text-xs sm:text-sm font-semibold text-white uppercase tracking-wider">{t('admEventTrends')}</h2>
-            <span className="text-[10px] sm:text-xs text-slate-500">
+            <span className="text-[12px] sm:text-xs text-slate-400">
               {dashboard ? `${dashboard.today_events} ${t('admEventsToday')}` : '—'}
             </span>
           </div>
@@ -424,7 +425,7 @@ export default function AdminDashboard() {
           {/* Bar chart with divs */}
           <div className="flex items-end gap-0.5 sm:gap-1 h-28 sm:h-40">
             {hourBuckets.length === 0 && !loading && (
-              <div className="flex-1 flex items-center justify-center text-slate-600 text-xs sm:text-sm h-full">
+              <div className="flex-1 flex items-center justify-center text-slate-400 text-xs sm:text-sm h-full">
                 {t('admNoEventData')}
               </div>
             )}
@@ -432,7 +433,7 @@ export default function AdminDashboard() {
               const pct = (b.count / maxBucket) * 100;
               return (
                 <div key={b.hour} className="flex-1 flex flex-col items-center justify-end h-full group/bar">
-                  <span className="text-[8px] sm:text-[10px] text-slate-500 mb-0.5 sm:mb-1 opacity-0 group-hover/bar:opacity-100 transition-opacity">
+                  <span className="text-[12px] sm:text-[12px] text-slate-400 mb-0.5 sm:mb-1 opacity-0 group-hover/bar:opacity-100 transition-opacity">
                     {b.count}
                   </span>
                   <div
@@ -440,7 +441,7 @@ export default function AdminDashboard() {
                     style={{ height: `${Math.max(pct, 2)}%` }}
                     title={`${b.hour} — ${b.count} events`}
                   />
-                  <span className="text-[8px] sm:text-[9px] text-slate-600 mt-0.5 sm:mt-1 hidden sm:block select-none">
+                  <span className="text-[12px] sm:text-[11px] text-slate-400 mt-0.5 sm:mt-1 hidden sm:block select-none">
                     {b.hour.slice(0, 2)}
                   </span>
                 </div>
@@ -452,7 +453,7 @@ export default function AdminDashboard() {
           <div className="flex gap-0.5 sm:gap-1 mt-1">
             {hourBuckets.map((b, i) => (
               <div key={b.hour} className="flex-1 text-center">
-                <span className={`text-[8px] sm:text-[9px] select-none ${i % 3 === 0 ? 'text-slate-500' : 'text-transparent'}`}>
+                <span className={`text-[12px] sm:text-[11px] select-none ${i % 3 === 0 ? 'text-slate-400' : 'text-transparent'}`}>
                   {b.hour}
                 </span>
               </div>
@@ -465,19 +466,19 @@ export default function AdminDashboard() {
           <h2 className="text-xs sm:text-sm font-semibold text-white uppercase tracking-wider mb-3 sm:mb-4">Quick Info</h2>
           <div className="space-y-3">
             <div className="flex items-center justify-between py-2 border-b border-slate-800">
-              <span className="text-slate-500 text-sm">Active Webhooks</span>
+              <span className="text-slate-400 text-sm">Active Webhooks</span>
               <span className="text-white font-semibold">{dashboard?.active_webhooks ?? '—'}</span>
             </div>
             <div className="flex items-center justify-between py-2 border-b border-slate-800">
-              <span className="text-slate-500 text-sm">Events Today</span>
+              <span className="text-slate-400 text-sm">Events Today</span>
               <span className="text-white font-semibold">{dashboard?.today_events ?? '—'}</span>
             </div>
             <div className="flex items-center justify-between py-2 border-b border-slate-800">
-              <span className="text-slate-500 text-sm">Recent Events</span>
+              <span className="text-slate-400 text-sm">Recent Events</span>
               <span className="text-white font-semibold">{events.length}</span>
             </div>
             <div className="flex items-center justify-between py-2">
-              <span className="text-slate-500 text-sm">Status</span>
+              <span className="text-slate-400 text-sm">Status</span>
               <span className={`text-sm font-semibold ${loading ? 'text-amber-400' : error ? 'text-red-400' : 'text-emerald-400'}`}>
                 {loading ? '⏳ Loading' : error ? '⚠ Error' : '● OK'}
               </span>
@@ -494,30 +495,30 @@ export default function AdminDashboard() {
           {monitorHealth ? (
             <div className="space-y-3">
               <div className="flex items-center justify-between py-2 border-b border-slate-800">
-                <span className="text-slate-500 text-sm">Status</span>
+                <span className="text-slate-400 text-sm">Status</span>
                 <span className={`text-sm font-semibold ${monitorHealth.status === 'healthy' ? 'text-emerald-400' : 'text-amber-400'}`}>
                   ● {monitorHealth.status}
                 </span>
               </div>
               <div className="flex items-center justify-between py-2 border-b border-slate-800">
-                <span className="text-slate-500 text-sm">CPU</span>
+                <span className="text-slate-400 text-sm">CPU</span>
                 <span className="text-white text-sm">{monitorHealth.cpu_usage?.toFixed(1) ?? '—'}%</span>
               </div>
               <div className="flex items-center justify-between py-2 border-b border-slate-800">
-                <span className="text-slate-500 text-sm">Memory</span>
+                <span className="text-slate-400 text-sm">Memory</span>
                 <span className="text-white text-sm">{monitorHealth.memory_usage ? `${(monitorHealth.memory_usage / 1024 / 1024 / 1024).toFixed(1)}GB` : '—'}</span>
               </div>
               <div className="flex items-center justify-between py-2 border-b border-slate-800">
-                <span className="text-slate-500 text-sm">Uptime</span>
+                <span className="text-slate-400 text-sm">Uptime</span>
                 <span className="text-white text-sm">{formatUptime(monitorHealth.uptime)}</span>
               </div>
               <div className="flex items-center justify-between py-2">
-                <span className="text-slate-500 text-sm">Active Connections</span>
+                <span className="text-slate-400 text-sm">Active Connections</span>
                 <span className="text-white text-sm">{monitorHealth.active_connections ?? '—'}</span>
               </div>
             </div>
           ) : (
-            <div className="text-center py-6 text-slate-600 text-sm">Loading...</div>
+            <div className="text-center py-6 text-slate-400 text-sm">Loading...</div>
           )}
         </div>
 
@@ -528,31 +529,31 @@ export default function AdminDashboard() {
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-lg bg-slate-800/50 p-3 text-center">
-                  <div className="text-xs text-slate-500">Online Nodes</div>
+                  <div className="text-xs text-slate-400">Online Nodes</div>
                   <div className="text-lg font-bold text-cyan-400">{kpis.online_nodes}/{kpis.total_nodes}</div>
                 </div>
                 <div className="rounded-lg bg-slate-800/50 p-3 text-center">
-                  <div className="text-xs text-slate-500">Completed Tasks</div>
+                  <div className="text-xs text-slate-400">Completed Tasks</div>
                   <div className="text-lg font-bold text-emerald-400">{kpis.completed_tasks}/{kpis.total_tasks}</div>
                 </div>
                 <div className="rounded-lg bg-slate-800/50 p-3 text-center">
-                  <div className="text-xs text-slate-500">Federation Nodes</div>
+                  <div className="text-xs text-slate-400">Federation Nodes</div>
                   <div className="text-lg font-bold text-violet-400">{kpis.federation_peers}</div>
                 </div>
                 <div className="rounded-lg bg-slate-800/50 p-3 text-center">
-                  <div className="text-xs text-slate-500">Total Bids</div>
+                  <div className="text-xs text-slate-400">Total Bids</div>
                   <div className="text-lg font-bold text-amber-400">{kpis.total_bids}</div>
                 </div>
               </div>
               {kpis.total_revenue !== undefined && (
                 <div className="flex items-center justify-between py-2 border-t border-slate-800">
-                  <span className="text-slate-500 text-sm">Total Revenue</span>
+                  <span className="text-slate-400 text-sm">Total Revenue</span>
                   <span className="text-white font-semibold">{formatRevenue(kpis.total_revenue)}</span>
                 </div>
               )}
             </div>
           ) : (
-            <div className="text-center py-6 text-slate-600 text-sm">Loading...</div>
+            <div className="text-center py-6 text-slate-400 text-sm">Loading...</div>
           )}
         </div>
 
@@ -563,17 +564,17 @@ export default function AdminDashboard() {
             {/* Redis */}
             {redisInfo && (
               <>
-                <div className="text-xs text-slate-500 uppercase tracking-wider mb-2">Redis</div>
+                <div className="text-xs text-slate-400 uppercase tracking-wider mb-2">Redis</div>
                 <div className="flex items-center justify-between py-1.5 border-b border-slate-800">
-                  <span className="text-slate-500 text-sm">Memory</span>
+                  <span className="text-slate-400 text-sm">Memory</span>
                   <span className="text-white text-sm">{redisInfo.used_memory}</span>
                 </div>
                 <div className="flex items-center justify-between py-1.5 border-b border-slate-800">
-                  <span className="text-slate-500 text-sm">Keys</span>
+                  <span className="text-slate-400 text-sm">Keys</span>
                   <span className="text-white text-sm">{redisInfo.total_keys}</span>
                 </div>
                 <div className="flex items-center justify-between py-1.5 border-b border-slate-800">
-                  <span className="text-slate-500 text-sm">OPS/sec</span>
+                  <span className="text-slate-400 text-sm">OPS/sec</span>
                   <span className="text-white text-sm">{redisInfo.ops_per_sec}</span>
                 </div>
               </>
@@ -581,13 +582,13 @@ export default function AdminDashboard() {
             {/* DB */}
             {dbStats && (
               <>
-                <div className="text-xs text-slate-500 uppercase tracking-wider mt-3 mb-2">Database</div>
+                <div className="text-xs text-slate-400 uppercase tracking-wider mt-3 mb-2">Database</div>
                 <div className="flex items-center justify-between py-1.5 border-b border-slate-800">
-                  <span className="text-slate-500 text-sm">Connections</span>
+                  <span className="text-slate-400 text-sm">Connections</span>
                   <span className="text-white text-sm">{dbStats.total_connections}</span>
                 </div>
                 <div className="flex items-center justify-between py-1.5 border-b border-slate-800">
-                  <span className="text-slate-500 text-sm">Size</span>
+                  <span className="text-slate-400 text-sm">Size</span>
                   <span className="text-white text-sm">{dbStats.database_size_mb?.toFixed(1)}MB</span>
                 </div>
               </>
@@ -595,7 +596,7 @@ export default function AdminDashboard() {
             {/* Alerts */}
             {monitorAlerts.length > 0 && (
               <>
-                <div className="text-xs text-slate-500 uppercase tracking-wider mt-3 mb-2">Alerts ({monitorAlerts.length})</div>
+                <div className="text-xs text-slate-400 uppercase tracking-wider mt-3 mb-2">Alerts ({monitorAlerts.length})</div>
                 {monitorAlerts.slice(0, 5).map((alert, i) => (
                   <div key={alert.id || i} className="flex items-start gap-2 py-1.5 text-sm">
                     <span className={`shrink-0 mt-0.5 w-2 h-2 rounded-full ${
@@ -616,7 +617,7 @@ export default function AdminDashboard() {
         <h2 className="text-xs sm:text-sm font-semibold text-white uppercase tracking-wider mb-3 sm:mb-4">Recent Events</h2>
 
         {events.length === 0 && !loading && (
-          <div className="text-center py-12 text-slate-600 text-sm">
+          <div className="text-center py-12 text-slate-400 text-sm">
             No event records
           </div>
         )}
@@ -626,11 +627,11 @@ export default function AdminDashboard() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-800">
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Time</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Level</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Type</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Source</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Message</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">Time</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">Level</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">Type</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">Source</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">Message</th>
                 </tr>
               </thead>
               <tbody>
@@ -648,7 +649,7 @@ export default function AdminDashboard() {
                       </span>
                     </td>
                     <td className="py-2 px-3 text-slate-300">{ev.type}</td>
-                    <td className="py-2 px-3 text-slate-500 font-mono text-xs">{ev.source || '—'}</td>
+                    <td className="py-2 px-3 text-slate-400 font-mono text-xs">{ev.source || '—'}</td>
                     <td className="py-2 px-3 text-slate-300 max-w-md truncate">{ev.message}</td>
                   </tr>
                 ))}
@@ -660,7 +661,7 @@ export default function AdminDashboard() {
         {loading && (
           <div className="flex items-center justify-center py-8">
             <div className="w-6 h-6 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
-            <span className="ml-3 text-slate-500 text-sm">Loading...</span>
+            <span className="ml-3 text-slate-400 text-sm">Loading...</span>
           </div>
         )}
       </div>
@@ -684,11 +685,11 @@ function TaskMarketPanel({ stats }: { stats: { open_tasks: number; total_bids: n
       <div className="grid grid-cols-2 gap-3 max-w-md">
         <div className="rounded-lg bg-[#111827] border border-slate-700/60 p-4 text-center">
           <div className="text-2xl font-bold text-amber-400">{stats?.open_tasks ?? '—'}</div>
-          <div className="text-xs text-slate-500 mt-1">{t('admOpenTasks')}</div>
+          <div className="text-xs text-slate-400 mt-1">{t('admOpenTasks')}</div>
         </div>
         <div className="rounded-lg bg-[#111827] border border-slate-700/60 p-4 text-center">
           <div className="text-2xl font-bold text-purple-400">{stats?.total_bids ?? '—'}</div>
-          <div className="text-xs text-slate-500 mt-1">{t('admTotalBids')}</div>
+          <div className="text-xs text-slate-400 mt-1">{t('admTotalBids')}</div>
         </div>
       </div>
 
@@ -720,7 +721,7 @@ interface Dispute {
 }
 
 function DisputesPanel({ apiKey }: { apiKey: string }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [disputes, setDisputes] = useState<Dispute[]>([]);
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(true);
@@ -804,10 +805,10 @@ function DisputesPanel({ apiKey }: { apiKey: string }) {
       {loading ? (
         <div className="flex items-center justify-center py-10">
           <div className="w-6 h-6 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
-          <span className="ml-3 text-slate-500 text-sm">{t('pnlLoading')}</span>
+          <span className="ml-3 text-slate-400 text-sm">{t('pnlLoading')}</span>
         </div>
       ) : disputes.length === 0 ? (
-        <div className="rounded-lg bg-[#111827] border border-slate-700/60 p-10 text-center text-sm text-slate-500">
+        <div className="rounded-lg bg-[#111827] border border-slate-700/60 p-10 text-center text-sm text-slate-400">
           {t('admNoDisputes')}{statusFilter ? `: ${statusFilter}` : ''}
         </div>
       ) : (
@@ -817,7 +818,7 @@ function DisputesPanel({ apiKey }: { apiKey: string }) {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h3 className="text-sm font-semibold text-white truncate">{d.title || d.type}</h3>
-                  <p className="text-[10px] font-mono text-slate-500 mt-0.5">
+                  <p className="text-[12px] font-mono text-slate-400 mt-0.5">
                     dispute {d.id.slice(0, 8)}… · task {d.task_id.slice(0, 8)}…
                   </p>
                 </div>
@@ -832,19 +833,19 @@ function DisputesPanel({ apiKey }: { apiKey: string }) {
 
               {d.reason && (
                 <p className="text-xs text-slate-300 mt-2 bg-slate-900/60 rounded p-2.5">
-                  <span className="text-slate-500">{t('admReason')}:</span> {d.reason}
+                  <span className="text-slate-400">{t('admReason')}:</span> {d.reason}
                 </p>
               )}
               {d.evidence && (
                 <p className="text-xs text-slate-400 mt-1.5">
-                  <span className="text-slate-500">{t('admEvidence')}:</span> {d.evidence}
+                  <span className="text-slate-400">{t('admEvidence')}:</span> {d.evidence}
                 </p>
               )}
 
-              <div className="flex flex-wrap items-center gap-2 mt-2.5 text-[10px] text-slate-500">
+              <div className="flex flex-wrap items-center gap-2 mt-2.5 text-[12px] text-slate-400">
                 <span>{t('admEscrow')}: <span className="text-amber-400 font-medium">{d.escrow_amount ?? 0} XCL</span></span>
-                <span>· {t('admOpened')}: {new Date(d.created_at).toLocaleString('zh-CN')}</span>
-                {d.resolved_at && <span>· {t('admResolvedAt')}: {new Date(d.resolved_at).toLocaleString('zh-CN')}</span>}
+                <span>· {t('admOpened')}: {fmtDateTime(d.created_at, lang)}</span>
+                {d.resolved_at && <span>· {t('admResolvedAt')}: {fmtDateTime(d.resolved_at, lang)}</span>}
               </div>
 
               {d.status === 'open' && (

@@ -7,6 +7,7 @@ import {
   validateAdminKey,
 } from '../utils/adminApi';
 import { useI18n } from '../i18n/LanguageContext';
+import { fmtDateTime } from '../utils/format';
 
 type Tab = 'dashboard' | 'monitor' | 'federation' | 'nodes' | 'events';
 
@@ -167,7 +168,7 @@ function AdminKeyGate({ keyInput, setKeyInput, keyError, checking, onSubmit }: {
         onChange={e => setKeyInput(e.target.value)}
         onKeyDown={e => e.key === 'Enter' && onSubmit()}
         placeholder="Admin API Key"
-        className="w-full px-3 py-2 rounded-lg text-sm outline-none bg-slate-800 border border-slate-700 text-white focus:border-brand-500 placeholder-slate-500"
+        className="w-full px-3 py-2 rounded-lg text-sm outline-none bg-slate-800 border border-slate-700 text-white focus:border-brand-500 placeholder-slate-400"
       />
       {keyError && <p className="text-xs text-red-400 mt-2">{keyError}</p>}
       <button
@@ -278,7 +279,7 @@ interface FederationPeer {
 }
 
 function FederationTab({ apiKey }: { apiKey: string }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [status, setStatus] = useState<Record<string, unknown> | null>(null);
   const [peers, setPeers] = useState<FederationPeer[]>([]);
   const [error, setError] = useState('');
@@ -327,10 +328,10 @@ function FederationTab({ apiKey }: { apiKey: string }) {
           <table className="w-full text-sm min-w-[500px]">
             <thead>
               <tr className="border-b border-slate-800">
-                <th className="text-left py-2 px-3 text-slate-500 font-medium">Network</th>
-                <th className="text-left py-2 px-3 text-slate-500 font-medium">Endpoint</th>
-                <th className="text-left py-2 px-3 text-slate-500 font-medium">Status</th>
-                <th className="text-left py-2 px-3 text-slate-500 font-medium">Last Seen</th>
+                <th className="text-left py-2 px-3 text-slate-400 font-medium">Network</th>
+                <th className="text-left py-2 px-3 text-slate-400 font-medium">Endpoint</th>
+                <th className="text-left py-2 px-3 text-slate-400 font-medium">Status</th>
+                <th className="text-left py-2 px-3 text-slate-400 font-medium">Last Seen</th>
               </tr>
             </thead>
             <tbody>
@@ -343,8 +344,8 @@ function FederationTab({ apiKey }: { apiKey: string }) {
                       p.status === 'active' || p.status === 'online' ? 'bg-green-500/20 text-green-400' : 'bg-slate-500/20 text-slate-400'
                     }`}>{String(p.status || 'unknown')}</span>
                   </td>
-                  <td className="py-2 px-3 text-slate-500 text-xs">
-                    {p.last_seen ? new Date(String(p.last_seen)).toLocaleString('zh-CN') : '—'}
+                  <td className="py-2 px-3 text-slate-400 text-xs">
+                    {p.last_seen ? fmtDateTime(String(p.last_seen), lang) : '—'}
                   </td>
                 </tr>
               ))}
@@ -359,7 +360,7 @@ function FederationTab({ apiKey }: { apiKey: string }) {
 // ─── Nodes ──────────────────────────────────────────────────────────────────
 
 function NodesTab({ apiKey }: { apiKey: string }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [nodes, setNodes] = useState<AdminNode[]>([]);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState('');
@@ -398,12 +399,12 @@ function NodesTab({ apiKey }: { apiKey: string }) {
           <table className="w-full text-sm min-w-[640px]">
             <thead>
               <tr className="border-b border-slate-800">
-                <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('pnlName')}</th>
-                <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('admNodeId')}</th>
-                <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('pnlStatus')}</th>
-                <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('admReputation')}</th>
-                <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('admEarnings')}</th>
-                <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('admLastHeartbeat')}</th>
+                <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('pnlName')}</th>
+                <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('admNodeId')}</th>
+                <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('pnlStatus')}</th>
+                <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('admReputation')}</th>
+                <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('admEarnings')}</th>
+                <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('admLastHeartbeat')}</th>
               </tr>
             </thead>
             <tbody>
@@ -418,8 +419,8 @@ function NodesTab({ apiKey }: { apiKey: string }) {
                   </td>
                   <td className="py-2 px-3 text-slate-300 text-xs">{n.reputation_score != null ? n.reputation_score.toFixed(2) : '—'}</td>
                   <td className="py-2 px-3 text-brand-400 text-xs">{n.total_earnings != null ? `${n.total_earnings} XCL` : '—'}</td>
-                  <td className="py-2 px-3 text-slate-500 text-xs">
-                    {n.last_heartbeat ? new Date(n.last_heartbeat).toLocaleString('zh-CN') : '—'}
+                  <td className="py-2 px-3 text-slate-400 text-xs">
+                    {n.last_heartbeat ? fmtDateTime(n.last_heartbeat, lang) : '—'}
                   </td>
                 </tr>
               ))}
@@ -434,7 +435,7 @@ function NodesTab({ apiKey }: { apiKey: string }) {
 // ─── Events ─────────────────────────────────────────────────────────────────
 
 function EventsTab({ apiKey }: { apiKey: string }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [events, setEvents] = useState<AdminEvent[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -472,13 +473,13 @@ function EventsTab({ apiKey }: { apiKey: string }) {
             <div key={ev.id} className={`${card} p-3`}>
               <div className="flex items-center justify-between">
                 <span className="text-xs font-mono text-brand-400">{ev.event_type || ev.type}</span>
-                <span className="text-[10px] text-slate-500">
-                  {new Date(ev.created_at || ev.timestamp || '').toLocaleString('zh-CN')}
+                <span className="text-[12px] text-slate-400">
+                  {fmtDateTime(ev.created_at || ev.timestamp || '', lang)}
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-1">{ev.message}</p>
               {ev.source_id && (
-                <p className="text-[10px] text-slate-500 mt-1 font-mono">source: {ev.source_id.slice(0, 12)}...</p>
+                <p className="text-[12px] text-slate-400 mt-1 font-mono">source: {ev.source_id.slice(0, 12)}...</p>
               )}
             </div>
           ))}
@@ -494,7 +495,7 @@ function Stat({ label, value, valueClass = 'text-white' }: { label: string; valu
   return (
     <div className="rounded-lg bg-slate-800 p-3 text-center">
       <div className={`text-lg font-bold ${valueClass}`}>{value}</div>
-      <div className="text-[10px] text-slate-400">{label}</div>
+      <div className="text-[12px] text-slate-400">{label}</div>
     </div>
   );
 }

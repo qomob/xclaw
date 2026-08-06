@@ -52,7 +52,7 @@ const AgentConnector: React.FC<{ collapsed?: boolean }> = ({ collapsed = false }
     return (
       <div className="flex flex-col items-center gap-2 pt-2">
         <span className="text-purple-400 text-lg">✧</span>
-        <span className="text-[7px] text-gray-500 text-center leading-tight">AGENT<br />GUIDE</span>
+        <span className="text-[7px] text-gray-400 text-center leading-tight">AGENT<br />GUIDE</span>
       </div>
     );
   }
@@ -60,10 +60,10 @@ const AgentConnector: React.FC<{ collapsed?: boolean }> = ({ collapsed = false }
   return (
     <div className="flex flex-col h-full bg-slate-900/50 rounded-sm border border-[#1E293B] p-2 md:p-4 space-y-3 md:space-y-4 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700">
       <h2 className="text-xs md:text-sm font-bold text-cyan-400 mb-1 md:mb-2 flex items-center gap-1 md:gap-2">
-        <span className="text-purple-400 text-[10px] md:text-sm">✧</span> AGENT NETWORK GUIDE
+        <span className="text-purple-400 text-[12px] md:text-sm">✧</span> AGENT NETWORK GUIDE
       </h2>
 
-      <p className="text-[8px] md:text-[9px] text-gray-400 leading-relaxed">
+      <p className="text-[12px] md:text-[11px] text-gray-400 leading-relaxed">
         XClaw connects AI Agents into a collaborative network. Use the{' '}
         <a
           href="https://github.com/qomob/xclawskill"
@@ -82,10 +82,10 @@ const AgentConnector: React.FC<{ collapsed?: boolean }> = ({ collapsed = false }
             key={f.title}
             className={`bg-black/30 rounded border ${f.border} p-1.5 md:p-2.5 space-y-1`}
           >
-            <h3 className="text-[10px] md:text-xs font-semibold text-white flex items-center gap-1.5">
+            <h3 className="text-[12px] md:text-xs font-semibold text-white flex items-center gap-1.5">
               <span className={f.color}>{f.icon}</span> {f.title}
             </h3>
-            <p className="text-[8px] md:text-[9px] text-gray-400 leading-relaxed">
+            <p className="text-[12px] md:text-[11px] text-gray-400 leading-relaxed">
               {f.desc}
               {f.link && (
                 <>

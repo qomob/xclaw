@@ -35,9 +35,9 @@ function LangToggle({ lang, toggleLang, compact = false }: { lang: Lang; toggleL
       aria-label="Switch language / 切换语言"
       title={lang === 'zh' ? 'English' : '中文'}
     >
-      <span className={lang === 'zh' ? 'text-brand-400 font-bold' : 'text-slate-500'}>中</span>
-      <span className="text-slate-600">/</span>
-      <span className={lang === 'en' ? 'text-brand-400 font-bold' : 'text-slate-500'}>EN</span>
+      <span className={lang === 'zh' ? 'text-brand-400 font-bold' : 'text-slate-400'}>中</span>
+      <span className="text-slate-400">/</span>
+      <span className={lang === 'en' ? 'text-brand-400 font-bold' : 'text-slate-400'}>EN</span>
     </button>
   );
 }
@@ -165,12 +165,19 @@ export default function TopHeader() {
         <div className="ml-auto flex items-center gap-2 md:gap-3">
           {/* 系统状态点 */}
           <div
-            className={`hidden md:block w-2 h-2 rounded-full ${
-              health.status === 'ok' ? 'bg-green-500' : health.status === 'degraded' ? 'bg-amber-500' : 'bg-red-500'
-            }`}
+            className="hidden md:flex items-center gap-1.5"
             title={`API ${health.backend} · DB ${health.database} · Redis ${health.redis}`}
-            aria-label="System status"
-          />
+          >
+            <span
+              className={`w-2 h-2 rounded-full ${
+                health.status === 'ok' ? 'bg-green-500' : health.status === 'degraded' ? 'bg-amber-500' : 'bg-red-500'
+              }`}
+              aria-hidden="true"
+            />
+            <span className="text-[11px] text-slate-400 hidden xl:inline">
+              {health.status === 'ok' ? t('systemOperational') : health.status === 'degraded' ? t('systemDegraded') : t('systemUnreachable')}
+            </span>
+          </div>
 
           <LangToggle lang={lang} toggleLang={toggleLang} />
 

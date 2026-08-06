@@ -107,7 +107,7 @@ export default function MCPPanel() {
         ].map(c => (
           <div key={c.label} className="bg-gray-800/50 rounded-lg sm:rounded-xl p-2.5 sm:p-4 border border-gray-700/50">
             <div className="text-lg sm:text-2xl mb-0.5 sm:mb-1">{c.icon}</div>
-            <div className="text-[9px] sm:text-xs text-slate-500 uppercase tracking-wider">{c.label}</div>
+            <div className="text-[11px] sm:text-xs text-slate-400 uppercase tracking-wider">{c.label}</div>
             <div className="text-xl sm:text-3xl font-bold text-green-400 mt-0.5 sm:mt-1">{c.value}</div>
           </div>
         ))}
@@ -121,9 +121,9 @@ export default function MCPPanel() {
             <table className="w-full text-sm min-w-[400px]">
               <thead>
                 <tr className="border-b border-gray-700">
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('pnlName')}</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('mcpEndpoint')}</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('pnlStatus')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('pnlName')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('mcpEndpoint')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('pnlStatus')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -142,7 +142,7 @@ export default function MCPPanel() {
             </table>
           </div>
         ) : (
-          <div className="text-center py-6 text-slate-600 text-sm">{t('pnlNoServers')}</div>
+          <div className="text-center py-6 text-slate-400 text-sm">{t('pnlNoServers')}</div>
         )}
       </div>
 
@@ -154,13 +154,13 @@ export default function MCPPanel() {
             {tools.map((t, i) => (
               <div key={i} className="bg-gray-900/50 rounded-lg p-3">
                 <div className="text-sm text-white font-medium">{t.name}</div>
-                <div className="text-xs text-slate-500">{t.server_name ?? '—'}</div>
+                <div className="text-xs text-slate-400">{t.server_name ?? '—'}</div>
                 {t.description && <div className="text-xs text-slate-400 mt-1">{t.description}</div>}
               </div>
             ))}
           </div>
         ) : (
-          <div className="text-center py-6 text-slate-600 text-sm">{t('pnlNoTools')}</div>
+          <div className="text-center py-6 text-slate-400 text-sm">{t('pnlNoTools')}</div>
         )}
       </div>
 
@@ -173,28 +173,28 @@ export default function MCPPanel() {
             value={regForm.name}
             onChange={e => setRegForm(f => ({ ...f, name: e.target.value }))}
             placeholder={t('mcpServerName')}
-            className="px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-green-500"
+            className="px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-400 text-sm focus:outline-none focus:border-green-500"
           />
           <input
             type="text"
             value={regForm.endpoint}
             onChange={e => setRegForm(f => ({ ...f, endpoint: e.target.value }))}
             placeholder={t('mcpEndpoint')}
-            className="px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-green-500"
+            className="px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-400 text-sm focus:outline-none focus:border-green-500"
           />
           <input
             type="text"
             value={regForm.description}
             onChange={e => setRegForm(f => ({ ...f, description: e.target.value }))}
             placeholder={t('mcpDescPlaceholder')}
-            className="px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-green-500"
+            className="px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-400 text-sm focus:outline-none focus:border-green-500"
           />
           <input
             type="text"
             value={regForm.capabilities}
             onChange={e => setRegForm(f => ({ ...f, capabilities: e.target.value }))}
             placeholder={t('mcpCaps')}
-            className="px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-green-500"
+            className="px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-400 text-sm focus:outline-none focus:border-green-500"
           />
         </div>
         <div className="flex items-center gap-3">
@@ -217,17 +217,17 @@ export default function MCPPanel() {
             <table className="w-full text-sm min-w-[500px]">
               <thead>
                 <tr className="border-b border-gray-700">
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('pnlTime')}</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('mcpServerName')}</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('mcpTool')}</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('pnlStatus')}</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('pnlDuration')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('pnlTime')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('mcpServerName')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('mcpTool')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('pnlStatus')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('pnlDuration')}</th>
                 </tr>
               </thead>
               <tbody>
                 {logs.map((log, i) => (
                   <tr key={log.id || i} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                    <td className="py-2 px-3 text-slate-500 text-xs whitespace-nowrap">
+                    <td className="py-2 px-3 text-slate-400 text-xs whitespace-nowrap">
                       {new Date(log.timestamp).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                     </td>
                     <td className="py-2 px-3 text-green-300 text-xs">{log.server_name}</td>
@@ -244,7 +244,7 @@ export default function MCPPanel() {
             </table>
           </div>
         ) : (
-          <div className="text-center py-6 text-slate-600 text-sm">{t('pnlNoLogs')}</div>
+          <div className="text-center py-6 text-slate-400 text-sm">{t('pnlNoLogs')}</div>
         )}
       </div>
     </div>

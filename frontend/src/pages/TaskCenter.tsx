@@ -6,6 +6,8 @@ import {
   cancelMarketTask, fetchMarketTask, getAgentIdFromToken,
 } from '../utils/api';
 import { useI18n } from '../i18n/LanguageContext';
+import { fmtDate } from '../utils/format';
+import { ErrorState, EmptyState, LoadingState } from '../components/StateNotice';
 
 type Tab = 'my-tasks' | 'market' | 'create';
 
@@ -62,12 +64,13 @@ const card = 'bg-slate-900 border border-slate-800 rounded-xl';
 const textSecondary = 'text-slate-400';
 
 export default function TaskCenter() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [tab, setTab] = useState<Tab>('my-tasks');
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [marketTasks, setMarketTasks] = useState<MarketTaskItem[]>([]);
   const [marketStats, setMarketStats] = useState<{ open_tasks: number; total_bids: number } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [taskStatusFilter, setTaskStatusFilter] = useState('');
 
   const [createForm, setCreateForm] = useState({ title: '', description: '', type: 'general', target_agent_id: '', priority: 'normal' });
@@ -115,18 +118,22 @@ export default function TaskCenter() {
 
   const loadTasks = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const params: Record<string, string> = { limit: '30' };
       if (taskStatusFilter) params.status = taskStatusFilter;
       const res = await fetchTasks(params);
       if (res.success) setTasks(res.data || []);
-    } catch { /* ignore */ } finally {
+    } catch {
+      setLoadError(true);
+    } finally {
       setLoading(false);
     }
   }, [taskStatusFilter]);
 
   const loadMarket = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const [tasksRes, statsRes] = await Promise.allSettled([
         browseTaskMarket({ limit: 30 }),
@@ -138,10 +145,26 @@ export default function TaskCenter() {
       if (statsRes.status === 'fulfilled' && statsRes.value.success) {
         setMarketStats(statsRes.value.data);
       }
+    } catch {
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const catLabel = (c?: string) =>
+    ({
+      general: t('catGeneral'),
+      development: t('catDevelopment'),
+      research: t('catResearch'),
+      writing: t('catWriting'),
+      analysis: t('catAnalysis'),
+      design: t('catDesign'),
+      data: t('catData'),
+    }[c || ''] || c || '—');
+
+  const stratLabel = (s?: string) =>
+    ({ auto: t('stratAuto'), bid: t('stratBid'), manual: t('stratManual') }[s || ''] || s || '—');
 
   const openDetail = useCallback(async (taskId: string) => {
     setDetailLoading(true);
@@ -359,6 +382,7 @@ export default function TaskCenter() {
         actionMsg={actionMsg}
         myAgentId={myAgentId}
         statusLabel={statusLabel}
+        stratLabel={stratLabel}
         bidPrice={bidPrice}
         setBidPrice={setBidPrice}
         bidDuration={bidDuration}
@@ -416,7 +440,7 @@ export default function TaskCenter() {
               <button
                 key={s}
                 onClick={() => setTaskStatusFilter(s)}
-                className={`px-2 py-1 text-[10px] rounded ${
+                className={`px-2 py-1 text-[12px] rounded ${
                   taskStatusFilter === s
                     ? 'bg-brand-500 text-white'
                     : 'bg-slate-800 text-slate-400'
@@ -426,10 +450,22 @@ export default function TaskCenter() {
               </button>
             ))}
           </div>
-          {loading ? (
-            <div className="text-center py-12 text-slate-400">{t('tcLoading')}</div>
+          {loadError ? (
+            <ErrorState onRetry={loadTasks} />
+          ) : loading ? (
+            <LoadingState />
           ) : tasks.length === 0 ? (
-            <div className={`${card} p-8 text-center text-xs text-slate-400`}>{t('tcNoTasks')}</div>
+            <EmptyState
+              message={t('emptyTasks')}
+              action={
+                <button
+                  onClick={() => setTab('create')}
+                  className="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 text-white text-[11px] rounded-lg transition-colors"
+                >
+                  {t('tcCreate')}
+                </button>
+              }
+            />
           ) : (
             <div className="space-y-2">
               {tasks.map(task => (
@@ -439,27 +475,27 @@ export default function TaskCenter() {
                       <span className="text-xs font-medium text-white">
                         {task.type}
                       </span>
-                      <span className="ml-2 text-[10px] font-mono text-slate-400">
+                      <span className="ml-2 text-[12px] font-mono text-slate-400">
                         {task.id.slice(0, 8)}...
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={`text-[10px] font-medium ${statusColor(task.status)}`}>
+                      <span className={`text-[12px] font-medium ${statusColor(task.status)}`}>
                         {statusLabel(task.status)}
                       </span>
-                      <span className="text-[10px] text-slate-400">
-                        {new Date(task.created_at).toLocaleDateString('zh-CN')}
+                      <span className="text-[12px] text-slate-400">
+                        {fmtDate(task.created_at, lang)}
                       </span>
                       <button
                         onClick={() => openDetail(task.id)}
-                        className="text-[10px] px-2 py-1 rounded bg-slate-800 text-brand-400 hover:bg-slate-700 transition-colors"
+                        className="text-[12px] px-2 py-1 rounded bg-slate-800 text-brand-400 hover:bg-slate-700 transition-colors"
                       >
                         {t('details')}
                       </button>
                     </div>
                   </div>
                   {task.payload && (
-                    <p className="text-[10px] mt-1 text-slate-400 truncate">
+                    <p className="text-[12px] mt-1 text-slate-400 truncate">
                       {JSON.stringify(task.payload).slice(0, 100)}
                     </p>
                   )}
@@ -476,18 +512,30 @@ export default function TaskCenter() {
             <div className="grid grid-cols-2 gap-3 shrink-0">
               <div className={`${card} p-3 text-center`}>
                 <div className="text-lg font-bold text-brand-400">{marketStats.open_tasks}</div>
-                <div className="text-[10px] text-slate-400">{t('tcOpenTasks')}</div>
+                <div className="text-[12px] text-slate-400">{t('tcOpenTasks')}</div>
               </div>
               <div className={`${card} p-3 text-center`}>
                 <div className="text-lg font-bold text-purple-400">{marketStats.total_bids}</div>
-                <div className="text-[10px] text-slate-400">{t('tcTotalBids')}</div>
+                <div className="text-[12px] text-slate-400">{t('tcTotalBids')}</div>
               </div>
             </div>
           )}
-          {loading ? (
-            <div className="text-center py-12 text-slate-400">{t('tcLoading')}</div>
+          {loadError ? (
+            <ErrorState onRetry={loadMarket} />
+          ) : loading ? (
+            <LoadingState />
           ) : marketTasks.length === 0 ? (
-            <div className={`${card} p-8 text-center text-xs text-slate-400`}>{t('tcNoMarketTasks')}</div>
+            <EmptyState
+              message={t('emptyTasks')}
+              action={
+                <button
+                  onClick={() => setTab('create')}
+                  className="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 text-white text-[11px] rounded-lg transition-colors"
+                >
+                  {t('tcCreateMarket')}
+                </button>
+              }
+            />
           ) : (
             <div className="space-y-2">
               {marketTasks.map(task => (
@@ -496,28 +544,28 @@ export default function TaskCenter() {
                     <h3 className="text-xs font-medium text-white">
                       {task.title}
                     </h3>
-                    <span className={`text-[10px] ${statusColor(task.status)}`}>{statusLabel(task.status)}</span>
+                    <span className={`text-[12px] ${statusColor(task.status)}`}>{statusLabel(task.status)}</span>
                   </div>
                   {task.description && (
-                    <p className="text-[10px] mt-1 text-slate-400 line-clamp-2">{task.description}</p>
+                    <p className="text-[12px] mt-1 text-slate-400 line-clamp-2">{task.description}</p>
                   )}
                   <div className="flex items-center gap-3 mt-1">
                     {task.budget_min !== undefined && (
-                      <span className="text-[10px] text-brand-400">
+                      <span className="text-[12px] text-brand-400">
                         💰 {task.budget_min}-{task.budget_max} XCL
                       </span>
                     )}
                     {task.bid_count !== undefined && (
-                      <span className="text-[10px] text-slate-400">
+                      <span className="text-[12px] text-slate-400">
                         {task.bid_count} {t('tcBids').toLowerCase()}
                       </span>
                     )}
                     {task.caller_name && (
-                      <span className="text-[10px] text-slate-500">{t('tcCaller')}: {task.caller_name}</span>
+                      <span className="text-[12px] text-slate-400">{t('tcCaller')}: {task.caller_name}</span>
                     )}
                     {task.assignment_strategy && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-500/20 text-slate-400">
-                        {task.assignment_strategy}
+                      <span className="text-[12px] px-1.5 py-0.5 rounded bg-slate-500/20 text-slate-400">
+                        {stratLabel(task.assignment_strategy)}
                       </span>
                     )}
                   </div>
@@ -567,10 +615,10 @@ export default function TaskCenter() {
                 onChange={e => setCreateForm(f => ({ ...f, priority: e.target.value }))}
                 className="w-full px-3 py-2 rounded-lg text-sm outline-none bg-slate-800 border border-slate-700 text-white"
               >
-                <option value="low">Low</option>
-                <option value="normal">Normal</option>
-                <option value="high">High</option>
-                <option value="critical">Critical</option>
+                <option value="low">{t('prioLow')}</option>
+                <option value="normal">{t('prioNormal')}</option>
+                <option value="high">{t('prioHigh')}</option>
+                <option value="critical">{t('prioCritical')}</option>
               </select>
               <div className="flex items-center gap-3">
                 <button
@@ -610,8 +658,8 @@ export default function TaskCenter() {
                   onChange={e => setMarketForm(f => ({ ...f, category: e.target.value }))}
                   className="w-full px-3 py-2 rounded-lg text-sm outline-none bg-slate-800 border border-slate-700 text-white"
                 >
-                  {['general', 'development', 'research', 'writing', 'analysis', 'design', 'data'].map(c => (
-                    <option key={c} value={c}>{c}</option>
+                  {(['general', 'development', 'research', 'writing', 'analysis', 'design', 'data'] as const).map(c => (
+                    <option key={c} value={c}>{catLabel(c)}</option>
                   ))}
                 </select>
                 <select
@@ -619,9 +667,9 @@ export default function TaskCenter() {
                   onChange={e => setMarketForm(f => ({ ...f, strategy: e.target.value }))}
                   className="w-full px-3 py-2 rounded-lg text-sm outline-none bg-slate-800 border border-slate-700 text-white"
                 >
-                  <option value="auto">Auto assign</option>
-                  <option value="bid">Bid (agents compete)</option>
-                  <option value="manual">Manual review</option>
+                  <option value="auto">{t('stratAuto')}</option>
+                  <option value="bid">{t('stratBid')}</option>
+                  <option value="manual">{t('stratManual')}</option>
                 </select>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -679,7 +727,7 @@ export default function TaskCenter() {
 // ─── 任务详情视图 ─────────────────────────────────────────────────────────
 
 function TaskDetailView({
-  task, bids, loading, error, actionMsg, myAgentId, statusLabel,
+  task, bids, loading, error, actionMsg, myAgentId, statusLabel, stratLabel,
   bidPrice, setBidPrice, bidDuration, setBidDuration, bidProposal, setBidProposal, bidStatus,
   resultText, setResultText, rejectReason, setRejectReason,
   onBack, onBid, onAcceptBid, onWithdrawBid, onCancel, onSubmitResult, onAcceptResult, onRejectResult,
@@ -691,6 +739,7 @@ function TaskDetailView({
   actionMsg: string;
   myAgentId: string | null;
   statusLabel: (s: string) => string;
+  stratLabel: (s?: string) => string;
   bidPrice: string;
   setBidPrice: (v: string) => void;
   bidDuration: string;
@@ -711,7 +760,7 @@ function TaskDetailView({
   onAcceptResult: () => void;
   onRejectResult: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const isCaller = !!myAgentId && task.caller_id === myAgentId;
   const isWorker = !!myAgentId && task.node_id === myAgentId;
   const status = task.status || 'pending';
@@ -731,33 +780,33 @@ function TaskDetailView({
             <h2 className="text-base font-bold text-white">{task.title || task.id}</h2>
             <p className="text-xs text-slate-400 mt-0.5">{task.description || '—'}</p>
           </div>
-          <span className="text-[10px] px-2 py-1 rounded bg-slate-800 font-medium text-slate-300 shrink-0">
+          <span className="text-[12px] px-2 py-1 rounded bg-slate-800 font-medium text-slate-300 shrink-0">
             {statusLabel(status)}
           </span>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-4">
           <InfoCell label={t('tcBudget')} value={task.budget_min != null ? `${task.budget_min}-${task.budget_max} XCL` : '—'} />
-          <InfoCell label={t('tcStrategy')} value={task.assignment_strategy || '—'} />
+          <InfoCell label={t('tcStrategy')} value={stratLabel(task.assignment_strategy)} />
           <InfoCell label={t('tcCaller')} value={task.caller_name || (task.caller_id || '—').slice(0, 12)} />
           <InfoCell label={t('tcWorker')} value={task.worker_name || (task.node_id ? task.node_id.slice(0, 12) : '—')} />
           {task.category && <InfoCell label={t('tcCategory')} value={task.category} />}
           {task.priority && <InfoCell label={t('tcPriority')} value={task.priority} />}
-          {task.deadline && <InfoCell label={t('tcDeadline')} value={new Date(task.deadline).toLocaleDateString('zh-CN')} />}
+          {task.deadline && <InfoCell label={t('tcDeadline')} value={fmtDate(task.deadline, lang)} />}
           {task.verification_status && <InfoCell label={t('tcVerification')} value={task.verification_status} />}
         </div>
 
         {task.required_capabilities && task.required_capabilities.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-3">
             {task.required_capabilities.map((c, i) => (
-              <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-brand-500/10 text-brand-400">{c}</span>
+              <span key={i} className="text-[12px] px-1.5 py-0.5 rounded bg-brand-500/10 text-brand-400">{c}</span>
             ))}
           </div>
         )}
 
         {task.result !== undefined && task.result !== null && (
           <div className="mt-3 bg-slate-800 rounded-lg p-3">
-            <div className="text-[10px] text-slate-500 mb-1">{t('tcResult')}</div>
+            <div className="text-[12px] text-slate-400 mb-1">{t('tcResult')}</div>
             <pre className="text-xs text-green-300 whitespace-pre-wrap font-mono max-h-40 overflow-y-auto">
               {typeof task.result === 'string' ? task.result : JSON.stringify(task.result, null, 2)}
             </pre>
@@ -845,7 +894,7 @@ function TaskDetailView({
                 {t('tcBids')} ({bids.length})
               </h3>
               {bids.length === 0 ? (
-                <div className="text-center py-4 text-xs text-slate-500">{t('tcNoBids')}</div>
+                <div className="text-center py-4 text-xs text-slate-400">{t('tcNoBids')}</div>
               ) : (
                 <div className="space-y-2">
                   {bids.map(bid => {
@@ -858,33 +907,33 @@ function TaskDetailView({
                               {bid.bidder_name || bid.bidder_id.slice(0, 8)}
                             </span>
                             {mine && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-brand-500/20 text-brand-400">{t('tcYou')}</span>
+                              <span className="text-[12px] px-1.5 py-0.5 rounded bg-brand-500/20 text-brand-400">{t('tcYou')}</span>
                             )}
                             {bid.reputation_score != null && (
-                              <span className="text-[10px] text-yellow-500">★ {bid.reputation_score.toFixed(2)}</span>
+                              <span className="text-[12px] text-yellow-500">★ {bid.reputation_score.toFixed(2)}</span>
                             )}
                           </div>
                           <span className="text-xs font-bold text-brand-400">{bid.proposed_price} XCL</span>
                         </div>
                         {bid.proposal && (
-                          <p className="text-[10px] text-slate-400 mt-1">{bid.proposal}</p>
+                          <p className="text-[12px] text-slate-400 mt-1">{bid.proposal}</p>
                         )}
                         <div className="flex items-center justify-between mt-1">
-                          <span className="text-[10px] text-slate-500">
+                          <span className="text-[12px] text-slate-400">
                             {bid.estimated_duration ? `${t('tcEta')} ${bid.estimated_duration}` : ''}
                             {bid.match_score != null ? ` · ${t('tcMatch')} ${(bid.match_score * 100).toFixed(0)}%` : ''}
                           </span>
                           {isCaller ? (
                             <button
                               onClick={() => onAcceptBid(bid.id)}
-                              className="text-[10px] px-2.5 py-1 rounded bg-green-600 hover:bg-green-700 text-white transition-colors"
+                              className="text-[12px] px-2.5 py-1 rounded bg-green-600 hover:bg-green-700 text-white transition-colors"
                             >
                               {t('tcAcceptBid')}
                             </button>
                           ) : mine ? (
                             <button
                               onClick={() => onWithdrawBid(bid.id)}
-                              className="text-[10px] px-2.5 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors"
+                              className="text-[12px] px-2.5 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors"
                             >
                               {t('tcWithdrawBid')}
                             </button>
@@ -949,7 +998,7 @@ function TaskDetailView({
 function InfoCell({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg bg-slate-800 p-2.5">
-      <div className="text-[9px] text-slate-500">{label}</div>
+      <div className="text-[11px] text-slate-400">{label}</div>
       <div className="text-xs text-slate-200 mt-0.5 truncate">{value}</div>
     </div>
   );

@@ -103,14 +103,14 @@ export default function DeveloperPanel() {
             value={regForm.name}
             onChange={e => setRegForm(f => ({ ...f, name: e.target.value }))}
             placeholder={t('devName')}
-            className="px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-orange-500"
+            className="px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-400 text-sm focus:outline-none focus:border-orange-500"
           />
           <input
             type="email"
             value={regForm.email}
             onChange={e => setRegForm(f => ({ ...f, email: e.target.value }))}
             placeholder={t('devEmail')}
-            className="px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-orange-500"
+            className="px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-400 text-sm focus:outline-none focus:border-orange-500"
           />
         </div>
         <div className="flex items-center gap-3">
@@ -131,30 +131,30 @@ export default function DeveloperPanel() {
         {sandboxStatus ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="rounded-lg bg-gray-900/50 p-3 text-center">
-              <div className="text-xs text-slate-500">{t('pnlStatus')}</div>
+              <div className="text-xs text-slate-400">{t('pnlStatus')}</div>
               <div className={`text-sm font-bold mt-1 ${sandboxStatus.status === 'active' ? 'text-emerald-400' : 'text-slate-400'}`}>
                 {sandboxStatus.status}
               </div>
             </div>
             <div className="rounded-lg bg-gray-900/50 p-3 text-center">
-              <div className="text-xs text-slate-500">{t('devSandboxAgents')}</div>
+              <div className="text-xs text-slate-400">{t('devSandboxAgents')}</div>
               <div className="text-sm font-bold text-orange-400 mt-1">{sandboxStatus.agents_count ?? 0}</div>
             </div>
             {sandboxStatus.resources && (
               <>
                 <div className="rounded-lg bg-gray-900/50 p-3 text-center">
-                  <div className="text-xs text-slate-500">CPU</div>
+                  <div className="text-xs text-slate-400">CPU</div>
                   <div className="text-sm font-bold text-slate-300 mt-1">{sandboxStatus.resources.cpu}</div>
                 </div>
                 <div className="rounded-lg bg-gray-900/50 p-3 text-center">
-                  <div className="text-xs text-slate-500">Memory</div>
+                  <div className="text-xs text-slate-400">Memory</div>
                   <div className="text-sm font-bold text-slate-300 mt-1">{sandboxStatus.resources.memory}</div>
                 </div>
               </>
             )}
           </div>
         ) : (
-          <div className="text-center py-4 text-slate-600 text-sm">{t('pnlLoading')}</div>
+          <div className="text-center py-4 text-slate-400 text-sm">{t('pnlLoading')}</div>
         )}
       </div>
 
@@ -167,7 +167,7 @@ export default function DeveloperPanel() {
               <div key={a.id} className="flex items-center justify-between bg-gray-900/50 rounded-lg p-3">
                 <div>
                   <div className="text-sm text-white font-medium">{a.name}</div>
-                  <div className="text-xs text-slate-500 font-mono">{a.id}</div>
+                  <div className="text-xs text-slate-400 font-mono">{a.id}</div>
                 </div>
                 <div className="flex items-center gap-2">
                   {a.capabilities?.slice(0, 3).map((c, i) => (
@@ -181,7 +181,7 @@ export default function DeveloperPanel() {
             ))}
           </div>
         ) : (
-          <div className="text-center py-4 text-slate-600 text-sm">{t('pnlNoSandboxAgents')}</div>
+          <div className="text-center py-4 text-slate-400 text-sm">{t('pnlNoSandboxAgents')}</div>
         )}
       </div>
 
@@ -194,14 +194,14 @@ export default function DeveloperPanel() {
             value={keyForm.name}
             onChange={e => setKeyForm(f => ({ ...f, name: e.target.value }))}
             placeholder={t('devKeyName')}
-            className="flex-1 px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-orange-500"
+            className="flex-1 px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-400 text-sm focus:outline-none focus:border-orange-500"
           />
           <input
             type="text"
             value={keyForm.permissions}
             onChange={e => setKeyForm(f => ({ ...f, permissions: e.target.value }))}
             placeholder={t('devPerms')}
-            className="flex-1 px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-orange-500"
+            className="flex-1 px-3 py-2 rounded-lg bg-gray-900/50 border border-gray-700 text-white placeholder-slate-400 text-sm focus:outline-none focus:border-orange-500"
           />
           <button
             onClick={handleCreateKey}
@@ -217,10 +217,10 @@ export default function DeveloperPanel() {
             <table className="w-full text-sm min-w-[500px]">
               <thead>
                 <tr className="border-b border-gray-700">
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('pnlName')}</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Key</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('devPermissions')}</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('devCreatedAt')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('pnlName')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">Key</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('devPermissions')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('devCreatedAt')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -235,7 +235,7 @@ export default function DeveloperPanel() {
                         ))}
                       </div>
                     </td>
-                    <td className="py-2 px-3 text-slate-500 text-xs whitespace-nowrap">
+                    <td className="py-2 px-3 text-slate-400 text-xs whitespace-nowrap">
                       {new Date(k.created_at).toLocaleDateString('zh-CN')}
                     </td>
                   </tr>
@@ -244,7 +244,7 @@ export default function DeveloperPanel() {
             </table>
           </div>
         ) : (
-          <div className="text-center py-4 text-slate-600 text-sm">{t('pnlNoApiKeys')}</div>
+          <div className="text-center py-4 text-slate-400 text-sm">{t('pnlNoApiKeys')}</div>
         )}
       </div>
     </div>

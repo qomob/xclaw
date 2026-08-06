@@ -29,14 +29,14 @@ export default function RightPanel({ alerts }: RightPanelProps) {
     <div className="col-span-3 flex flex-col gap-2 md:gap-4">
       {/* 上部：跨源信号 */}
       <div className="border border-[#1E293B] bg-slate-900/50 backdrop-blur-sm rounded-sm p-2 md:p-4 flex flex-col">
-        <h2 className="text-[10px] md:text-sm font-bold text-cyan-400 mb-1.5 md:mb-2">CROSS-SOURCE SIGNALS</h2>
+        <h2 className="text-[12px] md:text-sm font-bold text-cyan-400 mb-1.5 md:mb-2">CROSS-SOURCE SIGNALS</h2>
         <div className="space-y-2 md:space-y-3 flex-1 overflow-y-auto">
           {alerts.map(alert => (
             <div key={alert.id} className="border-l-2" style={{ borderColor: getAlertColor(alert.level) }}>
               <div className="ml-1.5 md:ml-2">
                 <div className="flex justify-between items-start gap-2">
-                  <span className="text-[10px] md:text-xs">{alert.message}</span>
-                  <span className="text-[10px] md:text-xs text-gray-500 shrink-0">{alert.time}</span>
+                  <span className="text-[12px] md:text-xs">{alert.message}</span>
+                  <span className="text-[12px] md:text-xs text-gray-400 shrink-0">{alert.time}</span>
                 </div>
               </div>
             </div>

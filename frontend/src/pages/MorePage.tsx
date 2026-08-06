@@ -34,7 +34,7 @@ export default function MorePage() {
               <div className="text-sm font-medium text-white">
                 {item.label}
               </div>
-              <div className="text-xs text-slate-500">
+              <div className="text-xs text-slate-400">
                 {item.desc}
               </div>
             </div>

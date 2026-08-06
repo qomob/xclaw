@@ -4,6 +4,8 @@ import {
   request, getAgentIdFromToken
 } from '../utils/api';
 import { useI18n } from '../i18n/LanguageContext';
+import { fmtDateTime } from '../utils/format';
+import { ErrorState, EmptyState, LoadingState } from '../components/StateNotice';
 
 type Tab = 'overview' | 'transactions' | 'wallets' | 'topup';
 
@@ -34,15 +36,17 @@ const card = 'bg-slate-900 border border-slate-800 rounded-xl';
 const textSecondary = 'text-slate-400';
 
 export default function FinanceCenter() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [tab, setTab] = useState<Tab>('overview');
   const [balance, setBalance] = useState<BalanceData | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const [balRes, txRes] = await Promise.allSettled([
         fetchBalance(),
@@ -54,6 +58,8 @@ export default function FinanceCenter() {
       if (txRes.status === 'fulfilled' && txRes.value.success) {
         setTransactions(txRes.value.data || []);
       }
+    } catch {
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -117,6 +123,12 @@ export default function FinanceCenter() {
 
       {tab === 'overview' && (
         <div className="space-y-4">
+          {loadError && (
+            <ErrorState onRetry={loadData} />
+          )}
+          {!loadError && loading && <LoadingState />}
+          {!loadError && !loading && (
+          <>
           <div className={`${card} p-4`}>
             <h3 className="text-sm font-semibold mb-3 text-white">
               {t('fcAccountBalance')}
@@ -150,15 +162,15 @@ export default function FinanceCenter() {
                       }`}>
                         {tx.type === 'topup' ? '+' : tx.type === 'charge' ? '-' : ''}{tx.amount}
                       </span>
-                      <span className="ml-2 text-[10px] text-slate-400">{tx.type}</span>
+                      <span className="ml-2 text-[12px] text-slate-400">{tx.type}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                      <span className={`text-[12px] px-1.5 py-0.5 rounded ${
                         tx.status === 'completed' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'
                       }`}>
                         {tx.status}
                       </span>
-                      <span className="text-[10px] text-slate-400">
+                      <span className="text-[12px] text-slate-400">
                         {new Date(tx.created_at).toLocaleDateString('zh-CN')}
                       </span>
                     </div>
@@ -183,10 +195,10 @@ export default function FinanceCenter() {
                         {chainMeta[w.chain]?.symbol || w.chain}
                       </span>
                       {w.is_primary && (
-                        <span className="ml-2 text-[10px] text-brand-400">{t('fcPrimary')}</span>
+                        <span className="ml-2 text-[12px] text-brand-400">{t('fcPrimary')}</span>
                       )}
                     </div>
-                    <span className="text-[10px] font-mono text-slate-400">
+                    <span className="text-[12px] font-mono text-slate-400">
                       {w.address.slice(0, 10)}...{w.address.slice(-6)}
                     </span>
                   </div>
@@ -194,6 +206,8 @@ export default function FinanceCenter() {
               </div>
             )}
           </div>
+          </>
+          )}
         </div>
       )}
 
@@ -214,7 +228,7 @@ export default function FinanceCenter() {
                   <span className="ml-2 text-xs text-slate-400">{tx.type}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                  <span className={`text-[12px] px-1.5 py-0.5 rounded ${
                     tx.status === 'completed' ? 'bg-green-500/20 text-green-400' :
                     tx.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
                     'bg-red-500/20 text-red-400'
@@ -224,10 +238,10 @@ export default function FinanceCenter() {
                 </div>
               </div>
               {tx.reason && (
-                <p className="text-[10px] mt-1 text-slate-400">{tx.reason}</p>
+                <p className="text-[12px] mt-1 text-slate-400">{tx.reason}</p>
               )}
-              <p className="text-[10px] mt-1 text-slate-600">
-                {new Date(tx.created_at).toLocaleString('zh-CN')}
+              <p className="text-[12px] mt-1 text-slate-400">
+                {fmtDateTime(tx.created_at, lang)}
               </p>
             </div>
           ))}
@@ -257,7 +271,7 @@ export default function FinanceCenter() {
                       </span>
                     </div>
                     {w.is_primary && (
-                      <span className="text-[10px] px-1.5 py-0.5 bg-brand-500/20 text-brand-400 rounded">{t('fcPrimary')}</span>
+                      <span className="text-[12px] px-1.5 py-0.5 bg-brand-500/20 text-brand-400 rounded">{t('fcPrimary')}</span>
                     )}
                   </div>
                 ))}
@@ -275,10 +289,10 @@ export default function FinanceCenter() {
                   <div className={`text-xs font-bold ${chainMeta[chain]?.color || 'text-white'}`}>
                     {chainMeta[chain]?.symbol || chain}
                   </div>
-                  <div className="text-[10px] text-slate-400">
+                  <div className="text-[12px] text-slate-400">
                     {chainMeta[chain]?.label || chain}
                   </div>
-                  <div className="text-[10px] text-slate-500">
+                  <div className="text-[12px] text-slate-400">
                     {wallets.some(w => w.chain === chain) ? t('fcBound') : t('fcNotBound')}
                   </div>
                 </div>
@@ -308,7 +322,7 @@ export default function FinanceCenter() {
               </code>
               {t('fcTopUpHint4')}
             </p>
-            <p className="text-slate-500">
+            <p className="text-slate-400">
               {t('fcTopUpDoc')}
               <a
                 href="https://github.com/qomob/xclaw/blob/main/docs/payment-config.md"

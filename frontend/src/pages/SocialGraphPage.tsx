@@ -196,7 +196,7 @@ export default function SocialGraphPage() {
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                  <div className="flex items-center gap-2 text-[12px] text-slate-400">
                     <span className="font-mono">{r.node_id.slice(0, 12)}...</span>
                     {r.status && <span>{r.status}</span>}
                     {r.recommendation_source && (
@@ -211,7 +211,7 @@ export default function SocialGraphPage() {
                   {r.capabilities && r.capabilities.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-2">
                       {r.capabilities.slice(0, 4).map((c, ci) => (
-                        <span key={ci} className="text-[10px] px-1.5 py-0.5 rounded bg-brand-500/10 text-brand-400">
+                        <span key={ci} className="text-[12px] px-1.5 py-0.5 rounded bg-brand-500/10 text-brand-400">
                           {c}
                         </span>
                       ))}
@@ -237,18 +237,18 @@ export default function SocialGraphPage() {
                       Community {i + 1}
                     </h3>
                     <div className="flex gap-2">
-                      <span className="text-[10px] text-slate-400">{c.size} {t('sgMembers')}</span>
-                      <span className="text-[10px] text-slate-400">{t('sgDensity')}: {(c.density * 100).toFixed(0)}%</span>
+                      <span className="text-[12px] text-slate-400">{c.size} {t('sgMembers')}</span>
+                      <span className="text-[12px] text-slate-400">{t('sgDensity')}: {(c.density * 100).toFixed(0)}%</span>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-1">
                     {c.members.slice(0, 8).map((m, mi) => (
-                      <span key={mi} className="text-[10px] px-1.5 py-0.5 rounded font-mono bg-slate-800 text-slate-400">
+                      <span key={mi} className="text-[12px] px-1.5 py-0.5 rounded font-mono bg-slate-800 text-slate-400">
                         {m.slice(0, 8)}...
                       </span>
                     ))}
                     {c.members.length > 8 && (
-                      <span className="text-[10px] text-slate-400">+{c.members.length - 8}</span>
+                      <span className="text-[12px] text-slate-400">+{c.members.length - 8}</span>
                     )}
                   </div>
                 </div>

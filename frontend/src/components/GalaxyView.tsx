@@ -488,7 +488,7 @@ function GalaxyFallback({
           );
         })}
       </svg>
-      <div className="absolute top-2 left-2 text-gray-500 text-xs">
+      <div className="absolute top-2 left-2 text-gray-400 text-xs">
         WebGL unavailable — showing 2D fallback
       </div>
     </div>

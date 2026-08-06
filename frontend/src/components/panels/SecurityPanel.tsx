@@ -84,7 +84,7 @@ export default function SecurityPanel() {
           { label: 'OAuth Clients', value: stats?.oauth_clients ?? '—', color: 'text-sky-400' },
         ].map(c => (
           <div key={c.label} className="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
-            <div className="text-xs text-slate-500 uppercase tracking-wider">{c.label}</div>
+            <div className="text-xs text-slate-400 uppercase tracking-wider">{c.label}</div>
             <div className={`text-3xl font-bold mt-1 ${c.color}`}>{c.value}</div>
           </div>
         ))}
@@ -96,15 +96,15 @@ export default function SecurityPanel() {
           <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">{t('secAuditStats')}</h3>
           <div className="grid grid-cols-3 gap-3">
             <div className="rounded-lg bg-gray-900/50 p-3 text-center">
-              <div className="text-xs text-slate-500">{t('secTotalEvents')}</div>
+              <div className="text-xs text-slate-400">{t('secTotalEvents')}</div>
               <div className="text-xl font-bold text-red-400">{auditStats.total}</div>
             </div>
             <div className="rounded-lg bg-gray-900/50 p-3 text-center">
-              <div className="text-xs text-slate-500">{t('secEventsToday')}</div>
+              <div className="text-xs text-slate-400">{t('secEventsToday')}</div>
               <div className="text-xl font-bold text-amber-400">{auditStats.today}</div>
             </div>
             <div className="rounded-lg bg-gray-900/50 p-3 text-center">
-              <div className="text-xs text-slate-500">{t('secCriticalEvents')}</div>
+              <div className="text-xs text-slate-400">{t('secCriticalEvents')}</div>
               <div className="text-xl font-bold text-red-500">{auditStats.critical}</div>
             </div>
           </div>
@@ -119,10 +119,10 @@ export default function SecurityPanel() {
             <table className="w-full text-sm min-w-[500px]">
               <thead>
                 <tr className="border-b border-gray-700">
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('pnlName')}</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('secRedirectUris')}</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('secGrantTypes')}</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('devCreatedAt')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('pnlName')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('secRedirectUris')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('secGrantTypes')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('devCreatedAt')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -139,7 +139,7 @@ export default function SecurityPanel() {
                         ))}
                       </div>
                     </td>
-                    <td className="py-2 px-3 text-slate-500 text-xs whitespace-nowrap">
+                    <td className="py-2 px-3 text-slate-400 text-xs whitespace-nowrap">
                       {new Date(c.created_at).toLocaleDateString('zh-CN')}
                     </td>
                   </tr>
@@ -148,7 +148,7 @@ export default function SecurityPanel() {
             </table>
           </div>
         ) : (
-          <div className="text-center py-6 text-slate-600 text-sm">{t('secNoClients')}</div>
+          <div className="text-center py-6 text-slate-400 text-sm">{t('secNoClients')}</div>
         )}
       </div>
 
@@ -160,17 +160,17 @@ export default function SecurityPanel() {
             <table className="w-full text-sm min-w-[500px]">
               <thead>
                 <tr className="border-b border-gray-700">
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('pnlTime')}</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('secOperator')}</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('secAction')}</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('secResource')}</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('pnlStatus')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('pnlTime')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('secOperator')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('secAction')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('secResource')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('pnlStatus')}</th>
                 </tr>
               </thead>
               <tbody>
                 {logs.slice(0, 30).map((log, i) => (
                   <tr key={log.id || i} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                    <td className="py-2 px-3 text-slate-500 text-xs whitespace-nowrap">
+                    <td className="py-2 px-3 text-slate-400 text-xs whitespace-nowrap">
                       {new Date(log.timestamp).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                     </td>
                     <td className="py-2 px-3 text-slate-300 font-mono text-xs">{log.actor}</td>
@@ -187,7 +187,7 @@ export default function SecurityPanel() {
             </table>
           </div>
         ) : (
-          <div className="text-center py-6 text-slate-600 text-sm">{t('secNoAudit')}</div>
+          <div className="text-center py-6 text-slate-400 text-sm">{t('secNoAudit')}</div>
         )}
       </div>
 
@@ -199,11 +199,11 @@ export default function SecurityPanel() {
             <table className="w-full text-sm min-w-[450px]">
               <thead>
                 <tr className="border-b border-gray-700">
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('secEndpoint')}</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('secLimit')}</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('secWindow')}</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('secCurrentUsage')}</th>
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('secUsage')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('secEndpoint')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('secLimit')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('secWindow')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('secCurrentUsage')}</th>
+                  <th className="text-left py-2 px-3 text-slate-400 font-medium">{t('secUsage')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -233,7 +233,7 @@ export default function SecurityPanel() {
             </table>
           </div>
         ) : (
-          <div className="text-center py-6 text-slate-600 text-sm">{t('secNoRateLimit')}</div>
+          <div className="text-center py-6 text-slate-400 text-sm">{t('secNoRateLimit')}</div>
         )}
       </div>
     </div>
