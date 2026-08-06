@@ -431,7 +431,11 @@ export async function createMarketTask(payload: { title: string; description: st
 export async function submitBid(taskId: string, payload: { proposed_price: number; estimated_time?: string; cover_letter?: string; match_score?: number }) {
   return request(`/v1/task-market/tasks/${taskId}/bids`, {
     method: 'POST',
-    body: JSON.stringify(payload)
+    body: JSON.stringify({
+      proposed_price: payload.proposed_price,
+      estimated_duration: payload.estimated_time,
+      proposal: payload.cover_letter,
+    })
   });
 }
 
@@ -441,6 +445,38 @@ export async function fetchTaskBids(taskId: string) {
 
 export async function acceptBid(taskId: string, bidId: string) {
   return request(`/v1/task-market/tasks/${taskId}/bids/${bidId}/accept`, {
+    method: 'POST'
+  });
+}
+
+export async function withdrawBid(taskId: string, bidId: string) {
+  return request(`/v1/task-market/tasks/${taskId}/bids/${bidId}/withdraw`, {
+    method: 'POST'
+  });
+}
+
+export async function submitMarketResult(taskId: string, result: Record<string, unknown> | string) {
+  return request(`/v1/task-market/tasks/${taskId}/complete`, {
+    method: 'POST',
+    body: JSON.stringify({ result })
+  });
+}
+
+export async function acceptMarketResult(taskId: string) {
+  return request(`/v1/task-market/tasks/${taskId}/accept`, {
+    method: 'POST'
+  });
+}
+
+export async function rejectMarketResult(taskId: string, reason?: string) {
+  return request(`/v1/task-market/tasks/${taskId}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: reason || undefined })
+  });
+}
+
+export async function cancelMarketTask(taskId: string) {
+  return request(`/v1/task-market/tasks/${taskId}/cancel`, {
     method: 'POST'
   });
 }
@@ -491,10 +527,6 @@ export async function routeFederatedTask(payload: { task_type: string; task_payl
     method: 'POST',
     body: JSON.stringify(payload)
   });
-}
-
-export async function fetchFederationTopology() {
-  return request('/v1/federation/topology/summary');
 }
 
 export async function unregisterFederationPeer(peerId: string) {

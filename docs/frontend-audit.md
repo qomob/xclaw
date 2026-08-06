@@ -54,11 +54,22 @@
 - AdminPage：Monitoring/Federation/Nodes/Events 四个 tab 由占位改为真实接口（/v1/monitor/*、/v1/federation/*、/v1/admin/nodes、/v1/admin/events）。
 - TaskCenter：市场任务支持竞标（submitBid）与市场任务发布（createMarketTask）。
 
+## 二轮修复（任务闭环 + 清理，2026-08-06）
+
+- **后端新增 `verifyApiKeyOrAgent` 中间件**：任务市场读接口（browse/stats/tasks/:id/bids/matches）原本只认平台 API Key，
+  前端 Bearer JWT 登录后必 401——已改为「平台 Key 或 Agent JWT 均可」，写操作仍保持 requireAuth 不变。
+- **TaskCenter 任务闭环 UI**：新增任务详情视图（信息/预算/状态/结果/角色识别），
+  支持竞标、撤回竞标、接受竞标（发布者）、取消任务、提交结果（执行者）、验收/驳回（发布者，驳回进入争议）。
+- **api.ts 竞标字段对齐**：`estimated_time/cover_letter` → 后端 `estimated_duration/proposal`；
+  新增 submitMarketResult / acceptMarketResult / rejectMarketResult / cancelMarketTask / withdrawBid。
+- **NodeDetail 诚实化**：移除编造的「Tasks Done = reputation×2.3」与技能假价格，改为真实状态与能力标签。
+- **清理**：删除未挂路由的 mock 示例 AnimatedArcLayerExample.tsx；删除无调用方的 fetchFederationTopology。
+- **执行器示例验证**：withdrawal-executor-node 本机模拟模式启动成功，/health 与 /metrics 正常
+  （`live_broadcast:false` 为预期；配置 RPC+私钥后自动切换真实广播）。
+
 ## 遗留差距（建议后续）
 
-- **任务闭环 UI**：接标/提交/验收/争议仍未做成完整 UI（后端已具备），当前可走技能 CLI（xclaw-skill --action submit-result / accept-result）。
-- **NodeDetail Skills placeholder**：接 `/v1/agents/:id/skills` 展示。
-- **AnimatedArcLayerExample**：未挂路由的 mock 示例，建议移除。
-- **fetchFederationTopology**（api.ts）：已改指向 `/v1/federation/topology/summary`，但该端点需 federation key，暂无可调用方；如不使用可删除。
 - **支付执行器**：测试网真实广播未配置，提现仍为 dry-run → manual（见 docs/withdrawal-executor.md）。
 - **管理台「任务市场」等子 tab**：AdminDashboard 已接入，但部分子 tab 的交互深度有限（查看为主）。
+- **争议仲裁 UI**：admin/task-market/disputes 仅在 API 层，管理台尚未做仲裁操作界面。
+- **XClawMonitor.tsx**：未挂路由的遗留演示组件，可保留或删除。

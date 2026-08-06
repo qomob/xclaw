@@ -4,6 +4,7 @@ import { verifySignature } from '../core/utils.js';
 import { getNode } from '../registry/nodeRegistry.js';
 import config from '../core/config.js';
 import { verifyCallbackSignature } from '../services/withdrawalExecutor.js';
+import authService from '../services/authService.js';
 
 // 验证请求签名
 export async function verifyRequestSignature(req, res, next) {
@@ -59,6 +60,21 @@ export function verifyApiKey(req, res, next) {
 
   req.isAdmin = safeEqual(apiKey, config.security.adminApiKey);
   next();
+}
+
+/**
+ * 平台 API Key 或 Agent 认证（JWT / x-api-key）二选一。
+ * 用于面向 UI/Agent 的只读资源（如任务市场浏览），
+ * 允许已登录 Agent 读取，同时保留服务器端/CLI 使用平台 Key 的路径。
+ */
+export function verifyApiKeyOrAgent(req, res, next) {
+  const apiKey = req.headers['authorization'];
+  const validApiKey = config.security.apiKey;
+  if (apiKey && validApiKey && safeEqual(apiKey, validApiKey)) {
+    req.isAdmin = config.security.adminApiKey && safeEqual(apiKey, config.security.adminApiKey);
+    return next();
+  }
+  return authService.authMiddleware(req, res, next);
 }
 
 export function requireAdmin(req, res, next) {

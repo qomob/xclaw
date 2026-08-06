@@ -41,7 +41,7 @@ import {
   acceptTaskResult, rejectTaskResult, cancelMarketTaskByCaller,
   listDisputes, resolveDispute, processVerificationDeadlines
 } from '../services/taskMarketService.js';
-import { verifyApiKey, requireAdmin, requireAgentId, requireOwnNode, requireFederationKey } from './auth.js';
+import { verifyApiKey, verifyApiKeyOrAgent, requireAdmin, requireAgentId, requireOwnNode, requireFederationKey } from './auth.js';
 import { verifyWithdrawalCallback } from './auth.js';
 import { processPendingWithdrawals, handleWithdrawalCallback } from '../services/withdrawalExecutor.js';
 import { searchAgentsByIntent } from '../services/searchEngine.js';
@@ -2042,7 +2042,7 @@ router.post('/v1/reputation/init', verifyApiKey, requireAdmin, async (_req, res)
 // ============================================
 
 // 浏览任务市场
-router.get('/v1/task-market/browse', verifyApiKey, async (req, res) => {
+router.get('/v1/task-market/browse', verifyApiKeyOrAgent, async (req, res) => {
   try {
     const filters = {
       status: req.query.status,
@@ -2062,7 +2062,7 @@ router.get('/v1/task-market/browse', verifyApiKey, async (req, res) => {
 });
 
 // 获取市场统计
-router.get('/v1/task-market/stats', verifyApiKey, async (_req, res) => {
+router.get('/v1/task-market/stats', verifyApiKeyOrAgent, async (_req, res) => {
   try {
     const result = await getMarketStats();
     res.json(result);
@@ -2094,7 +2094,7 @@ router.post('/v1/task-market/tasks', requireAuth, async (req, res) => {
 });
 
 // 获取任务详情
-router.get('/v1/task-market/tasks/:task_id', verifyApiKey, validateUUIDParam('task_id'), async (req, res) => {
+router.get('/v1/task-market/tasks/:task_id', verifyApiKeyOrAgent, validateUUIDParam('task_id'), async (req, res) => {
   try {
     const { task_id } = req.params;
     const pgPool = getPostgres();
@@ -2118,7 +2118,7 @@ router.get('/v1/task-market/tasks/:task_id', verifyApiKey, validateUUIDParam('ta
 });
 
 // 获取任务竞标列表
-router.get('/v1/task-market/tasks/:task_id/bids', verifyApiKey, validateUUIDParam('task_id'), async (req, res) => {
+router.get('/v1/task-market/tasks/:task_id/bids', verifyApiKeyOrAgent, validateUUIDParam('task_id'), async (req, res) => {
   try {
     const { task_id } = req.params;
     const result = await getTaskBids(task_id);
@@ -2188,7 +2188,7 @@ router.post('/v1/task-market/tasks/:task_id/assign', verifyApiKey, requireAdmin,
 });
 
 // 获取最佳匹配（用于预览）
-router.get('/v1/task-market/tasks/:task_id/matches', verifyApiKey, validateUUIDParam('task_id'), async (req, res) => {
+router.get('/v1/task-market/tasks/:task_id/matches', verifyApiKeyOrAgent, validateUUIDParam('task_id'), async (req, res) => {
   try {
     const { task_id } = req.params;
     const pgPool = getPostgres();

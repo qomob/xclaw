@@ -139,14 +139,14 @@ const NodeDetail: React.FC<NodeDetailProps> = ({
           <div className="text-gray-500 text-xs">Connections</div>
         </div>
         <div className="rounded-lg bg-gray-900/60 p-2 text-center">
-          <div className="text-white font-bold text-lg">
-            {Math.floor(node.reputation * 2.3)}
+          <div className={`text-white font-bold text-lg ${node.online ? 'text-green-400' : 'text-red-400'}`}>
+            {node.online ? 'ONLINE' : 'OFFLINE'}
           </div>
-          <div className="text-gray-500 text-xs">Tasks Done</div>
+          <div className="text-gray-500 text-xs">Status</div>
         </div>
       </div>
 
-      {/* Skills (placeholder) */}
+      {/* Skills（能力标签来自节点注册数据） */}
       <div>
         <div className="text-gray-400 text-xs mb-1">Skills</div>
         <div className="flex flex-col gap-1">
@@ -156,9 +156,6 @@ const NodeDetail: React.FC<NodeDetailProps> = ({
               className="flex items-center justify-between text-xs px-2 py-1 rounded bg-gray-900/40"
             >
               <span className="text-gray-300">{cap}</span>
-              <span className="text-cyan-400 font-mono">
-                ${(0.5 + i * 0.3 + node.reputation * 0.01).toFixed(2)}
-              </span>
             </div>
           ))}
         </div>
