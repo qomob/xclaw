@@ -5,19 +5,9 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   build: {
-    // 将重型可视化/渲染库拆分为独立 chunk，提升缓存命中与并行加载
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (!id.includes('node_modules')) return undefined;
-          if (id.includes('maplibre') || id.includes('@vis.gl')) return 'maplibre';
-          if (id.includes('deck.gl') || id.includes('@deck.gl') || id.includes('h3-js')) return 'deckgl';
-          if (id.includes('three') || id.includes('@react-three') || id.includes('troika')) return 'three3d';
-          if (id.includes('d3-') || id.includes('/d3/')) return 'd3';
-          if (id.includes('react') || id.includes('scheduler') || id.includes('zustand')) return 'react-vendor';
-          return 'vendor';
-        },
-      },
-    },
+    // 不自动 modulepreload 重型懒加载 chunk（maplibre/deckgl/three 等按需加载，
+    // 避免每次打开首页都预取 ~460KB，弱网络下显著拖慢首屏）
+    modulePreload: false,
+    // manualChunks 已移除（实验：避免共享模块被塞进 react-vendor 造成静态引用重型库）
   },
 })

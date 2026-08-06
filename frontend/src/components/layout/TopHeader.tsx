@@ -122,7 +122,7 @@ export default function TopHeader() {
         {/* Logo */}
         <NavLink to="/" className="flex items-center gap-2 shrink-0">
           <img src="/XClaw_logo.png" alt="XClaw" className="h-7 w-auto" />
-          <span className="hidden sm:inline text-sm font-bold tracking-wider text-white">XCLAW</span>
+          <span className="hidden sm:inline text-sm font-bold tracking-wider text-white">Agents Connected</span>
         </NavLink>
 
         {/* 桌面主导航（仅登录后显示） */}
