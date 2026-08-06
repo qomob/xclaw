@@ -3,6 +3,7 @@ import {
   fetchBalance, fetchTransactions,
   request, getAgentIdFromToken
 } from '../utils/api';
+import { useI18n } from '../i18n/LanguageContext';
 
 type Tab = 'overview' | 'transactions' | 'wallets' | 'topup';
 
@@ -33,6 +34,7 @@ const card = 'bg-slate-900 border border-slate-800 rounded-xl';
 const textSecondary = 'text-slate-400';
 
 export default function FinanceCenter() {
+  const { t } = useI18n();
   const [tab, setTab] = useState<Tab>('overview');
   const [balance, setBalance] = useState<BalanceData | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -90,10 +92,10 @@ export default function FinanceCenter() {
     <div className="h-full flex flex-col p-4 gap-4 overflow-y-auto">
       <div>
         <h1 className="text-lg font-bold text-white">
-          💰 Finance Center
+          💰 {t('pageFinance')}
         </h1>
         <p className="text-xs mt-0.5 text-slate-400">
-          Balance management, transactions, multi-chain wallets
+          {t('pageFinanceDesc')}
         </p>
       </div>
 

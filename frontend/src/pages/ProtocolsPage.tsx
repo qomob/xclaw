@@ -4,10 +4,12 @@ import MCPPanel from '../components/panels/MCPPanel';
 import SearchV2Panel from '../components/panels/SearchV2Panel';
 import DeveloperPanel from '../components/panels/DeveloperPanel';
 import WebhookManager from '../components/panels/WebhookPanel';
+import { useI18n } from '../i18n/LanguageContext';
 
 type Tab = 'a2a' | 'mcp' | 'search' | 'webhook' | 'ai' | 'developer';
 
 export default function ProtocolsPage() {
+  const { t } = useI18n();
   const [tab, setTab] = useState<Tab>('a2a');
 
   const tabs: { key: Tab; label: string; icon: string }[] = [
@@ -23,10 +25,10 @@ export default function ProtocolsPage() {
     <div className="h-full flex flex-col">
       <div className="px-4 pt-4 pb-2">
         <h1 className="text-lg font-bold text-white">
-          🔧 Protocols & Tools
+          🔧 {t('pageProtocols')}
         </h1>
         <p className="text-xs mt-0.5 text-slate-400">
-          A2A, MCP, Search, Webhook, AI Services & Developer Tools
+          {t('pageProtocolsDesc')}
         </p>
       </div>
 

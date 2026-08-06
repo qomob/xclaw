@@ -6,6 +6,7 @@ import {
   setStoredAdminKey,
   validateAdminKey,
 } from '../utils/adminApi';
+import { useI18n } from '../i18n/LanguageContext';
 
 type Tab = 'dashboard' | 'monitor' | 'federation' | 'nodes' | 'events';
 
@@ -60,6 +61,7 @@ interface AdminEvent {
 const card = 'bg-slate-900 border border-slate-800 rounded-xl';
 
 export default function AdminPage() {
+  const { t } = useI18n();
   const [tab, setTab] = useState<Tab>('dashboard');
   const [adminKey, setAdminKey] = useState(getStoredAdminKey);
   const [keyInput, setKeyInput] = useState('');
@@ -98,10 +100,10 @@ export default function AdminPage() {
     <div className="h-full flex flex-col">
       <div className="px-4 pt-4 pb-2">
         <h1 className="text-lg font-bold text-white">
-          ⚙️ System Admin
+          ⚙️ {t('pageAdmin')}
         </h1>
         <p className="text-xs mt-0.5 text-slate-400">
-          Admin console, system monitoring & federation management
+          {t('pageAdminDesc')}
         </p>
       </div>
 

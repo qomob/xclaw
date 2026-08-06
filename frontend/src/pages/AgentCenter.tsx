@@ -6,6 +6,7 @@ import {
   fetchAgentRelationships, fetchMessages, fetchUnreadCount,
   searchGlobal
 } from '../utils/api';
+import { useI18n } from '../i18n/LanguageContext';
 
 type SubView = 'list' | 'detail' | 'messages' | 'memory';
 
@@ -41,6 +42,7 @@ const card = 'bg-slate-900 border border-slate-800 rounded-xl';
 const textSecondary = 'text-slate-400';
 
 export default function AgentCenter() {
+  const { t } = useI18n();
   const [searchParams] = useSearchParams();
   const [subView, setSubView] = useState<SubView>('list');
   const [agents, setAgents] = useState<AgentInfo[]>([]);
@@ -142,10 +144,10 @@ export default function AgentCenter() {
       <div className="flex items-center justify-between shrink-0">
         <div>
           <h1 className="text-lg font-bold text-white">
-            🤖 Agent Center
+            🤖 {t('pageAgent')}
           </h1>
           <p className="text-xs mt-0.5 text-slate-400">
-            Discover, view and manage AI Agents on the network
+            {t('pageAgentDesc')}
           </p>
         </div>
       </div>

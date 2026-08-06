@@ -1,6 +1,7 @@
 import React from 'react';
 import { useXClawStore } from '../store/useXClawStore';
 import { useSystemHealthContext } from './SystemHealthContext';
+import { useI18n } from '../i18n/LanguageContext';
 
 const LOG_COLOR: Record<string, string> = {
   p2p: 'text-cyan-400',
@@ -12,6 +13,7 @@ const LOG_COLOR: Record<string, string> = {
  * 全部数据来自公开接口与 WebSocket 实时流。
  */
 export default function LiveNetworkPanel({ onOpenMap }: { onOpenMap: () => void }) {
+  const { t } = useI18n();
   const health = useSystemHealthContext();
   const agents = useXClawStore(s => s.agents);
   const tasks = useXClawStore(s => s.tasks);
@@ -28,23 +30,23 @@ export default function LiveNetworkPanel({ onOpenMap }: { onOpenMap: () => void 
   return (
     <div className="h-full overflow-y-auto p-4 md:p-6 space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 max-w-3xl">
-        {stat('AGENTS ONLINE', String(health.agentsOnline), health.agentsOnline > 0 ? 'text-green-400' : 'text-slate-500')}
-        {stat('NODES', String(agents.length))}
-        {stat('LINKS', String(tasks.length))}
-        {stat('SYSTEM', health.status.toUpperCase(), health.status === 'ok' ? 'text-green-400' : health.status === 'degraded' ? 'text-amber-400' : 'text-red-400')}
+        {stat(t('agentsOnlineShort'), String(health.agentsOnline), health.agentsOnline > 0 ? 'text-green-400' : 'text-slate-500')}
+        {stat(t('nodes'), String(agents.length))}
+        {stat(t('links'), String(tasks.length))}
+        {stat(t('system'), health.status.toUpperCase(), health.status === 'ok' ? 'text-green-400' : health.status === 'degraded' ? 'text-amber-400' : 'text-red-400')}
       </div>
 
       <div className="max-w-3xl bg-slate-900/80 border border-slate-800 rounded-xl p-3">
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-[10px] font-bold text-cyan-400 tracking-wider">LIVE STREAM</h3>
+          <h3 className="text-[10px] font-bold text-cyan-400 tracking-wider">{t('liveStream')}</h3>
           <span className={`text-[9px] font-mono ${isConnected ? 'text-green-500' : 'text-red-500'}`}>
-            {isConnected ? 'CONNECTED' : 'CONNECTING…'}
+            {isConnected ? t('connected').toUpperCase() : t('connecting').toUpperCase()}
           </span>
         </div>
         <div className="space-y-1.5 min-h-[80px]">
           {logs.length === 0 ? (
             <p className="text-[10px] text-slate-600 py-4 text-center">
-              {isConnected ? '网络安静——注册第一个 Agent 就会在这里看到实时事件' : '正在建立实时连接…'}
+              {isConnected ? t('networkQuiet') : t('connectingText')}
             </p>
           ) : (
             logs.slice(0, 8).map(log => (
@@ -62,7 +64,7 @@ export default function LiveNetworkPanel({ onOpenMap }: { onOpenMap: () => void 
           onClick={onOpenMap}
           className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg transition-colors"
         >
-          🗺️ Open 3D Map
+          🗺️ {t('openMap')}
         </button>
         <a
           href="/xclawskill.html"
@@ -70,7 +72,7 @@ export default function LiveNetworkPanel({ onOpenMap }: { onOpenMap: () => void 
           rel="noopener noreferrer"
           className="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 text-white text-xs rounded-lg transition-colors"
         >
-          🤖 Register an Agent
+          🤖 {t('registerAgent')}
         </a>
         <a
           href="/manual.html"
@@ -78,7 +80,7 @@ export default function LiveNetworkPanel({ onOpenMap }: { onOpenMap: () => void 
           rel="noopener noreferrer"
           className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg transition-colors"
         >
-          Manual
+          {t('manual')}
         </a>
       </div>
     </div>

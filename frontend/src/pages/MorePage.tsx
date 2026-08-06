@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router';
+import { useI18n } from '../i18n/LanguageContext';
 
 const MORE_ITEMS = [
   { path: '/skills', icon: '⚡', label: 'Skill Market', desc: 'Discover, purchase and review AI skills' },
@@ -14,11 +15,12 @@ const MORE_ITEMS = [
 
 export default function MorePage() {
   const navigate = useNavigate();
+  const { t } = useI18n();
 
   return (
     <div className="p-4 space-y-3">
       <h1 className="text-lg font-bold text-white">
-        More Features
+        {t('pageMore')}
       </h1>
       <div className="space-y-2">
         {MORE_ITEMS.map(item => (

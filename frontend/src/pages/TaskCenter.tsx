@@ -5,6 +5,7 @@ import {
   submitMarketResult, acceptMarketResult, rejectMarketResult,
   cancelMarketTask, fetchMarketTask, getAgentIdFromToken,
 } from '../utils/api';
+import { useI18n } from '../i18n/LanguageContext';
 
 type Tab = 'my-tasks' | 'market' | 'create';
 
@@ -61,6 +62,7 @@ const card = 'bg-slate-900 border border-slate-800 rounded-xl';
 const textSecondary = 'text-slate-400';
 
 export default function TaskCenter() {
+  const { t } = useI18n();
   const [tab, setTab] = useState<Tab>('my-tasks');
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [marketTasks, setMarketTasks] = useState<MarketTaskItem[]>([]);
@@ -374,10 +376,10 @@ export default function TaskCenter() {
     <div className="h-full flex flex-col p-4 gap-4 overflow-y-auto">
       <div>
         <h1 className="text-lg font-bold text-white">
-          📋 Task Center
+          📋 {t('pageTasks')}
         </h1>
         <p className="text-xs mt-0.5 text-slate-400">
-          Manage tasks, browse market, create new tasks
+          {t('pageTasksDesc')}
         </p>
       </div>
 

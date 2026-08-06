@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { fetchOnlineAgents, request } from '../utils/api';
 import SocialGraph from '../components/SocialGraph';
+import { useI18n } from '../i18n/LanguageContext';
 
 type Tab = 'graph' | 'trust' | 'recommend' | 'communities';
 
@@ -32,6 +33,7 @@ const card = 'bg-slate-900 border border-slate-800 rounded-xl';
 const textSecondary = 'text-slate-400';
 
 export default function SocialGraphPage() {
+  const { t } = useI18n();
   const [tab, setTab] = useState<Tab>('graph');
   const [trustScores, setTrustScores] = useState<TrustScore[]>([]);
   const [communities, setCommunities] = useState<Community[]>([]);
@@ -106,10 +108,10 @@ export default function SocialGraphPage() {
     <div className="h-full flex flex-col">
       <div className="px-4 pt-4 pb-2">
         <h1 className="text-lg font-bold text-white">
-          🕸️ Social Graph
+          🕸️ {t('pageSocial')}
         </h1>
         <p className="text-xs mt-0.5 text-slate-400">
-          Agent relationship network, trust scores & community detection
+          {t('pageSocialDesc')}
         </p>
       </div>
 

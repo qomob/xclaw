@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import SecurityPanel from '../components/panels/SecurityPanel';
 import ClawOracle from '../components/ClawOracle';
+import { useI18n } from '../i18n/LanguageContext';
 
 type Tab = 'security' | 'reputation' | 'audit';
 
 export default function SecurityPage() {
+  const { t } = useI18n();
   const [tab, setTab] = useState<Tab>('security');
 
   const tabs: { key: Tab; label: string }[] = [
@@ -17,10 +19,10 @@ export default function SecurityPage() {
     <div className="h-full flex flex-col">
       <div className="px-4 pt-4 pb-2">
         <h1 className="text-lg font-bold text-white">
-          🛡️ Security & Audit
+          🛡️ {t('pageSecurity')}
         </h1>
         <p className="text-xs mt-0.5 text-slate-400">
-          OAuth management, audit logs, reputation system & rate limiting
+          {t('pageSecurityDesc')}
         </p>
       </div>
 

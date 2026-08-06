@@ -3,6 +3,7 @@ import { useXClawStore } from '../store/useXClawStore';
 import { getToken } from '../utils/api';
 import { useSystemHealthContext } from '../components/SystemHealthContext';
 import LiveNetworkPanel from '../components/LiveNetworkPanel';
+import { useI18n } from '../i18n/LanguageContext';
 
 // 重型可视化组件全部懒加载：匿名访客默认不加载地图渲染库
 const NetworkMap = React.lazy(() => import('../components/NetworkMap'));
@@ -15,6 +16,7 @@ type PrimaryView = 'network' | 'data';
 type DataView = 'galaxy' | 'topology' | 'osint' | 'graph';
 
 export default function NetworkOverview() {
+  const { t } = useI18n();
   const [primary, setPrimary] = useState<PrimaryView>('network');
   const [dataView, setDataView] = useState<DataView>('galaxy');
   const [showMap, setShowMap] = useState(() => !!getToken());
@@ -50,10 +52,10 @@ export default function NetworkOverview() {
         >
           <div className="flex-1 min-w-0">
             <h1 className="text-sm font-bold text-white">
-              XClaw — AI Agent 网络基础设施
+              {t('heroTitle')}
             </h1>
             <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
-              Agent 通过 xclawskill 接入网络；这里是给人类查看与协作的界面。
+              {t('heroSubtitle')}
             </p>
           </div>
           <div className="flex items-center gap-3 text-[10px] text-slate-400 shrink-0">
@@ -68,7 +70,7 @@ export default function NetworkOverview() {
               rel="noopener noreferrer"
               className="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 text-white rounded-lg transition-colors"
             >
-              🤖 接入你的 Agent
+              🤖 {t('connectAgent')}
             </a>
             <a
               href="/manual.html"
@@ -76,7 +78,7 @@ export default function NetworkOverview() {
               rel="noopener noreferrer"
               className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
             >
-              Manual
+              {t('manual')}
             </a>
           </div>
         </div>
@@ -92,7 +94,7 @@ export default function NetworkOverview() {
                 : 'text-slate-500 hover:text-brand-400'
             }`}
           >
-            NETWORK
+            {t('network').toUpperCase()}
           </button>
           <button
             onClick={() => setPrimary('data')}
@@ -102,7 +104,7 @@ export default function NetworkOverview() {
                 : 'text-slate-500 hover:text-brand-400'
             }`}
           >
-            DATA
+            {t('data').toUpperCase()}
           </button>
         </div>
 
@@ -126,15 +128,15 @@ export default function NetworkOverview() {
 
         <div className="ml-auto flex items-center gap-3 text-[10px]">
           <span className="text-slate-500">
-            {agents.length} agents online
+            {agents.length} {t('agentsOnline')}
           </span>
           <div
             className="flex items-center gap-1"
-            title={isConnected ? 'WebSocket connected to XClaw server' : 'WebSocket disconnected from XClaw server'}
+            title={isConnected ? 'WebSocket connected' : 'WebSocket disconnected'}
           >
             <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
             <span className={isConnected ? 'text-green-500' : 'text-red-500'}>
-              {isConnected ? 'WS LIVE' : 'WS OFFLINE'}
+              {isConnected ? t('wsLive') : t('wsOffline')}
             </span>
           </div>
         </div>
@@ -145,12 +147,12 @@ export default function NetworkOverview() {
           !getToken() && !showMap ? (
             <LiveNetworkPanel onOpenMap={() => setShowMap(true)} />
           ) : (
-            <React.Suspense fallback={<div className="h-full flex items-center justify-center text-xs text-slate-500">Loading map…</div>}>
+            <React.Suspense fallback={<div className="h-full flex items-center justify-center text-xs text-slate-500">{t('loading')}</div>}>
               <NetworkMap />
             </React.Suspense>
           )
         ) : (
-          <React.Suspense fallback={<div className="h-full flex items-center justify-center text-xs text-slate-500">Loading view…</div>}>
+          <React.Suspense fallback={<div className="h-full flex items-center justify-center text-xs text-slate-500">{t('loading')}</div>}>
             {dataView === 'galaxy' && <GalaxyView nodes={galaxyNodes} edges={galaxyEdges} />}
             {dataView === 'topology' && <TopologyView />}
             {dataView === 'osint' && <OsintFeedView />}
@@ -163,12 +165,10 @@ export default function NetworkOverview() {
             <div className="pointer-events-auto max-w-sm mx-4 bg-slate-900 border border-slate-700 rounded-xl p-6 text-center shadow-2xl">
               <div className="text-3xl mb-2">🤖</div>
               <h3 className="text-sm font-bold text-white mb-1">
-                {isConnected ? '0 agents online' : 'Connecting to network…'}
+                {isConnected ? t('emptyTitle') : t('connectingText')}
               </h3>
               <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                {isConnected
-                  ? 'The network is quiet. Register the first Agent to light up the map.'
-                  : 'Establishing the live WebSocket connection…'}
+                {isConnected ? t('emptySubtitle') : t('connectingText')}
               </p>
               {isConnected && (
                 <div className="flex gap-2 justify-center">
@@ -178,7 +178,7 @@ export default function NetworkOverview() {
                     rel="noopener noreferrer"
                     className="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 text-white text-xs rounded-lg transition-colors"
                   >
-                    Register an Agent
+                    {t('registerAgent')}
                   </a>
                   <a
                     href="/manual.html"
@@ -186,7 +186,7 @@ export default function NetworkOverview() {
                     rel="noopener noreferrer"
                     className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg transition-colors"
                   >
-                    Manual
+                    {t('manual')}
                   </a>
                 </div>
               )}
