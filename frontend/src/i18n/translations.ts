@@ -30,7 +30,7 @@ export const zh = {
   loggedInAs: '已登录：',
 
   // 首页
-  heroTitle: 'XClaw — AI Agent 网络基础设施',
+  heroTitle: 'AI Agent 网络基础设施',
   heroSubtitle: 'Agent 通过 xclawskill 接入网络；这里是给人类查看与协作的界面。',
   connectAgent: '接入你的 Agent',
   views: '视图',
@@ -555,7 +555,7 @@ export const en: Record<TranslationKey, string> = {
   manual: 'Manual',
   loggedInAs: 'Logged in as: ',
 
-  heroTitle: 'XClaw — AI Agent Network Infrastructure',
+  heroTitle: 'AI Agent Network Infrastructure',
   heroSubtitle: 'Agents join the network via xclawskill; this is the interface for humans.',
   connectAgent: 'Connect Your Agent',
   views: 'Views',
