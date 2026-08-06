@@ -4,7 +4,6 @@ import { getToken } from '../utils/api';
 import { useSystemHealthContext } from '../components/SystemHealthContext';
 import LiveFeed from '../components/LiveFeed';
 import { useI18n } from '../i18n/LanguageContext';
-import WorldMapLight from '../components/WorldMapLight';
 
 // 重型可视化组件全部懒加载
 const NetworkMap = React.lazy(() => import('../components/NetworkMap'));
@@ -13,7 +12,7 @@ const TopologyView = React.lazy(() => import('../components/TopologyView'));
 const GalaxyView = React.lazy(() => import('../components/GalaxyView'));
 
 type PrimaryView = 'network' | 'graph';
-type MapMode = 'map' | 'map3d' | 'galaxy' | 'topo';
+type MapMode = 'map' | 'galaxy' | 'topo';
 
 export default function NetworkOverview() {
   const { t } = useI18n();
@@ -87,7 +86,7 @@ export default function NetworkOverview() {
 
         {primary === 'network' && (
           <div className="flex items-center gap-1 ml-2 pl-2 border-l border-slate-700">
-            {(['map', 'map3d', 'galaxy', 'topo'] as MapMode[]).map(m => (
+            {(['map', 'galaxy', 'topo'] as MapMode[]).map(m => (
               <button
                 key={m}
                 onClick={() => setMapMode(m)}
@@ -95,10 +94,10 @@ export default function NetworkOverview() {
                   mapMode === m ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-brand-400'
                 }`}
               >
-                {m === 'map' ? t('viewMap') : m === 'map3d' ? '3D' : m === 'galaxy' ? t('viewGalaxy') : t('viewTopo')}
+                {m === 'map' ? t('viewMap') : m === 'galaxy' ? t('viewGalaxy') : t('viewTopo')}
               </button>
             ))}
-            {mapMode === 'map3d' && (
+            {mapMode === 'map' && (
               <button
                 onClick={() => setShowEvents(o => !o)}
                 className={`px-2 py-1 text-[11px] font-medium rounded-md transition-colors ${
@@ -140,9 +139,6 @@ export default function NetworkOverview() {
           <div className="h-full flex">
             <div className="flex-1 min-h-0 relative">
               {mapMode === 'map' && (
-                <WorldMapLight />
-              )}
-              {mapMode === 'map3d' && (
                 <React.Suspense fallback={<div className="h-full flex items-center justify-center text-xs text-slate-400">{t('loading')}</div>}>
                   <NetworkMap showEvents={showEvents} />
                 </React.Suspense>
@@ -158,7 +154,7 @@ export default function NetworkOverview() {
                 </React.Suspense>
               )}
 
-              {mapMode !== 'map3d' && agents.length === 0 && (
+              {mapMode === 'map' && agents.length === 0 && (
                 <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm pointer-events-none">
                   <div className="pointer-events-auto max-w-sm mx-4 bg-slate-900 border border-slate-700 rounded-xl p-6 text-center shadow-2xl">
                     <div className="text-3xl mb-2">🤖</div>
