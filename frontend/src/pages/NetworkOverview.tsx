@@ -5,20 +5,20 @@ import { useSystemHealthContext } from '../components/SystemHealthContext';
 import LiveFeed from '../components/LiveFeed';
 import { useI18n } from '../i18n/LanguageContext';
 
-// 重型可视化组件全部懒加载：匿名访客默认不加载地图渲染库
+// 重型可视化组件全部懒加载
 const NetworkMap = React.lazy(() => import('../components/NetworkMap'));
 const SocialGraph = React.lazy(() => import('../components/SocialGraph'));
 const TopologyView = React.lazy(() => import('../components/TopologyView'));
-const OsintFeedView = React.lazy(() => import('../components/OsintFeedView'));
 const GalaxyView = React.lazy(() => import('../components/GalaxyView'));
 
-type PrimaryView = 'network' | 'data';
-type DataView = 'galaxy' | 'topology' | 'osint' | 'graph';
+type PrimaryView = 'network' | 'graph';
+type MapMode = 'map' | 'galaxy' | 'topo';
 
 export default function NetworkOverview() {
   const { t } = useI18n();
   const [primary, setPrimary] = useState<PrimaryView>('network');
-  const [dataView, setDataView] = useState<DataView>('galaxy');
+  const [mapMode, setMapMode] = useState<MapMode>('map');
+  const [showEvents, setShowEvents] = useState(false);
   const [feedOpen, setFeedOpen] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1280);
 
   const health = useSystemHealthContext();
@@ -36,12 +36,16 @@ export default function NetworkOverview() {
     return () => { destroy(); };
   }, [init, destroy, fetchGalaxyData]);
 
-  const dataTabs: { key: DataView; label: string }[] = [
-    { key: 'galaxy', label: t('viewGalaxy') },
-    { key: 'topology', label: t('viewTopo') },
-    { key: 'osint', label: t('viewOsint') },
-    { key: 'graph', label: t('viewGraph') },
-  ];
+  const tabBtn = (active: boolean, onClick: () => void, label: string) => (
+    <button
+      onClick={onClick}
+      className={`px-2.5 py-1 text-[12px] font-medium rounded-md transition-colors ${
+        active ? 'bg-brand-500 text-white' : 'text-slate-400 hover:text-brand-400'
+      }`}
+    >
+      {label}
+    </button>
+  );
 
   return (
     <div className="h-full flex flex-col">
@@ -54,7 +58,7 @@ export default function NetworkOverview() {
             <h1 className="text-sm font-bold text-white">
               {t('heroTitle')}
             </h1>
-            <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+            <p className="text-[12px] text-slate-400 mt-0.5 leading-relaxed">
               {t('heroSubtitle')}
             </p>
           </div>
@@ -77,51 +81,39 @@ export default function NetworkOverview() {
       )}
 
       <div className="flex items-center gap-1 px-3 py-2 border-b shrink-0 border-slate-800 bg-slate-900/50">
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setPrimary('network')}
-            className={`px-2.5 py-1 text-[12px] font-medium rounded-md transition-colors ${
-              primary === 'network'
-                ? 'bg-brand-500 text-white'
-                : 'text-slate-400 hover:text-brand-400'
-            }`}
-          >
-            {t('network').toUpperCase()}
-          </button>
-          <button
-            onClick={() => setPrimary('data')}
-            className={`px-2.5 py-1 text-[12px] font-medium rounded-md transition-colors ${
-              primary === 'data'
-                ? 'bg-brand-500 text-white'
-                : 'text-slate-400 hover:text-brand-400'
-            }`}
-          >
-            {t('data').toUpperCase()}
-          </button>
-        </div>
+        {tabBtn(primary === 'network', () => setPrimary('network'), t('network').toUpperCase())}
+        {tabBtn(primary === 'graph', () => setPrimary('graph'), t('viewGraph'))}
 
-        {primary === 'data' && (
+        {primary === 'network' && (
           <div className="flex items-center gap-1 ml-2 pl-2 border-l border-slate-700">
-            {dataTabs.map(tab => (
+            {(['map', 'galaxy', 'topo'] as MapMode[]).map(m => (
               <button
-                key={tab.key}
-                onClick={() => setDataView(tab.key)}
-                className={`px-2 py-1 text-[12px] font-medium rounded-md transition-colors ${
-                  dataView === tab.key
-                    ? 'bg-slate-700 text-white'
-                    : 'text-slate-400 hover:text-brand-400'
+                key={m}
+                onClick={() => setMapMode(m)}
+                className={`px-2 py-1 text-[11px] font-medium rounded-md transition-colors ${
+                  mapMode === m ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-brand-400'
                 }`}
               >
-                {tab.label}
+                {m === 'map' ? t('viewMap') : m === 'galaxy' ? t('viewGalaxy') : t('viewTopo')}
               </button>
             ))}
+            {mapMode === 'map' && (
+              <button
+                onClick={() => setShowEvents(o => !o)}
+                className={`px-2 py-1 text-[11px] font-medium rounded-md transition-colors ${
+                  showEvents ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-400 hover:text-cyan-400'
+                }`}
+              >
+                ⚡ {t('eventLayer')}
+              </button>
+            )}
           </div>
         )}
 
         <div className="ml-auto flex items-center gap-3 text-[12px]">
           <button
             onClick={() => setFeedOpen(o => !o)}
-            className={`flex items-center gap-1 px-2 py-1 text-[12px] font-medium rounded-md transition-colors ${
+            className={`flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md transition-colors ${
               feedOpen ? 'bg-cyan-500/15 text-cyan-400' : 'text-slate-400 hover:text-cyan-400'
             }`}
           >
@@ -146,11 +138,23 @@ export default function NetworkOverview() {
         {primary === 'network' ? (
           <div className="h-full flex">
             <div className="flex-1 min-h-0 relative">
-              <React.Suspense fallback={<div className="h-full flex items-center justify-center text-xs text-slate-400">{t('loading')}</div>}>
-                <NetworkMap />
-              </React.Suspense>
+              {mapMode === 'map' && (
+                <React.Suspense fallback={<div className="h-full flex items-center justify-center text-xs text-slate-400">{t('loading')}</div>}>
+                  <NetworkMap showEvents={showEvents} />
+                </React.Suspense>
+              )}
+              {mapMode === 'galaxy' && (
+                <React.Suspense fallback={<div className="h-full flex items-center justify-center text-xs text-slate-400">{t('loading')}</div>}>
+                  <GalaxyView nodes={galaxyNodes} edges={galaxyEdges} />
+                </React.Suspense>
+              )}
+              {mapMode === 'topo' && (
+                <React.Suspense fallback={<div className="h-full flex items-center justify-center text-xs text-slate-400">{t('loading')}</div>}>
+                  <TopologyView />
+                </React.Suspense>
+              )}
 
-              {agents.length === 0 && (
+              {mapMode === 'map' && agents.length === 0 && (
                 <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm pointer-events-none">
                   <div className="pointer-events-auto max-w-sm mx-4 bg-slate-900 border border-slate-700 rounded-xl p-6 text-center shadow-2xl">
                     <div className="text-3xl mb-2">🤖</div>
@@ -169,14 +173,6 @@ export default function NetworkOverview() {
                           className="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 text-white text-xs rounded-lg transition-colors"
                         >
                           {t('registerAgent')}
-                        </a>
-                        <a
-                          href="/manual.html"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg transition-colors"
-                        >
-                          {t('manual')}
                         </a>
                       </div>
                     )}
@@ -198,10 +194,7 @@ export default function NetworkOverview() {
           </div>
         ) : (
           <React.Suspense fallback={<div className="h-full flex items-center justify-center text-xs text-slate-400">{t('loading')}</div>}>
-            {dataView === 'galaxy' && <GalaxyView nodes={galaxyNodes} edges={galaxyEdges} />}
-            {dataView === 'topology' && <TopologyView />}
-            {dataView === 'osint' && <OsintFeedView />}
-            {dataView === 'graph' && <SocialGraph />}
+            <SocialGraph />
           </React.Suspense>
         )}
       </div>

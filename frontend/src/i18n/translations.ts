@@ -289,6 +289,8 @@ export const zh = {
   viewTopo: '拓扑',
   viewOsint: '情报',
   viewGraph: '图谱',
+  viewMap: '地图',
+  eventLayer: '事件层',
 
   // ── 协议/安全/管理页签 ──
   prA2A: 'A2A 协议',
@@ -803,6 +805,8 @@ export const en: Record<TranslationKey, string> = {
   viewTopo: 'TOPO',
   viewOsint: 'OSINT',
   viewGraph: 'GRAPH',
+  viewMap: 'Map',
+  eventLayer: 'Events',
 
   prA2A: 'A2A Protocol',
   prMCP: 'MCP Management',

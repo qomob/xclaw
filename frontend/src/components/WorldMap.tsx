@@ -88,12 +88,15 @@ interface FlyToTarget {
 interface WorldMapProps {
   flyTo?: FlyToTarget | null;
   onFlyComplete?: () => void;
+  showEvents?: boolean;
 }
 
 import { runPrecisionTests } from '../utils/geoUtils';
 
-export default function WorldMap({ flyTo, onFlyComplete }: WorldMapProps) {
+export default function WorldMap({ flyTo, onFlyComplete, showEvents = false }: WorldMapProps) {
   const agents = useXClawStore(state => state.agents);
+  const logs = useXClawStore(state => state.logs);
+  const alerts = useXClawStore(state => state.alerts);
   const setSelectedAgentId = useXClawStore(state => state.setSelectedAgentId);
   const [animationTime, setAnimationTime] = useState(0);
   const [debugMode, setDebugMode] = useState(false);
@@ -219,6 +222,37 @@ export default function WorldMap({ flyTo, onFlyComplete }: WorldMapProps) {
       };
     });
   }, [agents, animationTime]);
+
+  // 实时事件图层（来自 WebSocket 事件流：P2P / 广播 / 告警）
+  const eventData = useMemo(() => {
+    if (!showEvents || agents.length === 0) return [] as NodeData[];
+    const points: NodeData[] = [];
+    const pickAgent = (i: number) => agents[i % agents.length];
+    logs.slice(0, 40).forEach((log, i) => {
+      const a = pickAgent(i);
+      const color = log.type === 'p2p' ? [6, 212, 255] : [168, 85, 247];
+      points.push({
+        id: `evt-${log.id}`,
+        name: log.message,
+        position: [a.lng, a.lat],
+        color: [...color, 220] as [number, number, number, number],
+        radius: 9,
+        group: 0,
+      });
+    });
+    alerts.slice(0, 20).forEach((al, i) => {
+      const a = pickAgent(i);
+      points.push({
+        id: `al-${al.id}`,
+        name: al.message,
+        position: [a.lng, a.lat],
+        color: [239, 68, 68, 230] as [number, number, number, number],
+        radius: 11,
+        group: 0,
+      });
+    });
+    return points;
+  }, [showEvents, agents, logs, alerts]);
   
   const layers = useMemo(() => [
     new ScatterplotLayer<NodeData>({
@@ -263,8 +297,23 @@ export default function WorldMap({ flyTo, onFlyComplete }: WorldMapProps) {
         getWidth: 2,
         pickable: true
       })
+    ] : []),
+    ...(showEvents && eventData.length > 0 ? [
+      new ScatterplotLayer<NodeData>({
+        id: 'event-layer',
+        data: eventData,
+        getPosition: (d: NodeData) => d.position,
+        getFillColor: (d: NodeData) => d.color,
+        getRadius: (d: NodeData) => d.radius,
+        radiusMinPixels: 4,
+        radiusMaxPixels: 16,
+        stroked: true,
+        lineWidthMinPixels: 1,
+        getLineColor: () => [255, 255, 255, 160],
+        pickable: false,
+      })
     ] : [])
-  ], [nodeData, debugMode, animationTime, handleNodeClick, relLines]);
+  ], [nodeData, debugMode, animationTime, handleNodeClick, relLines, showEvents, eventData]);
   
   return (
     <div className="w-full h-full relative">

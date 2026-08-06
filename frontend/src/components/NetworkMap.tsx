@@ -8,6 +8,10 @@ interface FlyToTarget {
   zoom: number;
 }
 
+interface NetworkMapProps {
+  showEvents?: boolean;
+}
+
 const CONTINENTS: Record<string, FlyToTarget> = {
   WORLD: { longitude: 0, latitude: 20, zoom: 1.5 },
   NORTH_AMERICA: { longitude: -100, latitude: 45, zoom: 3 },
@@ -18,7 +22,7 @@ const CONTINENTS: Record<string, FlyToTarget> = {
   OCEANIA: { longitude: 135, latitude: -25, zoom: 3.5 },
 };
 
-export default function NetworkMap() {
+export default function NetworkMap({ showEvents = false }: NetworkMapProps) {
   const [activeTab, setActiveTab] = useState('WORLD');
   const [flyTo, setFlyTo] = useState<FlyToTarget | null>(null);
   
@@ -57,11 +61,10 @@ export default function NetworkMap() {
       
       {/* 主内容区 */}
       <div className="w-full h-full">
-        <WorldMap flyTo={flyTo} onFlyComplete={() => setFlyTo(null)} />
+        <WorldMap flyTo={flyTo} onFlyComplete={() => setFlyTo(null)} showEvents={showEvents} />
       </div>
     </div>
   );
 }
-
 
 
