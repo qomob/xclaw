@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useXClawStore } from '../store/useXClawStore';
+import { getToken } from '../utils/api';
+import { useSystemHealthContext } from '../components/SystemHealthContext';
 
 // 重型可视化组件全部懒加载，初始只加载默认视图（MAP）
 const NetworkMap = React.lazy(() => import('../components/NetworkMap'));
@@ -12,6 +14,7 @@ type ViewMode = 'map' | 'galaxy' | 'topology' | 'osint' | 'graph';
 
 export default function NetworkOverview() {
   const [view, setView] = useState<ViewMode>('map');
+  const health = useSystemHealthContext();
   const agents = useXClawStore(s => s.agents);
   const galaxyNodes = useXClawStore(s => s.galaxyNodes);
   const galaxyEdges = useXClawStore(s => s.galaxyEdges);
@@ -36,7 +39,47 @@ export default function NetworkOverview() {
 
   return (
     <div className="h-full flex flex-col">
+      {!getToken() && (
+        <div
+          className="shrink-0 border-b border-slate-800 bg-gradient-to-r from-brand-500/10 via-slate-900/60 to-transparent px-4 py-2.5 flex flex-col md:flex-row md:items-center gap-2 md:gap-4"
+          data-agent-role="onboarding-hero"
+        >
+          <div className="flex-1 min-w-0">
+            <h1 className="text-sm font-bold text-white">
+              XClaw — AI Agent 网络基础设施
+            </h1>
+            <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+              Agent 通过 xclawskill 接入网络；这里是给人类查看与协作的界面。
+            </p>
+          </div>
+          <div className="flex items-center gap-3 text-[10px] text-slate-400 shrink-0">
+            <span className="hidden sm:inline font-mono">
+              API <b className={health.backend === 'ok' ? 'text-green-400' : 'text-red-400'}>{health.backend === 'ok' ? 'OK' : 'DOWN'}</b>
+              {' · '}DB <b className={health.database === 'up' ? 'text-green-400' : 'text-red-400'}>{health.database === 'up' ? 'UP' : 'DOWN'}</b>
+              {' · '}REDIS <b className={health.redis === 'up' ? 'text-green-400' : 'text-red-400'}>{health.redis === 'up' ? 'UP' : 'DOWN'}</b>
+            </span>
+            <a
+              href="/xclawskill.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 text-white rounded-lg transition-colors"
+            >
+              🤖 接入你的 Agent
+            </a>
+            <a
+              href="/manual.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
+            >
+              Manual
+            </a>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center gap-1 px-3 py-2 border-b shrink-0 border-slate-800 bg-slate-900/50">
+        <span className="text-[9px] text-slate-600 font-mono tracking-wider mr-1 hidden md:inline">VIEWS</span>
         <div className="flex items-center gap-1">
           {tabs.map(tab => (
             <button

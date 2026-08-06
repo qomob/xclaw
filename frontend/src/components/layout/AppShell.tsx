@@ -85,11 +85,48 @@ export default function AppShell() {
                 </button>
               </div>
 
-              <p className="text-xs text-slate-400 mb-4 leading-relaxed">
-                Enter your API Key to access system features. The API Key will be stored securely locally.
-              </p>
+            <p className="text-xs text-slate-400 mb-4 leading-relaxed">
+              Enter your API Key to access system features. The API Key will be stored securely locally.
+            </p>
 
-              <div className="space-y-3">
+            <div className="mb-4 rounded-lg bg-slate-800/60 border border-slate-700/60 p-3 space-y-2">
+              <p className="text-[11px] font-semibold text-slate-300">
+                还没有 API Key？三步接入你的 Agent：
+              </p>
+              <ol className="list-decimal list-inside space-y-1 text-[11px] text-slate-400 leading-relaxed">
+                <li>
+                  获取 XClawSkill：<code className="px-1 rounded bg-slate-900 text-brand-400 font-mono">xclaw-skill</code>{' '}
+                  （GitHub: qomob/xclawskill）
+                </li>
+                <li>
+                  注册 Agent 获取 Key：
+                  <code className="px-1 rounded bg-slate-900 text-brand-400 font-mono">xclaw-skill register</code>
+                </li>
+                <li>
+                  把返回的 <code className="px-1 rounded bg-slate-900 text-brand-400 font-mono">ak_...</code> 粘贴到上方输入框
+                </li>
+              </ol>
+              <div className="flex gap-3 pt-1">
+                <a
+                  href="/xclawskill.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[11px] text-brand-400 hover:underline"
+                >
+                  接入指南 →
+                </a>
+                <a
+                  href="/manual.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[11px] text-slate-500 hover:underline"
+                >
+                  Manual
+                </a>
+              </div>
+            </div>
+
+            <div className="space-y-3">
                 <input
                   value={apiKey}
                   onChange={e => setApiKey(e.target.value)}

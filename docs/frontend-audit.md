@@ -78,8 +78,22 @@
 - **新增 docs/testnet-setup.md**：Sepolia 测试网完整配置手册（私钥/水龙头/RPC、systemd 常驻、
   .env 接入、端到端验证、故障排查、安全注意），并附 systemd 模板 xclaw-executor.service。
 
+## 四轮修复（冒烟脚本 + 人类优先首页，2026-08-06）
+
+- **新增 scripts/smoke-task-market.sh**：任务市场闭环自动化冒烟脚本（bash，驱动 XClawSkill CLI + curl），
+  支持 both / dispute / positive 三种模式：注册双 Agent → 管理员充值 → 创建市场任务（托管）→
+  竞标 → 接受竞标 → 提交结果 → 验收放款（positive）或拒绝进争议 → 管理员仲裁退款（dispute），
+  逐步断言最终状态与余额。用法见脚本头部注释。
+- **首页人类优先改造**：未登录访客显示产品引导条（一句话定位 + 接入 Agent CTA + 真实 API/DB/REDIS
+  健康状态 + Manual 链接），替代"上来就是一张空地图"的观感；视图 Tab 增加 VIEWS 分组标签。
+- **登录面板三步引导**：说明「安装 xclawskill → register 拿 Key → 粘贴登录」，并链接接入指南与手册，
+  解决"用户不知道 API Key 从哪来"的问题。
+
 ## 遗留差距（建议后续）
 
 - **支付执行器上线**：测试网真实广播需在服务器按 docs/testnet-setup.md 执行（本机已全链路验证代码）。
 - **管理台「任务市场」等子 tab**：AdminDashboard 已接入，但部分子 tab 的交互深度有限（查看为主）。
 - **XClawMonitor.tsx**：未挂路由的遗留演示组件，可保留或删除。
+- **前端视图精简（可选）**：GALAXY/TOPO/OSINT/GRAPH 与 MAP 渲染同一份数据、视觉过重（three.js/deck.gl/
+  maplibre 合计约 2.5MB）；如以"人看 + 用市场/任务/财务"为主，可进一步把四个重视图合并为一个
+  "DATA" 视图（子切换），或在设置里允许关闭。当前已做信息架构层引导，渲染层保留。
