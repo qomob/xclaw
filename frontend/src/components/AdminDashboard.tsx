@@ -163,6 +163,7 @@ export default function AdminDashboard() {
     { id: 'monitor', label: 'Monitoring', color: 'sky' },
     { id: 'federation', label: 'Federation', color: 'violet' },
     { id: 'taskmarket', label: 'Task Market', color: 'amber' },
+    { id: 'disputes', label: 'Disputes', color: 'red' },
     { id: 'settings', label: 'Settings', color: 'slate' },
     { id: 'a2a', label: 'A2A Protocol', color: 'purple' },
     { id: 'searchv2', label: 'Search V2', color: 'cyan' },
@@ -386,6 +387,8 @@ export default function AdminDashboard() {
       {activeTab === 'mcp' && <MCPPanel />}
       {activeTab === 'developer' && <DeveloperPanel />}
       {activeTab === 'security' && <SecurityPanel />}
+      {activeTab === 'taskmarket' && <TaskMarketPanel stats={taskMarketStats} />}
+      {activeTab === 'disputes' && <DisputesPanel apiKey={apiKey} />}
 
       {/* ─── Overview Tab Content ─── */}
       {activeTab === 'overview' && (<>
@@ -661,6 +664,212 @@ export default function AdminDashboard() {
       </div>
 
       </>)}
+    </div>
+  );
+}
+
+// ─── Task Market Panel ─────────────────────────────────────────────────────
+
+function TaskMarketPanel({ stats }: { stats: { open_tasks: number; total_bids: number } | null }) {
+  return (
+    <div className="space-y-4">
+      <div className="border-l-4 border-amber-500 pl-4">
+        <h2 className="text-xl font-bold text-white">Task Market</h2>
+        <p className="text-sm text-slate-400 mt-1">Marketplace overview — management is done in the Task Center</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 max-w-md">
+        <div className="rounded-lg bg-[#111827] border border-slate-700/60 p-4 text-center">
+          <div className="text-2xl font-bold text-amber-400">{stats?.open_tasks ?? '—'}</div>
+          <div className="text-xs text-slate-500 mt-1">Open Tasks</div>
+        </div>
+        <div className="rounded-lg bg-[#111827] border border-slate-700/60 p-4 text-center">
+          <div className="text-2xl font-bold text-purple-400">{stats?.total_bids ?? '—'}</div>
+          <div className="text-xs text-slate-500 mt-1">Total Bids</div>
+        </div>
+      </div>
+
+      <div className="rounded-lg bg-[#111827] border border-slate-700/60 p-4 text-sm text-slate-400 max-w-xl">
+        任务市场的完整管理（发布/竞标/接标/提交/验收）请在左侧导航进入
+        <span className="text-slate-200 font-medium"> Task Center</span> 操作；
+        争议仲裁请切换到本页的
+        <span className="text-red-400 font-medium"> Disputes</span> 标签。
+      </div>
+    </div>
+  );
+}
+
+// ─── Disputes Panel ────────────────────────────────────────────────────────
+
+interface Dispute {
+  id: string;
+  task_id: string;
+  opened_by: string | null;
+  reason: string;
+  evidence: string | null;
+  status: 'open' | 'resolved';
+  resolution: string | null;
+  resolved_by: string | null;
+  created_at: string;
+  resolved_at: string | null;
+  type: string;
+  title: string;
+  caller_id: string;
+  node_id: string | null;
+  escrow_amount: number | null;
+}
+
+function DisputesPanel({ apiKey }: { apiKey: string }) {
+  const [disputes, setDisputes] = useState<Dispute[]>([]);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const qs = statusFilter ? `?status=${statusFilter}&limit=50` : '?limit=50';
+      const res = await adminFetch<{ data: Dispute[] }>(`/v1/admin/task-market/disputes${qs}`, apiKey);
+      setDisputes(res.data || []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load disputes');
+    } finally {
+      setLoading(false);
+    }
+  }, [apiKey, statusFilter]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const resolve = async (dispute: Dispute, resolution: 'released_to_worker' | 'refunded_caller') => {
+    const label = resolution === 'released_to_worker'
+      ? `释放托管给执行者（${dispute.escrow_amount ?? 0} XCL）并标记任务完成`
+      : `向调用方退款（${dispute.escrow_amount ?? 0} XCL）并取消任务`;
+    if (!window.confirm(`确认仲裁该争议？将${label}。此操作不可撤销。`)) return;
+    setBusyId(dispute.id);
+    try {
+      const res = await adminFetch<{ success?: boolean; message?: string }>(
+        `/v1/admin/task-market/disputes/${dispute.id}/resolve`,
+        apiKey,
+        {
+          method: 'POST',
+          body: JSON.stringify({ resolution }),
+        }
+      );
+      if (res && res.success === false) {
+        alert(res.message || '仲裁失败');
+      }
+      load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '仲裁请求失败');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const filterBtn = (key: string, label: string) => (
+    <button
+      key={key}
+      onClick={() => setStatusFilter(key)}
+      className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+        statusFilter === key ? 'bg-red-500 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
+      }`}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="border-l-4 border-red-500 pl-4">
+          <h2 className="text-xl font-bold text-white">Dispute Arbitration</h2>
+          <p className="text-sm text-slate-400 mt-1">
+            Worker submitted a result, caller rejected it — escrow is held until you decide
+          </p>
+        </div>
+        <div className="flex gap-1.5">
+          {filterBtn('', 'All')}
+          {filterBtn('open', 'Open')}
+          {filterBtn('resolved', 'Resolved')}
+        </div>
+      </div>
+
+      {error && (
+        <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-400">
+          {error === 'AUTH_FAILED' ? 'Invalid admin API key' : error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex items-center justify-center py-10">
+          <div className="w-6 h-6 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+          <span className="ml-3 text-slate-500 text-sm">Loading disputes...</span>
+        </div>
+      ) : disputes.length === 0 ? (
+        <div className="rounded-lg bg-[#111827] border border-slate-700/60 p-10 text-center text-sm text-slate-500">
+          No disputes{statusFilter ? ` with status "${statusFilter}"` : ''}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {disputes.map(d => (
+            <div key={d.id} className="rounded-lg bg-[#111827] border border-slate-700/60 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold text-white truncate">{d.title || d.type}</h3>
+                  <p className="text-[10px] font-mono text-slate-500 mt-0.5">
+                    dispute {d.id.slice(0, 8)}… · task {d.task_id.slice(0, 8)}…
+                  </p>
+                </div>
+                <span className={`shrink-0 text-xs px-2 py-1 rounded font-medium ${
+                  d.status === 'open'
+                    ? 'bg-red-500/20 text-red-400'
+                    : 'bg-green-500/20 text-green-400'
+                }`}>
+                  {d.status === 'open' ? 'OPEN' : `RESOLVED · ${d.resolution || ''}`}
+                </span>
+              </div>
+
+              {d.reason && (
+                <p className="text-xs text-slate-300 mt-2 bg-slate-900/60 rounded p-2.5">
+                  <span className="text-slate-500">Reason:</span> {d.reason}
+                </p>
+              )}
+              {d.evidence && (
+                <p className="text-xs text-slate-400 mt-1.5">
+                  <span className="text-slate-500">Evidence:</span> {d.evidence}
+                </p>
+              )}
+
+              <div className="flex flex-wrap items-center gap-2 mt-2.5 text-[10px] text-slate-500">
+                <span>Escrow: <span className="text-amber-400 font-medium">{d.escrow_amount ?? 0} XCL</span></span>
+                <span>· Opened: {new Date(d.created_at).toLocaleString('zh-CN')}</span>
+                {d.resolved_at && <span>· Resolved: {new Date(d.resolved_at).toLocaleString('zh-CN')}</span>}
+              </div>
+
+              {d.status === 'open' && (
+                <div className="flex gap-2 mt-3">
+                  <button
+                    onClick={() => resolve(d, 'released_to_worker')}
+                    disabled={busyId === d.id}
+                    className="px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white text-xs rounded-lg transition-colors"
+                  >
+                    {busyId === d.id ? 'Processing...' : 'Release to Worker'}
+                  </button>
+                  <button
+                    onClick={() => resolve(d, 'refunded_caller')}
+                    disabled={busyId === d.id}
+                    className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-slate-200 text-xs rounded-lg transition-colors"
+                  >
+                    {busyId === d.id ? 'Processing...' : 'Refund Caller'}
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

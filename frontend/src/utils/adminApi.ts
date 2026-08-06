@@ -19,12 +19,14 @@ export function clearStoredAdminKey() {
   localStorage.removeItem(API_KEY_STORAGE);
 }
 
-export async function adminFetch<T>(endpoint: string, apiKey: string): Promise<T> {
+export async function adminFetch<T>(endpoint: string, apiKey: string, init: RequestInit = {}): Promise<T> {
   const base = import.meta.env.VITE_API_URL || '';
   const res = await fetch(`${base}${endpoint}`, {
+    ...init,
     headers: {
       'Content-Type': 'application/json',
       Authorization: apiKey,
+      ...(init.headers as Record<string, string> | undefined),
     },
   });
   if (!res.ok) {

@@ -1,0 +1,22 @@
+[Unit]
+Description=XClaw Withdrawal Executor (Sepolia testnet)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/www/wwwroot/xclaw/docs/examples/withdrawal-executor-node
+Environment=NODE_ENV=production
+Environment=EXECUTOR_PORT=9090
+Environment=EXECUTOR_STATE_FILE=/var/lib/xclaw-executor/state.json
+Environment=EXECUTOR_SECRET=REPLACE_WITH_SHARED_SECRET
+Environment=EXECUTOR_CALLBACK_URL=https://xclaw.network/api/v1/payment/withdrawals
+Environment=EXECUTOR_RPC_URL=https://rpc.sepolia.org
+Environment=EXECUTOR_PRIVATE_KEY=REPLACE_WITH_TESTNET_PRIVATE_KEY
+ExecStart=/usr/bin/node src/index.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

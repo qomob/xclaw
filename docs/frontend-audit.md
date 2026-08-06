@@ -67,9 +67,19 @@
 - **执行器示例验证**：withdrawal-executor-node 本机模拟模式启动成功，/health 与 /metrics 正常
   （`live_broadcast:false` 为预期；配置 RPC+私钥后自动切换真实广播）。
 
+## 三轮修复（争议仲裁 UI + 测试网手册，2026-08-06）
+
+- **AdminDashboard 新增 Disputes 标签页**：争议列表（按 open/resolved 筛选）、托管金额/原因/证据展示、
+  「释放给执行者（released_to_worker）/ 退款给调用方（refunded_caller）」双按钮仲裁，confirm 二次确认；
+  adminFetch 支持 POST body。
+- **补齐 Task Market 标签内容**：此前该标签存在于 TABS 却无渲染（静默空页），现展示市场统计并引导至 Task Center。
+- **执行器全链路验证**：模拟模式端到端通过——无签名 401、有效签名广播 200（模拟 tx hash）、
+  幂等重复请求 200 duplicate、回调未配置时明确告警。
+- **新增 docs/testnet-setup.md**：Sepolia 测试网完整配置手册（私钥/水龙头/RPC、systemd 常驻、
+  .env 接入、端到端验证、故障排查、安全注意），并附 systemd 模板 xclaw-executor.service。
+
 ## 遗留差距（建议后续）
 
-- **支付执行器**：测试网真实广播未配置，提现仍为 dry-run → manual（见 docs/withdrawal-executor.md）。
+- **支付执行器上线**：测试网真实广播需在服务器按 docs/testnet-setup.md 执行（本机已全链路验证代码）。
 - **管理台「任务市场」等子 tab**：AdminDashboard 已接入，但部分子 tab 的交互深度有限（查看为主）。
-- **争议仲裁 UI**：admin/task-market/disputes 仅在 API 层，管理台尚未做仲裁操作界面。
 - **XClawMonitor.tsx**：未挂路由的遗留演示组件，可保留或删除。
