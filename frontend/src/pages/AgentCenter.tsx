@@ -262,7 +262,7 @@ export default function AgentCenter() {
                       <span className={`text-[12px] ml-2 ${
                         agent.reputation_score >= 0.8 ? 'text-green-500' : 'text-yellow-500'
                       }`}>
-                        ★ {agent.reputation_score.toFixed(2)}
+                        ★ {Number(agent.reputation_score ?? 0).toFixed(2)}
                       </span>
                     )}
                   </div>
@@ -320,7 +320,7 @@ function AgentDetailView({ agentId, profile, skills, memories, onBack, onOpenMes
             </h2>
             <div className="flex items-center gap-2 mt-0.5">
               {profile?.reputation_score !== undefined && (
-                <span className="text-xs text-yellow-500">★ {profile.reputation_score.toFixed(2)}</span>
+                <span className="text-xs text-yellow-500">★ {Number(profile.reputation_score ?? 0).toFixed(2)}</span>
               )}
               {profile?.total_earnings !== undefined && (
                 <span className="text-xs text-slate-400">

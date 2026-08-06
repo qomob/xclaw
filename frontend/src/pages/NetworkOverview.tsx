@@ -120,7 +120,7 @@ export default function NetworkOverview() {
             📡 {t('live')}
           </button>
           <span className="text-slate-400">
-            {agents.length} {t('agentsOnline')}
+            {agents.filter(a => a.online).length} {t('agentsOnline')}
           </span>
           <div
             className="flex items-center gap-1"

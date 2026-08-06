@@ -106,7 +106,7 @@ export default function SocialGraph() {
     for (const node of nodesRef.current) {
       const r = getNodeRadius(node);
       const isHovered = hovered?.id === node.id;
-      const trust = node.trust_score ?? 0;
+      const trust = Number(node.trust_score ?? 0);
 
       if (trust > 0) {
         ctx.beginPath();
@@ -171,7 +171,7 @@ export default function SocialGraph() {
 
       const trustStr = Number(hovered.trust_score ?? 0).toFixed(2);
       const relStr = hovered.relationship_count || '0';
-      const trustLevel = hovered.trust_score >= 0.7 ? 'High' : hovered.trust_score >= 0.4 ? 'Med' : 'Low';
+      const trustLevel = Number(hovered.trust_score ?? 0) >= 0.7 ? 'High' : Number(hovered.trust_score ?? 0) >= 0.4 ? 'Med' : 'Low';
       const nodeEdges = edgesRef.current.filter(
         e => (typeof e.source === 'object' && e.source.id === hovered.id) ||
              (typeof e.target === 'object' && e.target.id === hovered.id)
@@ -231,7 +231,7 @@ export default function SocialGraph() {
         setStats({
           total_nodes: res.data.total_nodes ?? 0,
           total_edges: res.data.total_edges ?? 0,
-          avg_trust_score: res.data.avg_trust_score ?? 0,
+          avg_trust_score: Number(res.data.avg_trust_score ?? 0),
         });
       }
     } catch {
@@ -240,10 +240,12 @@ export default function SocialGraph() {
   }, []);
 
   useEffect(() => {
-    if (dimensions.width === 0 || dimensions.height === 0) return;
+    if (!containerRef.current) return;
     let cancelled = false;
     const init = async () => {
       try {
+        const w = dimensions.width || 900;
+        const h = dimensions.height || 600;
         const res = await fetchSocialGraph();
         if (cancelled) return;
         if (!res.success) { setError(res.error || 'Load Failed'); setLoading(false); return; }
@@ -253,8 +255,8 @@ export default function SocialGraph() {
 
         const simNodes: SimNode[] = rawNodes.map((n, i) => ({
           ...n,
-          x: dimensions.width / 2 + Math.cos((2 * Math.PI * i) / rawNodes.length) * 200,
-          y: dimensions.height / 2 + Math.sin((2 * Math.PI * i) / rawNodes.length) * 200,
+          x: w / 2 + Math.cos((2 * Math.PI * i) / rawNodes.length) * 200,
+          y: h / 2 + Math.sin((2 * Math.PI * i) / rawNodes.length) * 200,
         }));
 
         const simLinks = rawEdges.map(e => ({
@@ -521,27 +523,21 @@ export default function SocialGraph() {
     draw();
   }, [draw]);
 
-  if (loading) {
-    return (
-      <div className="w-full h-full flex items-center justify-center bg-[#0f172a] text-cyan-400 text-xs font-mono">
-        LOADING SOCIAL GRAPH...
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="w-full h-full flex flex-col items-center justify-center bg-[#0f172a] gap-3">
-        <span className="text-gray-400 text-xs font-mono">{error}</span>
-        <button onClick={() => window.location.reload()} className="px-3 py-1 text-[12px] bg-cyan-600 hover:bg-cyan-700 text-white rounded font-bold">
-          RETRY
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div ref={containerRef} className="w-full h-full relative" style={{ touchAction: 'none', overflow: 'hidden' }}>
+      {loading && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#0f172a]/90 text-cyan-400 text-xs font-mono">
+          LOADING SOCIAL GRAPH...
+        </div>
+      )}
+      {error && (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-[#0f172a]/90 gap-3">
+          <span className="text-gray-400 text-xs font-mono">{error}</span>
+          <button onClick={() => window.location.reload()} className="px-3 py-1 text-[12px] bg-cyan-600 hover:bg-cyan-700 text-white rounded font-bold">
+            RETRY
+          </button>
+        </div>
+      )}
       <div className="absolute top-2 left-2 z-10 flex gap-2 items-center">
         <span className="text-[12px] text-gray-400 font-mono">
           {nodes.length} AGENTS · {edges.length} CONNECTIONS

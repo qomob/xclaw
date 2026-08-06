@@ -305,18 +305,29 @@ export const useXClawStore = create<XClawState>((set, get) => {
         const agentsData = await fetchOnlineAgents() as APIResponse<BackendNode[]>;
         const categoriesData = await fetchSkillCategories() as APIResponse<Array<string | BackendCategory>>;
 
-        if (agentsData.success && agentsData.data) {
-          const agents: Agent[] = agentsData.data.map((node) => ({
-            id: node.id || node.node_id || '',
-            name: node.name,
-            group: Math.floor(Math.random() * 4) + 1,
-            lat: Number(node.lat || node.latitude) || 0,
-            lng: Number(node.lng || node.longitude) || 0,
-            online: node.status === 'online',
-            tags: node.tags || []
-          }));
-          set({ agents });
+        // 用拓扑全量节点作为地图数据源（含已注册但当前离线的 Agent），
+        // online 状态以 Redis 在线集为准（心跳语义）
+        const onlineIds = new Set(
+          (agentsData.success ? agentsData.data : []).map(a => a.id || a.node_id)
+        );
+        let sourceNodes: BackendNode[] = [];
+        try {
+          const topo = await getTopology3D('live');
+          if (topo?.nodes?.length) sourceNodes = topo.nodes as unknown as BackendNode[];
+        } catch { /* ignore */ }
+        if (sourceNodes.length === 0 && agentsData.success && agentsData.data) {
+          sourceNodes = agentsData.data;
         }
+        const agents: Agent[] = sourceNodes.map((node) => ({
+          id: node.id || node.node_id || '',
+          name: node.name,
+          group: node.group || 1,
+          lat: Number(node.lat ?? node.latitude) || 0,
+          lng: Number(node.lng ?? node.longitude) || 0,
+          online: onlineIds.has(node.id || node.node_id || ''),
+          tags: node.tags || []
+        }));
+        set({ agents });
 
         if (categoriesData.success && categoriesData.data) {
           const groups: AgentGroup[] = categoriesData.data.map((cat, index: number) => {

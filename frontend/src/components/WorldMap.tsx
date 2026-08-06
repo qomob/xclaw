@@ -207,17 +207,19 @@ export default function WorldMap({ flyTo, onFlyComplete, showEvents = false }: W
       const jitter = idx === 0 ? 0 : 0.02;
       const jitterLng = agent.lng + jitter * (idx % 2 === 0 ? 1 : -1) * (0.5 + (idx * 0.3) % 1);
       const jitterLat = agent.lat + jitter * (idx % 2 === 1 ? 1 : -1) * (0.5 + (idx * 0.7) % 1);
-      const baseColor = cyberpunkColors[agent.group % cyberpunkColors.length];
+      const baseColor = agent.online
+        ? cyberpunkColors[agent.group % cyberpunkColors.length]
+        : [100, 116, 139];
       // 计算闪烁：正弦波动画，频率 2Hz
       const pulse = (Math.sin(animationTime * 4 + (parseFloat(agent.id.slice(-2)) || 0)) + 1) / 2;
-      const opacity = 0.4 + pulse * 0.6; // 透明度在 0.4 到 1.0 之间波动
+      const opacity = agent.online ? 0.4 + pulse * 0.6 : 0.22; // 在线闪烁，离线常灰
       
       return {
         id: agent.id,
         name: agent.name,
         position: [jitterLng, jitterLat],
         color: [baseColor[0], baseColor[1], baseColor[2], opacity * 255] as [number, number, number, number],
-        radius: 4 + pulse * 2, // 半径在 4 到 6 之间波动
+        radius: agent.online ? 4 + pulse * 2 : 3,
         group: agent.group
       };
     });
