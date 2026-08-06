@@ -143,6 +143,70 @@ const messageBuffer: Log[] = [];
 // 最大日志数量，超过时会剔除最旧的数据
 const MAX_LOGS = 200;
 
+/** 简单字符串哈希（用于确定性伪随机球面分布） */
+function hashString(str: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return Math.abs(h);
+}
+
+/**
+ * 将拓扑节点归一化为 GalaxyNode：
+ * - 保证 position 始终存在（有经纬度则投影到球面，否则按节点 ID 哈希生成确定性位置）
+ * - 兜底 id/name/capabilities/reputation/online 等字段
+ */
+function normalizeGalaxyNode(node: BackendNode, index: number): GalaxyNode {
+  const id = String(node.id || node.node_id || `node-${index}`);
+  const lat = Number(node.lat ?? node.latitude);
+  const lng = Number(node.lng ?? node.longitude);
+
+  let position: [number, number, number];
+  if (
+    Array.isArray(node.position) &&
+    node.position.length === 3 &&
+    node.position.every(v => typeof v === 'number' && Number.isFinite(v))
+  ) {
+    position = node.position as [number, number, number];
+  } else if (Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0)) {
+    const phi = (lat * Math.PI) / 180;
+    const theta = (lng * Math.PI) / 180;
+    const r = 200;
+    position = [
+      r * Math.cos(phi) * Math.cos(theta),
+      r * Math.sin(phi),
+      r * Math.cos(phi) * Math.sin(theta),
+    ];
+  } else {
+    // 确定性球面分布：同一节点多次渲染位置一致
+    const seed = hashString(id);
+    const phi = ((seed % 1000) / 1000) * Math.PI - Math.PI / 2;
+    const theta = ((seed % 997) / 997) * Math.PI * 2;
+    const r = 180 + (seed % 40);
+    position = [
+      r * Math.cos(phi) * Math.cos(theta),
+      r * Math.sin(phi),
+      r * Math.cos(phi) * Math.sin(theta),
+    ];
+  }
+
+  return {
+    id,
+    name: node.name || id,
+    capabilities: Array.isArray(node.capabilities)
+      ? node.capabilities
+      : typeof node.capabilities === 'string'
+        ? node.capabilities.split(',')
+        : [],
+    reputation: Number(node.reputation ?? node.reputation_score ?? 0.5) || 0.5,
+    online: Boolean(node.online ?? node.status === 'online'),
+    position,
+    group: Number(node.group || 1),
+  };
+}
+
 interface APIResponse<T> {
   success: boolean;
   data: T;
@@ -161,6 +225,11 @@ interface BackendNode {
   val?: number;
   lat?: number;
   lng?: number;
+  position?: number[];
+  capabilities?: string[] | string;
+  reputation?: number;
+  reputation_score?: number;
+  online?: boolean;
 }
 
 interface BackendCategory {
@@ -490,10 +559,16 @@ export const useXClawStore = create<XClawState>((set, get) => {
       try {
         const data = await getTopology3D(get().galaxyTimeRange);
         if (data?.nodes) {
-          set({ galaxyNodes: data.nodes });
+          set({ galaxyNodes: data.nodes.map(normalizeGalaxyNode) });
         }
         if (data?.edges) {
-          set({ galaxyEdges: data.edges });
+          set({
+            galaxyEdges: data.edges.map(e => ({
+              source: String(e.source),
+              target: String(e.target),
+              weight: Number(e.weight || 1),
+            })),
+          });
         }
       } catch (error) {
         console.error('Failed to fetch galaxy data:', error);

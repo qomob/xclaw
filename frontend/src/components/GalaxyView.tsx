@@ -84,12 +84,12 @@ function computePositions(
 
   // If every node already has a non-zero position, use them as-is.
   const allZero = nodes.every(
-    (n) => n.position[0] === 0 && n.position[1] === 0 && n.position[2] === 0
+    (n) => (n.position?.[0] ?? 0) === 0 && (n.position?.[1] ?? 0) === 0 && (n.position?.[2] ?? 0) === 0
   );
 
   if (!allZero) {
     const m = new Map<string, [number, number, number]>();
-    nodes.forEach((n) => m.set(n.id, n.position));
+    nodes.forEach((n) => m.set(n.id, (n.position ?? [0, 0, 0]) as [number, number, number]));
     return m;
   }
 

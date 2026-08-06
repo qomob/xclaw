@@ -100,6 +100,17 @@
 - **浏览器实测**：Playwright 验证匿名首页快照（hero + 状态面板 + NETWORK/DATA 结构）与
   DATA 子视图切换均正常渲染，无运行时错误。
 
+## 六轮修复（GALAXY 崩溃，2026-08-06）
+
+- **崩溃根因**：`GalaxyView.computePositions` 读取 `n.position[0]`，而 `/v1/topology` 返回的节点
+  只有 `lat/lng` 没有 `position` 数组；此前无节点不触发，有在线 Agent 后必然崩溃。
+- **修复**：
+  1. store `fetchGalaxyData` 归一化节点：保证 `position` 始终存在（有经纬度投影到球面，
+     否则按节点 ID 哈希生成确定性球面位置），并兜底 id/name/capabilities/reputation/online；
+  2. `GalaxyView.computePositions` 增加 `n.position?.` 可选链防御（双保险）。
+- **验证**：本地 mock API 返回「带经纬度、无 position」的拓扑节点（复现崩溃数据），
+  Playwright 进入 GALAXY 视图 Console 0 errors。
+
 ## 遗留差距（建议后续）
 
 - **支付执行器上线**：测试网真实广播需在服务器按 docs/testnet-setup.md 执行（本机已全链路验证代码）。
