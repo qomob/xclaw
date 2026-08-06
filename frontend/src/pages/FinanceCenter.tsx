@@ -82,10 +82,10 @@ export default function FinanceCenter() {
   };
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'overview', label: 'Overview' },
-    { key: 'transactions', label: 'Transactions' },
-    { key: 'wallets', label: 'Multi-Chain Wallets' },
-    { key: 'topup', label: 'Top Up' },
+    { key: 'overview', label: t('fcOverview') },
+    { key: 'transactions', label: t('fcTransactions') },
+    { key: 'wallets', label: t('fcWallets') },
+    { key: 'topup', label: t('fcTopUp') },
   ];
 
   return (
@@ -119,7 +119,7 @@ export default function FinanceCenter() {
         <div className="space-y-4">
           <div className={`${card} p-4`}>
             <h3 className="text-sm font-semibold mb-3 text-white">
-              Account Balance
+              {t('fcAccountBalance')}
             </h3>
             <div className="flex items-end gap-2">
               <span className={`text-3xl font-bold ${
@@ -135,10 +135,10 @@ export default function FinanceCenter() {
 
           <div className={`${card} p-4`}>
             <h3 className="text-sm font-semibold mb-3 text-white">
-              Recent Transactions
+              {t('fcRecentTx')}
             </h3>
             {transactions.length === 0 ? (
-              <div className="text-center py-6 text-xs text-slate-400">No transactions</div>
+              <div className="text-center py-6 text-xs text-slate-400">{t('fcNoTx')}</div>
             ) : (
               <div className="space-y-2">
                 {transactions.slice(0, 5).map(tx => (
@@ -170,10 +170,10 @@ export default function FinanceCenter() {
 
           <div className={`${card} p-4`}>
             <h3 className="text-sm font-semibold mb-3 text-white">
-              Multi-Chain Wallets ({wallets.length})
+              {t('fcWallets')} ({wallets.length})
             </h3>
             {wallets.length === 0 ? (
-              <div className="text-center py-6 text-xs text-slate-400">No bound wallets</div>
+              <div className="text-center py-6 text-xs text-slate-400">{t('fcNoWallets')}</div>
             ) : (
               <div className="space-y-2">
                 {wallets.map(w => (
@@ -183,7 +183,7 @@ export default function FinanceCenter() {
                         {chainMeta[w.chain]?.symbol || w.chain}
                       </span>
                       {w.is_primary && (
-                        <span className="ml-2 text-[10px] text-brand-400">Primary</span>
+                        <span className="ml-2 text-[10px] text-brand-400">{t('fcPrimary')}</span>
                       )}
                     </div>
                     <span className="text-[10px] font-mono text-slate-400">
@@ -200,7 +200,7 @@ export default function FinanceCenter() {
       {tab === 'transactions' && (
         <div className="space-y-2">
           {transactions.length === 0 ? (
-            <div className={`${card} p-8 text-center text-xs text-slate-400`}>No transactions</div>
+            <div className={`${card} p-8 text-center text-xs text-slate-400`}>{t('fcNoTx')}</div>
           ) : transactions.map(tx => (
             <div key={tx.id} className={`${card} p-3`}>
               <div className="flex items-center justify-between">
@@ -238,10 +238,10 @@ export default function FinanceCenter() {
         <div className="space-y-3">
           <div className={`${card} p-4`}>
             <h3 className="text-sm font-semibold mb-3 text-white">
-              Bound Wallets
+              {t('fcBoundWallets')}
             </h3>
             {wallets.length === 0 ? (
-              <div className="text-center py-6 text-xs text-slate-400">No bound wallets</div>
+              <div className="text-center py-6 text-xs text-slate-400">{t('fcNoWallets')}</div>
             ) : (
               <div className="space-y-2">
                 {wallets.map(w => (
@@ -257,7 +257,7 @@ export default function FinanceCenter() {
                       </span>
                     </div>
                     {w.is_primary && (
-                      <span className="text-[10px] px-1.5 py-0.5 bg-brand-500/20 text-brand-400 rounded">Primary</span>
+                      <span className="text-[10px] px-1.5 py-0.5 bg-brand-500/20 text-brand-400 rounded">{t('fcPrimary')}</span>
                     )}
                   </div>
                 ))}
@@ -267,7 +267,7 @@ export default function FinanceCenter() {
 
           <div className={`${card} p-4`}>
             <h3 className="text-sm font-semibold mb-3 text-white">
-              Supported Chains
+              {t('fcSupportedChains')}
             </h3>
             <div className="grid grid-cols-3 gap-2">
               {supportedChains.map(chain => (
@@ -279,7 +279,7 @@ export default function FinanceCenter() {
                     {chainMeta[chain]?.label || chain}
                   </div>
                   <div className="text-[10px] text-slate-500">
-                    {wallets.some(w => w.chain === chain) ? 'Bound' : 'Not bound'}
+                    {wallets.some(w => w.chain === chain) ? t('fcBound') : t('fcNotBound')}
                   </div>
                 </div>
               ))}
@@ -291,32 +291,32 @@ export default function FinanceCenter() {
       {tab === 'topup' && (
         <div className={`${card} p-4 max-w-lg`}>
           <h3 className="text-sm font-semibold mb-3 text-white">
-            Top Up
+            {t('fcTopUp')}
           </h3>
           <div className="space-y-3 text-xs text-slate-400 leading-relaxed">
             <p>
-              余额充值由平台管理员操作：管理员通过
+              {t('fcTopUpHint1')}
               <code className="mx-1 px-1.5 py-0.5 rounded bg-slate-800 text-brand-400 font-mono">
                 POST /v1/billing/topup
               </code>
-              为指定 Agent 记账（需管理员 API Key）。
+              {t('fcTopUpHint2')}
             </p>
             <p>
-              Agent 侧可以发起的是链上充值申请
+              {t('fcTopUpHint3')}
               <code className="mx-1 px-1.5 py-0.5 rounded bg-slate-800 text-brand-400 font-mono">
                 POST /v1/payment/deposit
               </code>
-              ，由管理员确认链上交易后入账。钱包地址可在「Multi-Chain Wallets」页绑定。
+              {t('fcTopUpHint4')}
             </p>
             <p className="text-slate-500">
-              完整配置说明见
+              {t('fcTopUpDoc')}
               <a
                 href="https://github.com/qomob/xclaw/blob/main/docs/payment-config.md"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="ml-1 text-brand-400 hover:underline"
               >
-                Payment Configuration
+                {t('fcPaymentConfig')}
               </a>
               。
             </p>

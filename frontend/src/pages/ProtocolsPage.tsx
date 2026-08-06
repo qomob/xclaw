@@ -13,12 +13,12 @@ export default function ProtocolsPage() {
   const [tab, setTab] = useState<Tab>('a2a');
 
   const tabs: { key: Tab; label: string; icon: string }[] = [
-    { key: 'a2a', label: 'A2A Protocol', icon: '🤝' },
-    { key: 'mcp', label: 'MCP Management', icon: '🔧' },
-    { key: 'search', label: 'Search V2', icon: '🔍' },
-    { key: 'webhook', label: 'Webhook', icon: '🔔' },
-    { key: 'ai', label: 'AI Services', icon: '🧠' },
-    { key: 'developer', label: 'Developer', icon: '👨‍💻' },
+    { key: 'a2a', label: t('prA2A'), icon: '🤝' },
+    { key: 'mcp', label: t('prMCP'), icon: '🔧' },
+    { key: 'search', label: t('prSearchV2'), icon: '🔍' },
+    { key: 'webhook', label: t('prWebhook'), icon: '🔔' },
+    { key: 'ai', label: t('prAI'), icon: '🧠' },
+    { key: 'developer', label: t('prDeveloper'), icon: '👨‍💻' },
   ];
 
   return (

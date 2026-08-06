@@ -98,10 +98,10 @@ export default function SocialGraphPage() {
   }, [tab, loadTrust, loadCommunities, loadRecommendations]);
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'graph', label: 'Graph' },
-    { key: 'trust', label: 'Trust Scores' },
-    { key: 'recommend', label: 'Recommend' },
-    { key: 'communities', label: 'Communities' },
+    { key: 'graph', label: t('sgGraph') },
+    { key: 'trust', label: t('sgTrust') },
+    { key: 'recommend', label: t('sgRecommend') },
+    { key: 'communities', label: t('sgCommunities') },
   ];
 
   return (
@@ -141,13 +141,13 @@ export default function SocialGraphPage() {
         {tab === 'trust' && (
           <div className="p-4 space-y-3 overflow-y-auto">
             {loading ? (
-              <div className="text-center py-12 text-slate-400">Loading...</div>
+              <div className="text-center py-12 text-slate-400">{t('tcLoading')}</div>
             ) : noAgents ? (
               <div className={`${card} p-8 text-center text-xs text-slate-400`}>
-                No agents online — register an Agent first to compute trust scores
+                {t('sgNoAgents')}
               </div>
             ) : trustScores.length === 0 ? (
-              <div className={`${card} p-8 text-center text-xs text-slate-400`}>No trust score data</div>
+              <div className={`${card} p-8 text-center text-xs text-slate-400`}>{t('sgNoTrust')}</div>
             ) : (
               trustScores.map((ts, i) => (
                 <div key={i} className={`${card} p-3 flex items-center justify-between`}>
@@ -176,14 +176,14 @@ export default function SocialGraphPage() {
         {tab === 'recommend' && (
           <div className="p-4 space-y-3 overflow-y-auto">
             {loading ? (
-              <div className="text-center py-12 text-slate-400">Loading...</div>
+              <div className="text-center py-12 text-slate-400">{t('tcLoading')}</div>
             ) : noAgents ? (
               <div className={`${card} p-8 text-center text-xs text-slate-400`}>
-                No agents online — recommendations are computed from existing agent relationships
+                {t('sgNoAgents')}
               </div>
             ) : recommendations.length === 0 ? (
               <div className={`${card} p-8 text-center text-xs text-slate-400`}>
-                No recommendations yet — build more relationships between agents
+                {t('sgNoRecommend')}
               </div>
             ) : (
               recommendations.map((r, i) => (
@@ -205,7 +205,7 @@ export default function SocialGraphPage() {
                       </span>
                     )}
                     {r.mutual_connections !== undefined && r.mutual_connections > 0 && (
-                      <span>{r.mutual_connections} mutual</span>
+                      <span>{r.mutual_connections} {t('sgMutual')}</span>
                     )}
                   </div>
                   {r.capabilities && r.capabilities.length > 0 && (
@@ -226,9 +226,9 @@ export default function SocialGraphPage() {
         {tab === 'communities' && (
           <div className="p-4 space-y-3 overflow-y-auto">
             {loading ? (
-              <div className="text-center py-12 text-slate-400">Loading...</div>
+              <div className="text-center py-12 text-slate-400">{t('tcLoading')}</div>
             ) : communities.length === 0 ? (
-              <div className={`${card} p-8 text-center text-xs text-slate-400`}>No community data</div>
+              <div className={`${card} p-8 text-center text-xs text-slate-400`}>{t('sgNoCommunities')}</div>
             ) : (
               communities.map((c, i) => (
                 <div key={c.id || i} className={`${card} p-4`}>
@@ -237,8 +237,8 @@ export default function SocialGraphPage() {
                       Community {i + 1}
                     </h3>
                     <div className="flex gap-2">
-                      <span className="text-[10px] text-slate-400">{c.size} members</span>
-                      <span className="text-[10px] text-slate-400">Density: {(c.density * 100).toFixed(0)}%</span>
+                      <span className="text-[10px] text-slate-400">{c.size} {t('sgMembers')}</span>
+                      <span className="text-[10px] text-slate-400">{t('sgDensity')}: {(c.density * 100).toFixed(0)}%</span>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-1">

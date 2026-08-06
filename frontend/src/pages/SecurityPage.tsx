@@ -10,9 +10,9 @@ export default function SecurityPage() {
   const [tab, setTab] = useState<Tab>('security');
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'security', label: 'Security' },
-    { key: 'reputation', label: 'Reputation' },
-    { key: 'audit', label: 'Audit Logs' },
+    { key: 'security', label: t('secSecurity') },
+    { key: 'reputation', label: t('secReputation') },
+    { key: 'audit', label: t('secAudit') },
   ];
 
   return (

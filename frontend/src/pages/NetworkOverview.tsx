@@ -39,10 +39,10 @@ export default function NetworkOverview() {
   }, [init, destroy, fetchGalaxyData]);
 
   const dataTabs: { key: DataView; label: string }[] = [
-    { key: 'galaxy', label: 'GALAXY' },
-    { key: 'topology', label: 'TOPO' },
-    { key: 'osint', label: 'OSINT' },
-    { key: 'graph', label: 'GRAPH' },
+    { key: 'galaxy', label: t('viewGalaxy') },
+    { key: 'topology', label: t('viewTopo') },
+    { key: 'osint', label: t('viewOsint') },
+    { key: 'graph', label: t('viewGraph') },
   ];
 
   return (

@@ -89,11 +89,11 @@ export default function AdminPage() {
   };
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'dashboard', label: 'Dashboard' },
-    { key: 'monitor', label: 'Monitoring' },
-    { key: 'federation', label: 'Federation' },
-    { key: 'nodes', label: 'Node Management' },
-    { key: 'events', label: 'Event Logs' },
+    { key: 'dashboard', label: t('admDashboard') },
+    { key: 'monitor', label: t('admMonitor') },
+    { key: 'federation', label: t('admFederation') },
+    { key: 'nodes', label: t('admNodes') },
+    { key: 'events', label: t('admEvents') },
   ];
 
   return (

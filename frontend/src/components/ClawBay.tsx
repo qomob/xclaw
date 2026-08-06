@@ -6,6 +6,7 @@ import {
   AuthError, login as apiLogin, getToken,
   fetchOrderDetail, runTask, pollTask
 } from '../utils/api';
+import { useI18n } from '../i18n/LanguageContext';
 
 interface Skill {
   id: string;
@@ -60,6 +61,7 @@ interface MarketStats {
 type Tab = 'discover' | 'market' | 'detail' | 'orders' | 'top';
 
 export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) {
+  const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<Tab>('market');
   const [skills, setSkills] = useState<Skill[]>([]);
   const [discoverSkills, setDiscoverSkills] = useState<Skill[]>([]);
@@ -280,21 +282,20 @@ export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) 
   return (
     <div className="flex flex-col h-full bg-slate-900/50 rounded-sm border border-[#1E293B] p-2 md:p-4 space-y-2 md:space-y-3 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700">
       <h2 className="text-xs md:text-sm font-bold text-cyan-400 mb-1 md:mb-2 flex items-center gap-1 md:gap-2">
-        <span className="text-amber-400 text-[10px] md:text-sm">⚡</span> CLAW BAY MARKETPLACE
+        <span className="text-amber-400 text-[10px] md:text-sm">⚡</span> {t('cbTitle')}
       </h2>
 
       <p className="text-[8px] md:text-[9px] text-gray-400 leading-relaxed">
-        Discover, buy, and sell AI skills on the XClaw network.
-        Browse listings by category, rating, or use semantic search to find exactly what you need.
+        {t('cbDesc')}
       </p>
 
-      <div className="flex gap-1 flex-wrap">{tabBtn('discover', 'Discover')}{tabBtn('market', 'Market')}{tabBtn('top', 'Top')}{tabBtn('orders', 'Orders')}</div>
+      <div className="flex gap-1 flex-wrap">{tabBtn('discover', t('cbDiscover'))}{tabBtn('market', t('cbMarket'))}{tabBtn('top', t('cbTop'))}{tabBtn('orders', t('cbOrders'))}</div>
 
       {stats && (
         <div className="grid grid-cols-3 gap-1.5 md:gap-2">
-          {statBadge('Listed', stats.listed_skills, 'text-cyan-400')}
-          {statBadge('Traded', stats.completed_orders || 0, 'text-green-400')}
-          {statBadge('Avg Rating', Number(stats.avg_market_rating).toFixed(1), 'text-amber-400')}
+          {statBadge(t('cbListed'), stats.listed_skills, 'text-cyan-400')}
+          {statBadge(t('cbTraded'), stats.completed_orders || 0, 'text-green-400')}
+          {statBadge(t('cbAvgRating'), Number(stats.avg_market_rating).toFixed(1), 'text-amber-400')}
         </div>
       )}
 
@@ -303,7 +304,7 @@ export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) 
         <>
           <div className="flex gap-1.5">
             <input value={discoverQuery} onChange={e => setDiscoverQuery(e.target.value)}
-              placeholder="Semantic search (e.g. crypto, weather)..."
+              placeholder={t('cbSemanticPlaceholder')}
               className="flex-1 bg-black/30 border border-gray-700 rounded px-2 py-1.5 text-[9px] md:text-[10px] text-white outline-none focus:border-cyan-500 placeholder-gray-600" />
             <button onClick={() => discoverSearch(discoverQuery)}
               className="bg-cyan-600 hover:bg-cyan-700 text-white text-[9px] px-2.5 py-1.5 rounded shrink-0 font-medium">🔍</button>
@@ -311,9 +312,9 @@ export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) 
 
           <div className="space-y-2 md:space-y-2.5 min-h-0">
             {!discoverQuery && discoverSkills.length === 0 ? (
-              <div className="border border-cyan-800/40 bg-black/30 rounded p-3 text-center text-[9px] text-gray-500 animate-pulse">Scanning network...</div>
+              <div className="border border-cyan-800/40 bg-black/30 rounded p-3 text-center text-[9px] text-gray-500 animate-pulse">{t('cbScanning')}</div>
             ) : discoverSkills.length === 0 ? (
-              <div className="border border-gray-800/40 bg-black/30 rounded p-3 text-center text-[9px] text-gray-500">No matching skills found.</div>
+              <div className="border border-gray-800/40 bg-black/30 rounded p-3 text-center text-[9px] text-gray-500">{t('cbNoMatch')}</div>
             ) : discoverSkills.map(s => (
               <div key={s.id} onClick={() => openDetail(s as Skill)}
                 className={`bg-black/30 rounded border border-l-2 ${s.is_listed ? 'border-l-amber-500 border-amber-800/30 hover:border-amber-700/50' : 'border-l-cyan-500 border-cyan-800/30 hover:border-cyan-700/50'} p-2 md:p-2.5 space-y-1 cursor-pointer transition-colors`}>
@@ -339,7 +340,7 @@ export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) 
         <>
           <div className="flex gap-1.5">
             <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Filter listings..."
+              placeholder={t('cbFilterPlaceholder')}
               className="flex-1 bg-black/30 border border-gray-700 rounded px-2 py-1.5 text-[9px] md:text-[10px] text-white outline-none focus:border-amber-500 placeholder-gray-600" />
             <button onClick={() => fetchData()}
               className="bg-amber-600 hover:bg-amber-700 text-white text-[9px] px-2.5 py-1.5 rounded shrink-0 font-medium">🔍</button>
@@ -347,7 +348,7 @@ export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) 
 
           {featured.length > 0 && (
             <div className="space-y-1.5">
-              <div className="text-[9px] md:text-[10px] font-semibold text-amber-300 flex items-center gap-1"><span>★</span> Featured Skills</div>
+              <div className="text-[9px] md:text-[10px] font-semibold text-amber-300 flex items-center gap-1"><span>★</span> {t('cbFeatured')}</div>
               <div className="flex gap-1.5 overflow-x-auto pb-1">
                 {featured.slice(0, 4).map(s => (
                   <button key={s.id} onClick={() => openDetail(s)}
@@ -363,9 +364,9 @@ export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) 
 
           <div className="space-y-2 md:space-y-2.5 min-h-0">
             {loading ? (
-              <div className="border border-amber-800/40 bg-black/30 rounded p-4 text-center text-[9px] text-gray-500 animate-pulse">Loading marketplace...</div>
+              <div className="border border-amber-800/40 bg-black/30 rounded p-4 text-center text-[9px] text-gray-500 animate-pulse">{t('cbLoading')}</div>
             ) : skills.filter(s => !searchQuery || s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.description?.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 ? (
-              <div className="border border-gray-800/40 bg-black/30 rounded p-4 text-center text-[9px] text-gray-500">No listings found.</div>
+              <div className="border border-gray-800/40 bg-black/30 rounded p-4 text-center text-[9px] text-gray-500">{t('cbNoListings')}</div>
             ) : skills.filter(s => !searchQuery || s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.description?.toLowerCase().includes(searchQuery.toLowerCase())).map(s => (
               <button key={s.id} onClick={() => openDetail(s)}
                 className="w-full text-left bg-black/30 rounded border border-l-2 border-l-amber-500 border-amber-800/30 p-2 md:p-2.5 space-y-1 hover:border-amber-700/50 transition-colors">
@@ -383,7 +384,7 @@ export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) 
                   <span>{s.category}</span>
                   <span>v{s.version}</span>
                   <span>{s.seller_name || 'Unknown'}</span>
-                  <span>{s.sales_count} sold</span>
+                  <span>{s.sales_count} {t('cbSold')}</span>
                 </div>
               </button>
             ))}
@@ -419,8 +420,8 @@ export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) 
           {needsAuth ? (
             <div className="space-y-2">
               <div className="bg-black/30 rounded border border-l-2 border-l-amber-500 border-amber-800/30 p-3 space-y-2">
-                <h3 className="text-[10px] md:text-xs font-semibold text-white flex items-center gap-1.5"><span className="text-amber-400">🔑</span> Agent Authentication</h3>
-                <p className="text-[8px] text-gray-400 leading-relaxed">Enter your API Key to access orders, buy skills, and post reviews.</p>
+                <h3 className="text-[10px] md:text-xs font-semibold text-white flex items-center gap-1.5"><span className="text-amber-400">🔑</span> {t('cbAuthTitle')}</h3>
+                <p className="text-[8px] text-gray-400 leading-relaxed">{t('cbAuthDesc')}</p>
                 <div className="space-y-1.5">
                   <input value={apiKey} onChange={e => setApiKey(e.target.value)}
                     placeholder="API Key (ak_xxx...)"
@@ -428,12 +429,12 @@ export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) 
                     className="w-full bg-slate-900/50 border border-gray-700 rounded px-2 py-1.5 text-[9px] text-white outline-none focus:border-amber-500 placeholder-gray-600" />
                   {loginError && <div className="text-[8px] text-red-400">{loginError}</div>}
                   <button onClick={handleLogin}
-                    className="w-full bg-amber-600 hover:bg-amber-700 text-white text-[9px] py-1.5 rounded font-medium transition-colors">Authenticate</button>
+                    className="w-full bg-amber-600 hover:bg-amber-700 text-white text-[9px] py-1.5 rounded font-medium transition-colors">{t('cbAuthenticate')}</button>
                 </div>
               </div>
               <div className="bg-slate-900/30 rounded border border-cyan-900/20 p-2.5 space-y-1">
                 <p className="text-[7px] md:text-[8px] text-cyan-400/70 leading-relaxed">
-                  <span className="text-cyan-400">ℹ</span> Get your API Key: run <code className="bg-slate-800 px-1 rounded text-cyan-300">xclaw-skill login</code> in your agent terminal, or check your node dashboard.
+                  <span className="text-cyan-400">ℹ</span> {t('cbGetKeyHint')} <code className="bg-slate-800 px-1 rounded text-cyan-300">xclaw-skill login</code>
                 </p>
               </div>
             </div>
@@ -441,7 +442,7 @@ export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) 
             <>
               <select value={orderStatus} onChange={e => setOrderStatus(e.target.value)}
                 className="w-full bg-black/30 border border-gray-700 rounded px-2 py-1.5 text-[9px] md:text-[10px] text-white outline-none focus:border-amber-500">
-                <option value="">All Status</option>
+                <option value="">{t('cbAllStatus')}</option>
                 <option value="pending">Pending</option>
                 <option value="processing">Processing</option>
                 <option value="completed">Completed</option>
@@ -450,20 +451,20 @@ export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) 
               <div className="space-y-2 md:space-y-2.5 min-h-0">
                 {selectedOrder ? (
                   <div className="bg-black/30 rounded border border-l-2 border-l-cyan-500 border-cyan-800/30 p-2.5 md:p-3 space-y-2">
-                    <button onClick={() => setSelectedOrder(null)} className="text-[9px] md:text-[10px] text-cyan-400 hover:underline flex items-center gap-1">&larr; Back to Orders</button>
+                    <button onClick={() => setSelectedOrder(null)} className="text-[9px] md:text-[10px] text-cyan-400 hover:underline flex items-center gap-1">&larr; {t('cbBackToOrders')}</button>
                     <h3 className="text-[11px] md:text-sm font-bold text-white flex items-center gap-1.5">
-                      <span className="text-cyan-400">&#9776;</span> Order Detail
+                      <span className="text-cyan-400">&#9776;</span> {t('cbOrderDetail')}
                     </h3>
                     <div className="grid grid-cols-2 gap-1.5">
                       {[
-                        ['Order ID', selectedOrder.order_id?.slice(0, 12) + '…', 'text-cyan-300'],
-                        ['Skill', selectedOrder.skill_name, 'text-white'],
-                        ['Amount', `${selectedOrder.amount} XCL`, 'text-amber-400 font-bold'],
-                        ['Commission', `${selectedOrder.commission} XCL`, 'text-gray-300'],
-                        ['Status', selectedOrder.status, selectedOrder.status === 'completed' ? 'text-green-400' : selectedOrder.status === 'processing' ? 'text-yellow-400' : selectedOrder.status === 'failed' ? 'text-red-400' : 'text-gray-400'],
-                        ['Created', new Date(selectedOrder.created_at).toLocaleString(), 'text-gray-300'],
-                        ['Seller', selectedOrder.seller_name || 'Unknown', 'text-white'],
-                        ['Skill ID', selectedOrder.skill_id?.slice(0, 12) + '…', 'text-gray-400'],
+                        [t('cbOrderId'), selectedOrder.order_id?.slice(0, 12) + '…', 'text-cyan-300'],
+                        [t('cbSkill'), selectedOrder.skill_name, 'text-white'],
+                        [t('cbAmount'), `${selectedOrder.amount} XCL`, 'text-amber-400 font-bold'],
+                        [t('cbCommission'), `${selectedOrder.commission} XCL`, 'text-gray-300'],
+                        [t('cbStatus'), selectedOrder.status, selectedOrder.status === 'completed' ? 'text-green-400' : selectedOrder.status === 'processing' ? 'text-yellow-400' : selectedOrder.status === 'failed' ? 'text-red-400' : 'text-gray-400'],
+                        [t('cbCreated'), new Date(selectedOrder.created_at).toLocaleString(), 'text-gray-300'],
+                        [t('cbSeller'), selectedOrder.seller_name || 'Unknown', 'text-white'],
+                        [t('cbSkillId'), selectedOrder.skill_id?.slice(0, 12) + '…', 'text-gray-400'],
                       ].map(([k, v, c]) => (
                         <div key={k as string} className="bg-slate-900/50 rounded p-1.5 space-y-0.5">
                           <div className="text-[7px] text-gray-500">{k}</div>
@@ -473,7 +474,7 @@ export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) 
                     </div>
                   </div>
                 ) : orders.length === 0 ? (
-                  <div className="border border-gray-800/40 bg-black/30 rounded p-4 text-center text-[9px] text-gray-500">No orders yet.</div>
+                  <div className="border border-gray-800/40 bg-black/30 rounded p-4 text-center text-[9px] text-gray-500">{t('cbNoOrders')}</div>
                 ) : orders.map(o => (
                   <div key={o.order_id} onClick={() => handleSelectOrder(o.order_id)}
                     className={`bg-black/30 rounded border border-l-2 ${statusColor(o.status)} p-2 md:p-2.5 space-y-1 cursor-pointer hover:border-amber-700/50 transition-colors`}>
@@ -501,7 +502,7 @@ export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) 
       {/* ===== DETAIL VIEW ===== */}
       {activeTab === 'detail' && selectedSkill && (
         <div className="space-y-2 md:space-y-3 min-h-0">
-          <button onClick={() => setActiveTab('market')} className="text-[9px] md:text-[10px] text-cyan-400 hover:underline flex items-center gap-1">&larr; Back to Market</button>
+          <button onClick={() => setActiveTab('market')} className="text-[9px] md:text-[10px] text-cyan-400 hover:underline flex items-center gap-1">&larr; {t('cbBackToMarket')}</button>
 
           <div className="bg-black/30 rounded border border-l-2 border-l-amber-500 border-amber-800/30 p-2.5 md:p-3 space-y-2">
             <h3 className="text-[11px] md:text-sm font-bold text-white flex items-center gap-1.5">
@@ -520,8 +521,8 @@ export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) 
 
           {needsAuth ? (
             <div className="bg-black/30 rounded border border-l-2 border-l-amber-500 border-amber-800/30 p-3 space-y-1.5">
-              <p className="text-[8px] text-gray-400 text-center">Authenticate to buy this skill</p>
-              <button onClick={() => setActiveTab('orders')} className="w-full bg-amber-600 hover:bg-amber-700 text-white text-[9px] py-1.5 rounded font-medium transition-colors">Go to Auth</button>
+              <p className="text-[8px] text-gray-400 text-center">{t('cbAuthToBuy')}</p>
+              <button onClick={() => setActiveTab('orders')} className="w-full bg-amber-600 hover:bg-amber-700 text-white text-[9px] py-1.5 rounded font-medium transition-colors">{t('cbGoToAuth')}</button>
             </div>
           ) : (
             <div className="space-y-2">
@@ -529,13 +530,13 @@ export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) 
                 className={`w-full py-2 rounded text-[10px] md:text-[11px] font-bold transition-colors ${
                   orderLoading ? 'bg-gray-700 text-gray-400 cursor-wait' : 'bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white'
                 }`}>
-                {orderLoading ? 'Processing...' : `Buy Now · ${selectedSkill.price} XCL`}
+                {orderLoading ? 'Processing...' : `${t('cbBuyNow')} · ${selectedSkill.price} XCL`}
               </button>
               <button onClick={handleRunTask} disabled={taskRunning}
                 className={`w-full py-2 rounded text-[10px] md:text-[11px] font-bold transition-colors ${
                   taskRunning ? 'bg-gray-700 text-gray-400 cursor-wait' : 'bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white'
                 }`}>
-                {taskRunning ? '⏳ Running Task...' : '⚡ Run Skill'}
+                {taskRunning ? t('cbRunningTask') : `⚡ ${t('cbRunSkill')}`}
               </button>
               {taskStatus && (
                 <div className={`bg-black/30 rounded border border-l-2 p-2.5 space-y-1.5 ${
@@ -544,7 +545,7 @@ export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) 
                   'border-l-cyan-500 border-cyan-800/30'
                 }`}>
                   <div className="flex justify-between items-center">
-                    <h4 className="text-[9px] md:text-[10px] font-semibold text-white">Task Status</h4>
+                    <h4 className="text-[9px] md:text-[10px] font-semibold text-white">{t('cbTaskStatus')}</h4>
                     <span className={`text-[8px] md:text-[9px] font-medium px-1.5 py-0.5 rounded ${
                       taskStatus.status === 'completed' ? 'bg-green-900/30 text-green-400' :
                       taskStatus.status === 'failed' ? 'bg-red-900/30 text-red-400' :
@@ -566,7 +567,7 @@ export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) 
                     </div>
                   )}
                   {(taskStatus.status === 'pending' || taskStatus.status === 'running') && (
-                    <div className="text-[7px] text-gray-500 animate-pulse">Polling for updates...</div>
+                    <div className="text-[7px] text-gray-500 animate-pulse">{t('cbPolling')}</div>
                   )}
                 </div>
               )}
@@ -574,9 +575,9 @@ export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) 
           )}
 
           <div className="space-y-1.5 pt-1 border-t border-slate-800">
-            <h3 className="text-[10px] md:text-xs font-semibold text-white flex items-center gap-1.5"><span className="text-yellow-400">★</span> Reviews ({reviews.length})</h3>
+            <h3 className="text-[10px] md:text-xs font-semibold text-white flex items-center gap-1.5"><span className="text-yellow-400">★</span> {t('cbReviews')} ({reviews.length})</h3>
             {reviews.length === 0 ? (
-              <div className="border border-gray-800/40 bg-black/30 rounded p-3 text-center text-[8px] text-gray-500">No reviews yet.</div>
+              <div className="border border-gray-800/40 bg-black/30 rounded p-3 text-center text-[8px] text-gray-500">{t('cbNoReviews')}</div>
             ) : reviews.map(r => (
               <div key={r.review_id} className="bg-black/30 rounded border border-gray-800/30 p-2 space-y-0.5">
                 <div className="flex justify-between items-center">
@@ -589,7 +590,7 @@ export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) 
           </div>
 
           <div className="space-y-1.5 pt-1 border-t border-slate-800">
-            <h3 className="text-[10px] md:text-xs font-semibold text-white flex items-center gap-1.5"><span className="text-purple-400">✎</span> Write a Review</h3>
+            <h3 className="text-[10px] md:text-xs font-semibold text-white flex items-center gap-1.5"><span className="text-purple-400">✎</span> {t('cbWriteReview')}</h3>
             <div className="bg-black/30 rounded border border-purple-800/30 p-2.5 space-y-1.5">
               <div className="flex gap-1">
                 {[1, 2, 3, 4, 5].map(n => (
@@ -599,11 +600,11 @@ export default function ClawBay({ collapsed = false }: { collapsed?: boolean }) 
                 <span className="text-[8px] text-gray-500 self-end ml-1">{reviewRating}/5</span>
               </div>
               <textarea value={reviewComment} onChange={e => setReviewComment(e.target.value)}
-                placeholder="Share your experience..."
+                placeholder={t('cbReviewPlaceholder')}
                 className="w-full bg-slate-900/50 border border-gray-700 rounded px-2 py-1.5 text-[9px] text-white outline-none focus:border-purple-500 resize-none placeholder-gray-600"
                 rows={2} />
               <button onClick={handleReview}
-                className="w-full bg-purple-600 hover:bg-purple-700 text-white text-[9px] py-1.5 rounded font-medium transition-colors">Submit Review</button>
+                className="w-full bg-purple-600 hover:bg-purple-700 text-white text-[9px] py-1.5 rounded font-medium transition-colors">{t('cbSubmitReview')}</button>
             </div>
           </div>
         </div>

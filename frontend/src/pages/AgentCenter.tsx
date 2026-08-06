@@ -160,7 +160,7 @@ export default function AgentCenter() {
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSearch()}
-            placeholder="Search agent name or capabilities..."
+            placeholder={t('acSearchPlaceholder')}
             className="flex-1 bg-transparent text-sm outline-none text-white placeholder-slate-500"
           />
         </div>
@@ -168,7 +168,7 @@ export default function AgentCenter() {
           onClick={handleSearch}
           className="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm rounded-lg transition-colors"
         >
-          Search
+          {t('acSearch')}
         </button>
       </div>
 
@@ -204,11 +204,11 @@ export default function AgentCenter() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {loading ? (
             <div className="col-span-full text-center py-12 text-slate-400">
-              Loading...
+              {t('acLoading')}
             </div>
           ) : agents.length === 0 ? (
             <div className="col-span-full text-center py-12 text-slate-400">
-              No online agents
+              {t('acNoOnline')}
             </div>
           ) : agents.map(agent => (
             <button
@@ -274,13 +274,14 @@ function AgentDetailView({ agentId, profile, skills, memories, onBack, onOpenMes
   onOpenMessages: () => void;
   onOpenMemory: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="space-y-4">
       <button
         onClick={onBack}
         className="text-xs text-brand-400 hover:text-brand-300"
       >
-        ← Back to list
+        {t('acBackToList')}
       </button>
 
       <div className={`${card} p-4`}>
@@ -307,10 +308,10 @@ function AgentDetailView({ agentId, profile, skills, memories, onBack, onOpenMes
 
         <div className="flex gap-2 mt-4">
           <button onClick={onOpenMessages} className="px-3 py-1.5 bg-brand-500 text-white text-xs rounded-lg hover:bg-brand-600 transition-colors">
-            💬 Messages
+            💬 {t('acMessages')}
           </button>
           <button onClick={onOpenMemory} className="px-3 py-1.5 text-xs rounded-lg transition-colors bg-slate-800 text-slate-300 hover:bg-slate-700">
-            🧠 Memory ({memories.length})
+            🧠 {t('acMemory')} ({memories.length})
           </button>
         </div>
       </div>
@@ -318,14 +319,14 @@ function AgentDetailView({ agentId, profile, skills, memories, onBack, onOpenMes
       {profile?.task_stats && (
         <div className={`${card} p-4`}>
           <h3 className="text-sm font-semibold mb-3 text-white">
-            Task Statistics
+            {t('acTaskStats')}
           </h3>
           <div className="grid grid-cols-4 gap-2">
             {[
-              { label: 'Total', value: profile.task_stats.total_tasks, color: 'text-brand-400' },
-              { label: 'Completed', value: profile.task_stats.completed_tasks, color: 'text-green-400' },
-              { label: 'Failed', value: profile.task_stats.failed_tasks, color: 'text-red-400' },
-              { label: 'Pending', value: profile.task_stats.pending_tasks, color: 'text-yellow-400' },
+              { label: t('acTotal'), value: profile.task_stats.total_tasks, color: 'text-brand-400' },
+              { label: t('acCompleted'), value: profile.task_stats.completed_tasks, color: 'text-green-400' },
+              { label: t('acFailed'), value: profile.task_stats.failed_tasks, color: 'text-red-400' },
+              { label: t('acPending'), value: profile.task_stats.pending_tasks, color: 'text-yellow-400' },
             ].map(stat => (
               <div key={stat.label} className="text-center p-2 rounded-lg bg-slate-800">
                 <div className={`text-lg font-bold ${stat.color}`}>{stat.value}</div>
@@ -339,7 +340,7 @@ function AgentDetailView({ agentId, profile, skills, memories, onBack, onOpenMes
       {skills.length > 0 && (
         <div className={`${card} p-4`}>
           <h3 className="text-sm font-semibold mb-3 text-white">
-            Skills ({skills.length})
+            {t('acSkills')} ({skills.length})
           </h3>
           <div className="space-y-2">
             {skills.map(skill => (
@@ -359,7 +360,7 @@ function AgentDetailView({ agentId, profile, skills, memories, onBack, onOpenMes
       {profile?.relationships && profile.relationships.length > 0 && (
         <div className={`${card} p-4`}>
           <h3 className="text-sm font-semibold mb-3 text-white">
-            Social Relations ({profile.relationships.length})
+            {t('acSocialRelations')} ({profile.relationships.length})
           </h3>
           <div className="space-y-1">
             {profile.relationships.slice(0, 10).map((rel, i) => (
@@ -387,20 +388,21 @@ function AgentMessagesView({ agentId, messages, onBack }: {
   messages: Array<{ message_id: string; sender_id: string; content: string; created_at: string; read: boolean }>;
   onBack: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="space-y-3">
       <button
         onClick={onBack}
         className="text-xs text-brand-400 hover:text-brand-300"
       >
-        ← Back to details
+        {t('acBackToDetail')}
       </button>
       <h2 className="text-sm font-semibold text-white">
-        💬 Message History
+        💬 {t('acMessageHistory')}
       </h2>
       {messages.length === 0 ? (
         <div className={`${card} p-8 text-center text-xs text-slate-500`}>
-          No messages
+          {t('acNoMessages')}
         </div>
       ) : (
         <div className="space-y-2">
@@ -430,20 +432,21 @@ function AgentMemoryView({ agentId, memories, onBack }: {
   memories: Memory[];
   onBack: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="space-y-3">
       <button
         onClick={onBack}
         className="text-xs text-brand-400 hover:text-brand-300"
       >
-        ← Back to details
+        {t('acBackToDetail')}
       </button>
       <h2 className="text-sm font-semibold text-white">
-        🧠 Agent Memory ({memories.length})
+        🧠 {t('acMemory')} ({memories.length})
       </h2>
       {memories.length === 0 ? (
         <div className={`${card} p-8 text-center text-xs text-slate-500`}>
-          No memories
+          {t('acNoMemories')}
         </div>
       ) : (
         <div className="space-y-2">
@@ -462,7 +465,7 @@ function AgentMemoryView({ agentId, memories, onBack }: {
               </p>
               {mem.importance !== undefined && (
                 <div className="text-[10px] mt-1 text-slate-500">
-                  Importance: {(mem.importance * 100).toFixed(0)}%
+                  {t('acImportance')}: {(mem.importance * 100).toFixed(0)}%
                 </div>
               )}
             </div>
