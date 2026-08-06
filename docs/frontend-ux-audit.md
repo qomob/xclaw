@@ -143,3 +143,13 @@
 - xclawskill 页：一行安装 / 让 Agent 安装 / 三命令速览 / 常用操作表 / 提示；
   manual 页：产品概述 / 安装 / 快速开始 / 网页端使用 / CLI 参考 / 任务市场闭环 / 故障排查；
 - Playwright 实测中英切换与渲染正常、控制台零错误。
+
+## 移动端自适应强化（2026-08-06）
+
+- **多尺寸扫描**：6 个页面 × 4 种设备（iPhone SE 320 / iPhone 13 390 / Pixel 5 393 / iPad Mini 768）
+  实测零横向溢出；抽屉/登录弹窗/实时动态覆盖层均在可视区内；
+- **iOS 聚焦防缩放**：≤640px 输入框字号强制 16px；
+- **安全区适配**：`viewport-fit=cover` + `env(safe-area-inset-*)`，刘海屏头部/底部避让；
+- **短屏可滚**：登录弹窗 `max-h-[90vh] overflow-y-auto`（iPhone SE 568px 实测正常）；
+- **动态视口**：`#root` 使用 `100dvh`，规避移动浏览器地址栏高度变化；
+- **防溢出兜底**：img/svg/canvas/pre/table/code 强制 `max-width:100%`；触控目标 32px。

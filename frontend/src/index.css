@@ -21,6 +21,7 @@ body {
 #root {
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   margin: 0;
   padding: 0;
 }
@@ -39,6 +40,40 @@ body {
 
 @media (max-width: 767px) {
   button, a {
-    min-height: 28px;
+    min-height: 32px;
   }
+}
+
+/* ── 移动端适配增强 ─────────────────────────────────────────────── */
+
+/* iOS：输入框字号 ≥16px，防止聚焦时页面自动放大 */
+@media (max-width: 640px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* 刘海屏安全区：头部/底部/悬浮条避开 home indicator 与刘海 */
+@supports (padding: max(0px)) {
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+  header,
+  footer {
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
+  .fixed.bottom-0,
+  [data-agent-role="mobile-nav"] {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* 超小屏：防溢出兜底 */
+img, svg, video, canvas, pre, table, code {
+  max-width: 100%;
+}
+pre {
+  overflow-x: auto;
 }

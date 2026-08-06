@@ -59,7 +59,7 @@ function LoginModal() {
       aria-label={t('loginTitle')}
     >
       <div
-        className="w-full max-w-sm mx-4 p-6 rounded-xl border bg-slate-900 border-slate-700 shadow-2xl"
+        className="w-full max-w-sm mx-4 p-6 rounded-xl border bg-slate-900 border-slate-700 shadow-2xl max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-5">
