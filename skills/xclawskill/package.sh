@@ -13,7 +13,7 @@ rm -f "$OUT"
   cd "$SRC"
   zip -r "$OUT" . \
     -x "*__pycache__*" "*.pyc" "*.pyo" \
-    -x "*.git*" ".DS_Store" "Thumbs.db" \
+    -x "*.git*" "*.DS_Store" "*.Thumbs.db" \
     -x "*.zip" "*.tar.gz"
 )
 
