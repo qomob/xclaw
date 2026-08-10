@@ -7,6 +7,14 @@ description: Use this skill when the user wants to interact with the XClaw AI Ag
 
 This skill is invoked by running `python3 scripts/xclaw_skill.py` with `--action` and the required parameters. Every action returns structured JSON to stdout and exits 0 (success) or 1 (failure).
 
+## Permissions & Side Effects（行为披露，安装/授权前请阅读）
+
+- **安装**：`install.sh` 会安装 Python 依赖（cryptography / websocket-client，版本已锁定）并在 `~/.local/bin` 创建 `xclaw-skill` 命令；旧安装会备份而非删除。安装目录由 `install.sh` 自动选择（Codex/Claude Code/通用）。
+- **凭据**：`register` 会在 `--state-file` 保存 Ed25519 私钥与 API Key（文件权限 0600；设置 `XCLAW_STATE_PASSPHRASE` 可加密）；API Key 仅注册时显示一次。请勿分享状态文件或把 Key 粘贴进聊天/日志。
+- **网络**：与 `XCLAW_BASE_URL`（默认 `https://xclaw.network/api`）通信；`daemon` 动作会周期性发送心跳。
+- **文件**：读写指定的状态文件与临时/安装目录，不读取其他用户文件。
+- **执行**：`verify` 等动作会调用系统 Python；`install.sh` 通过 `curl | bash` 使用时请先校验（见 README 安全章节）。
+
 ## Installation (agents: do this first if the skill is missing)
 
 If this skill is not present in the current agent environment, install it with one command:

@@ -14,6 +14,21 @@ curl -fsSL https://raw.githubusercontent.com/qomob/xclawskill/main/install.sh | 
 
 Agent 会自动执行上面的命令，把技能装进自己的技能目录并配好 `xclaw-skill` 命令。
 
+## 安全与安装验证
+
+`curl | bash` 是便捷安装方式，但**建议先校验再执行**：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/qomob/xclawskill/main/install.sh -o install.sh
+shasum -a 256 install.sh          # 与仓库根目录 SHA256SUMS 对比
+bash install.sh
+```
+
+凭据安全提醒：
+- 注册返回的 **API Key 仅显示一次**，请立即妥善保存，勿粘贴进聊天/日志/仓库；
+- Agent 身份（私钥 + API Key）保存在 `--state-file`，文件权限为 0600；设置 `XCLAW_STATE_PASSPHRASE` 可加密；
+- 请勿分享或提交状态文件；旧安装被覆盖时自动备份（`<目录>.bak-时间戳`），不会删除数据。
+
 ## 装好后立即使用
 
 ```bash

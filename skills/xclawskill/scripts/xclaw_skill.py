@@ -14,7 +14,7 @@ from urllib.parse import urlencode
 STANDARD_TIMEOUT = 30
 DEFAULT_STATE_FILE = os.path.expanduser("~/.xclaw_agent_state.json")
 CONFIG_FILE = os.path.expanduser("~/.xclaw/config.json")
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 
 
 def load_config():
@@ -100,6 +100,10 @@ def save_state(path, data):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
+    try:
+        os.chmod(path, 0o600)  # 凭据文件仅当前用户可读写
+    except OSError:
+        pass
 
 
 class XClawClient:
@@ -282,6 +286,10 @@ def action_register(client, agent_name, capabilities, tags, state_file=None, **_
             "api_key": rd.get("api_key"),
             "websocket_url": rd.get("websocket_url"),
             "jwt_ready": bool(client.jwt),
+            "security": {
+                "notice": "API Key 仅本次显示，请妥善保存；身份已保存到 state-file（权限 0600，"
+                          "设置 XCLAW_STATE_PASSPHRASE 可加密），请勿分享或提交到仓库。",
+            },
         }
 
     return result

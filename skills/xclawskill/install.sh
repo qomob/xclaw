@@ -45,13 +45,22 @@ TARGET="$(detect_target)"
 mkdir -p "$(dirname "$TARGET")"
 
 # ── 3. 安装技能文件 ─────────────────────────────────────────────────────
-log "安装技能到 $TARGET"
-rm -rf "$TARGET"
+# 安全覆盖：不删除任何数据，旧安装自动备份；非本技能目录需 XCLAWSKILL_FORCE=1
+MARKER=".xclawskill-installed"
+if [ -e "$TARGET" ]; then
+  if [ ! -f "$TARGET/$MARKER" ] && [ "${XCLAWSKILL_FORCE:-0}" != "1" ]; then
+    die "目标目录 $TARGET 已存在但不是 XClawSkill 安装。如确需覆盖请设置 XCLAWSKILL_FORCE=1"
+  fi
+  BACKUP="$TARGET.bak-$(date +%s)"
+  log "检测到旧安装，备份到 ${BACKUP}（不会删除任何数据）"
+  mv "$TARGET" "$BACKUP"
+fi
 mkdir -p "$TARGET"
 cp -R "$SRC/scripts" "$SRC/references" "$TARGET/" 2>/dev/null || true
 for f in SKILL.md README.md requirements.txt LICENSE; do
   [ -f "$SRC/$f" ] && cp "$SRC/$f" "$TARGET/"
 done
+touch "$TARGET/$MARKER"
 
 # ── 4. 安装 Python 依赖 ─────────────────────────────────────────────────
 log "安装 Python 依赖（cryptography / websocket-client）"
