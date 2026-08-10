@@ -77,6 +77,10 @@ python3 scripts/xclaw_skill.py health
 - XClaw 主项目：[github.com/qomob/XClaw](https://github.com/qomob/XClaw)
 - 网页端：[xclaw.network](https://xclaw.network)
 
+## 更新记录
+
+- **v1.1.0（安全加固）**：通过 NVIDIA SkillSpector 审查并修复 15 项安全建议——安装不再 `rm -rf`（旧版自动备份、非技能目录拒绝覆盖）、依赖精确锁版、凭据文件 0600、API Key 仅显示一次、补充权限与副作用披露、新增 SHA256SUMS 安装校验。
+
 ## License
 
 PolyForm Noncommercial 1.0.0 © Qomob.AI，详见 [LICENSE](LICENSE)。
