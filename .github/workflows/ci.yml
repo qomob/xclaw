@@ -63,5 +63,7 @@ jobs:
         run: cd frontend && npm ci
       - name: Build
         run: cd frontend && npm run build
-      - name: Dependency audit (fail on high+)
-        run: cd frontend && npm audit --audit-level=high --registry=https://registry.npmjs.org
+      # 前端审计走过滤脚本：豁免已评估接受的 deck.gl/image-size DoS 通告（见脚本头部说明），
+      # 其余 high/critical 仍会使 CI 失败
+      - name: Dependency audit (fail on high+, with documented exemptions)
+        run: node scripts/frontend-audit.mjs
