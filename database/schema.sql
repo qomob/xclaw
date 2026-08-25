@@ -154,14 +154,14 @@ END
 $$;
 
 -- ──────────────────────────────────────────
--- Phase 5: 多链支付
+-- Phase 5: 多币种支付 (ETH / BTC / USDT)
 -- ──────────────────────────────────────────
 
--- 多链钱包：每个 Agent 可绑定多条链的地址
+-- 多币种钱包：每个 Agent 可绑定多种货币的地址
 CREATE TABLE IF NOT EXISTS wallets (
     wallet_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     node_id UUID NOT NULL REFERENCES nodes(node_id) ON DELETE CASCADE,
-    chain VARCHAR(30) NOT NULL,                     -- ethereum / polygon / arbitrum / optimism
+    chain VARCHAR(30) NOT NULL,                     -- ethereum / bitcoin / usdt
     address VARCHAR(255) NOT NULL,
     label VARCHAR(100),
     is_primary BOOLEAN DEFAULT FALSE,
@@ -205,9 +205,9 @@ CREATE INDEX IF NOT EXISTS idx_chain_tx_hash ON chain_transactions(tx_hash);
 CREATE INDEX IF NOT EXISTS idx_chain_tx_type ON chain_transactions(type);
 CREATE INDEX IF NOT EXISTS idx_chain_tx_created ON chain_transactions(created_at DESC);
 
--- 支持的链配置
+-- 支持的货币配置
 CREATE TABLE IF NOT EXISTS supported_chains (
-    chain_id VARCHAR(30) PRIMARY KEY,               -- ethereum / polygon / arbitrum / optimism
+    chain_id VARCHAR(30) PRIMARY KEY,               -- ethereum / bitcoin / usdt
     name VARCHAR(100) NOT NULL,
     rpc_url VARCHAR(500),
     explorer_url VARCHAR(500),
@@ -222,13 +222,12 @@ CREATE TABLE IF NOT EXISTS supported_chains (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
--- 初始化四条链
-INSERT INTO supported_chains (chain_id, name, explorer_url, chain_currency, min_deposit, min_withdrawal, withdraw_fee, confirmations_required)
+-- 初始化三种货币：ETH / BTC / USDT
+INSERT INTO supported_chains (chain_id, name, explorer_url, chain_currency, decimals, min_deposit, min_withdrawal, withdraw_fee, confirmations_required)
 VALUES
-    ('ethereum', 'Ethereum Mainnet', 'https://etherscan.io', 'ETH', 0.001, 0.01, 0.0005, 12),
-    ('polygon',  'Polygon PoS',      'https://polygonscan.com', 'MATIC', 0.01, 0.1, 0.005, 128),
-    ('arbitrum', 'Arbitrum One',      'https://arbiscan.io', 'ETH', 0.0005, 0.005, 0.0001, 12),
-    ('optimism', 'Optimism',          'https://optimistic.etherscan.io', 'ETH', 0.0005, 0.005, 0.0001, 12)
+    ('ethereum', 'Ethereum Mainnet', 'https://etherscan.io', 'ETH', 18, 0.001, 0.01, 0.0005, 12),
+    ('bitcoin',  'Bitcoin',          'https://mempool.space', 'BTC', 8, 0.0001, 0.001, 0.0001, 6),
+    ('usdt',     'Tether USD (ERC-20)', 'https://etherscan.io', 'USDT', 6, 1, 10, 1, 12)
 ON CONFLICT (chain_id) DO NOTHING;
 
 -- Webhook 事件系统
