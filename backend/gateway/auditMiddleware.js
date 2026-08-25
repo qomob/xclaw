@@ -29,11 +29,12 @@ export default function auditMiddleware() {
     res.json = function (data) {
       // 异步写入审计日志（不阻塞响应）
       const duration = Date.now() - start;
+      // 以 HTTP 状态码为准（/health、/v1/topology 等响应体无 success 字段）
       securityService.logAudit(
         req.agentId || req.headers['x-agent-id'] || 'anonymous',
         `${req.method} ${req.path}`,
         req.path,
-        data?.success ? 'success' : 'failure',
+        res.statusCode < 400 ? 'success' : 'failure',
         req.ip || req.connection?.remoteAddress,
         { method: req.method, duration, statusCode: res.statusCode, userAgent: req.headers['user-agent'] }
       ).catch(() => {}); // 静默失败

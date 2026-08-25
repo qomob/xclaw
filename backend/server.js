@@ -45,6 +45,9 @@ import searchServiceV2 from './services/searchServiceV2.js';
 import realtimePushService from './services/realtimePushService.js';
 import realtimeEventBridge from './services/realtimeEvents.js';
 
+// Phase 15: 全站审计中间件（记录所有 API 请求到 audit_logs）
+import auditMiddleware from './gateway/auditMiddleware.js';
+
 // ==========================================
 // 1. 初始化依赖与配置
 // ==========================================
@@ -200,6 +203,9 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-agent-signature', 'x-agent-id']
 }));
+
+// Phase 15: 全站 API 审计（fire-and-forget 写 audit_logs，失败静默不影响请求）
+app.use(auditMiddleware());
 
 // 挂载 API 路由 (包含 /health, /metrics 和 /v1 接口)
 app.use('/', apiRouter);
