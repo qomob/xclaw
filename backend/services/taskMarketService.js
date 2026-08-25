@@ -706,6 +706,33 @@ export async function createMarketTask(taskData) {
       return { success: false, error: 'caller_id is required' };
     }
     
+    // ── 输入校验：杜绝非法值直落数据库（此前 deadline 传数字会回裸 SQL 500）──
+    const isValidDate = (v) => {
+      if (v == null || v === '') return true; // 可空
+      if (typeof v !== 'string') return false;
+      const t = Date.parse(v);
+      return !Number.isNaN(t) && Number.isFinite(t);
+    };
+    for (const field of ['deadline', 'bid_deadline']) {
+      const v = taskData[field];
+      if (v != null && v !== '') {
+        if (typeof v !== 'string' || !isValidDate(v)) {
+          return { success: false, error: `${field} must be a valid ISO datetime string (e.g. 2026-12-31T23:59:59Z)` };
+        }
+        if (new Date(v).getTime() <= Date.now()) {
+          return { success: false, error: `${field} must be in the future` };
+        }
+      }
+    }
+    const budgetMax = Number(taskData.budget_max) || 0;
+    const budgetMin = Number(taskData.budget_min) || 0;
+    if (budgetMax < 0 || budgetMin < 0 || budgetMax > 1000000) {
+      return { success: false, error: 'budget values must be between 0 and 1000000' };
+    }
+    if (taskData.budget_max != null && Number.isNaN(Number(taskData.budget_max))) {
+      return { success: false, error: 'budget_max must be a number' };
+    }
+    
     const callerResult = await pgPool.query(
       'SELECT * FROM nodes WHERE node_id = $1',
       [taskData.caller_id]

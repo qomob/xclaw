@@ -837,4 +837,58 @@ describe('taskMarketService', () => {
       expect(result.error).toMatch(/Stats query failed/);
     });
   });
+
+  // ============================================
+  // createMarketTask — 输入校验
+  // ============================================
+  describe('createMarketTask validation', () => {
+    const baseTask = {
+      caller_id: 'node-caller',
+      title: 'T',
+      budget_min: 10,
+      budget_max: 20,
+      assignment_strategy: 'auto',
+    };
+
+    test('should reject non-string deadline with clean error', async () => {
+      const result = await createMarketTask({ ...baseTask, deadline: 1 });
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/deadline must be a valid ISO datetime/);
+    });
+
+    test('should reject invalid date string deadline', async () => {
+      const result = await createMarketTask({ ...baseTask, deadline: 'not-a-date' });
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/deadline must be a valid ISO datetime/);
+    });
+
+    test('should reject past deadline', async () => {
+      const result = await createMarketTask({ ...baseTask, deadline: '2020-01-01T00:00:00Z' });
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/must be in the future/);
+    });
+
+    test('should reject non-numeric budget_max', async () => {
+      const result = await createMarketTask({ ...baseTask, budget_max: 'abc' });
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/budget_max must be a number/);
+    });
+
+    test('should accept valid future ISO deadline', async () => {
+      mockPoolQuery
+        .mockResolvedValueOnce({ rows: [{ node_id: 'node-caller' }] }) // caller SELECT
+        .mockResolvedValueOnce({ rows: [{ id: 'task-1' }] });           // INSERT
+      mockClientQuery
+        .mockResolvedValueOnce({}) // BEGIN
+        .mockResolvedValueOnce({}) // escrow (via escrowFundsInTx)
+        .mockResolvedValueOnce({}); // COMMIT
+
+      const future = new Date(Date.now() + 3600_000).toISOString();
+      const result = await createMarketTask({ ...baseTask, deadline: future, bid_deadline: future });
+      expect(result.success).toBe(true);
+      expect(result.data.task_id).toBeDefined();
+      expect(mockRelease).toHaveBeenCalled();
+    });
+  });
+
 });
