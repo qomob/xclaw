@@ -29,6 +29,8 @@ class WebSocketServer {
       }
 
       ws.agentId = agentId;
+      const forwarded = req.headers['x-forwarded-for'];
+      ws._clientIp = forwarded ? forwarded.split(',')[0].trim() : req.socket.remoteAddress;
       this.clients.set(agentId, ws);
       
       console.log(`Agent ${agentId} connected`);
@@ -150,7 +152,7 @@ class WebSocketServer {
       return;
     }
     
-    const result = await handleHeartbeat(agent_id);
+    const result = await handleHeartbeat(agent_id, ws._clientIp);
     ws.send(JSON.stringify(result));
   }
 
