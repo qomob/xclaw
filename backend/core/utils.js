@@ -18,34 +18,87 @@ export function generateAPIKey() {
   return `api_key_${generateRandomString(16)}`;
 }
 
-// 验证签名
+function isKeyObject(value) {
+  return !!value && typeof value === 'object'
+    && typeof value.type === 'string'
+    && typeof value.asymmetricKeyType === 'string';
+}
+
+/**
+ * 将公钥解析为 Node KeyObject，兼容两种常见编码：
+ * - PEM（Python CLI xclaw_skill.py 使用）
+ * - base64 DER SPKI（Node SDK generateKeyPair 使用）
+ * @param {string|Buffer|object} publicKey
+ * @returns {object|null} crypto.KeyObject 或 null
+ */
+export function parsePublicKey(publicKey) {
+  try {
+    if (isKeyObject(publicKey)) return publicKey;
+    if (typeof publicKey !== 'string' || !publicKey.trim()) return null;
+    const trimmed = publicKey.trim();
+    if (trimmed.includes('-----BEGIN')) {
+      return crypto.createPublicKey({ key: trimmed, format: 'pem' });
+    }
+    // base64 DER (SPKI)
+    return crypto.createPublicKey({
+      key: Buffer.from(trimmed, 'base64'),
+      format: 'der',
+      type: 'spki'
+    });
+  } catch (error) {
+    logger.error('Public key parse error:', error.message);
+    return null;
+  }
+}
+
+/**
+ * 将私钥解析为 Node KeyObject，兼容 PEM 与 base64 DER (PKCS8)
+ * @param {string|Buffer|object} privateKey
+ * @returns {object|null} crypto.KeyObject 或 null
+ */
+export function parsePrivateKey(privateKey) {
+  try {
+    if (isKeyObject(privateKey)) return privateKey;
+    if (typeof privateKey !== 'string' || !privateKey.trim()) return null;
+    const trimmed = privateKey.trim();
+    if (trimmed.includes('-----BEGIN')) {
+      return crypto.createPrivateKey({ key: trimmed, format: 'pem' });
+    }
+    return crypto.createPrivateKey({
+      key: Buffer.from(trimmed, 'base64'),
+      format: 'der',
+      type: 'pkcs8'
+    });
+  } catch (error) {
+    logger.error('Private key parse error:', error.message);
+    return null;
+  }
+}
+
+// 验证签名（公钥支持 PEM 或 base64 DER SPKI）
 export function verifySignature(data, signature, publicKey) {
   try {
+    const key = parsePublicKey(publicKey);
+    if (!key) return false;
     if (typeof data === 'string') {
       data = Buffer.from(data);
     }
-    return crypto.verify(null, data, {
-      key: publicKey,
-      type: 'spki',
-      format: 'pem'
-    }, Buffer.from(signature, 'base64'));
+    return crypto.verify(null, data, key, Buffer.from(signature, 'base64'));
   } catch (error) {
     logger.error('Signature verification error:', error);
     return false;
   }
 }
 
-// 生成签名
+// 生成签名（私钥支持 PEM 或 base64 DER PKCS8）
 export function generateSignature(data, privateKey) {
   try {
+    const key = parsePrivateKey(privateKey);
+    if (!key) return null;
     if (typeof data === 'string') {
       data = Buffer.from(data);
     }
-    const sigBuf = crypto.sign(null, data, {
-      key: privateKey,
-      type: 'pkcs8',
-      format: 'pem'
-    });
+    const sigBuf = crypto.sign(null, data, key);
     return sigBuf.toString('base64');
   } catch (error) {
     logger.error('Signature generation error:', error);

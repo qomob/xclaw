@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { v5 as uuidv5 } from 'uuid';
 import logger from './loggerService.js';
 import { getPostgres, getRedis } from '../core/dependencies.js';
+import { parsePublicKey } from '../core/utils.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -31,16 +32,14 @@ class AuthService {
     this.tokenExpiry = 24 * 60 * 60 * 1000;
   }
 
-  verifySignature(data, signature, publicKeyPem) {
+  verifySignature(data, signature, publicKey) {
     try {
+      const key = parsePublicKey(publicKey);
+      if (!key) return false;
       if (typeof data === 'string') {
         data = Buffer.from(data);
       }
-      return crypto.verify(null, data, {
-        key: publicKeyPem,
-        type: 'spki',
-        format: 'pem'
-      }, Buffer.from(signature, 'base64'));
+      return crypto.verify(null, data, key, Buffer.from(signature, 'base64'));
     } catch (error) {
       logger.error('Signature verification failed', { error: error.message });
       return false;
