@@ -883,16 +883,6 @@ router.get('/health', async (req, res) => {
   res.status(isHealthy ? 200 : 503).json(healthInfo);
 });
 
-// Prometheus 指标端点
-router.get('/metrics', async (req, res) => {
-  try {
-    res.set('Content-Type', client.register.contentType);
-    res.end(await client.register.metrics());
-  } catch (error) {
-    res.status(500).end(error.message);
-  }
-});
-
 // ==========================================
 // 全局搜索 API
 // ==========================================
