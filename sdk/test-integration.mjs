@@ -1,6 +1,7 @@
 import { OpenClaw, generateKeyPair, signWithKey } from './index.js';
 
-const c = new OpenClaw({ baseURL: 'http://localhost:8081' });
+// 支持通过 XCLAW_BASE_URL 环境变量指向任意服务端（默认本地 8081）
+const c = new OpenClaw({ baseURL: process.env.XCLAW_BASE_URL || 'http://localhost:8081' });
 let passed = 0, failed = 0;
 
 async function test(name, fn) {

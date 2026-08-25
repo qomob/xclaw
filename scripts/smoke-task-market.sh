@@ -2,14 +2,14 @@
 #
 # XClaw 任务市场闭环自动化冒烟脚本
 #
-# 覆盖完整链路：注册 Agent → 管理员充值 → 创建市场任务（托管预算）
-#   → 竞标 → 接受竞标（派活）→ 提交结果 → 验收放款（positive）或
-#   拒绝进入争议 → 管理员仲裁退款（dispute）
+# 覆盖完整链路：注册 Agent → 管理员充值 → 创建市场任务(托管预算)
+#   → 竞标 → 接受竞标(派活)→ 提交结果 → 验收放款(positive)或
+#   拒绝进入争议 → 管理员仲裁退款(dispute)
 #
 # 依赖：
-#   - python3（解析 JSON，服务器已具备）
+#   - python3(解析 JSON，服务器已具备)
 #   - curl
-#   - 本仓库 skills/xclawskill/scripts/xclaw_skill.py（XClawSkill CLI）
+#   - 本仓库 skills/xclawskill/scripts/xclaw_skill.py(XClawSkill CLI)
 #
 # 用法：
 #   XCLAW_BASE_URL=https://xclaw.network/api \
@@ -17,10 +17,10 @@
 #   bash scripts/smoke-task-market.sh [both|dispute|positive]
 #
 # 环境变量：
-#   XCLAW_BASE_URL    API 基地址（默认 https://xclaw.network/api）
-#   ADMIN_API_KEY     管理员 Key（必填，用于充值/派发/仲裁）
-#   TOPUP_AMOUNT      充值额度（默认 100 XCL）
-#   SMOKE_KEEP_TMP=1  保留临时目录（默认退出即清理）
+#   XCLAW_BASE_URL    API 基地址(默认 https://xclaw.network/api)
+#   ADMIN_API_KEY     管理员 Key(必填，用于充值/派发/仲裁)
+#   TOPUP_AMOUNT      充值额度(默认 100 XCL)
+#   SMOKE_KEEP_TMP=1  保留临时目录(默认退出即清理)
 #
 set -uo pipefail
 
@@ -56,17 +56,23 @@ PY
 }
 
 # 运行一步并记录结果：run <name> <cmd...>
+# 说明：任务名可能含 / 与中文，需先净化成安全文件名；
+#       set -u 下避免 "$var(...$?...)" 形式(bash 多字节解析 bug 会报 unbound variable)。
 run() {
   local name="$1"; shift
-  if "$@" >"$TMP_DIR/$name.out" 2>&1; then
+  local oname code
+  # 仅替换路径分隔符 '/'，保留空格等其他字符，与下游 jget 读取的文件名保持一致
+  oname="$(printf '%s' "$name" | tr '/' '_')"
+  if "$@" >"$TMP_DIR/$oname.out" 2>&1; then
     ok "$name"
   else
-    die "$name（exit $?）"
-    tail -5 "$TMP_DIR/$name.out" | sed 's/^/        /' >&2
+    code=$?
+    die "$name exit=$code"
+    tail -5 "$TMP_DIR/$oname.out" | sed 's/^/        /' >&2
   fi
 }
 
-# 调用技能 CLI（携带某个 Agent 的状态文件）：cli <state-file> --action ...
+# 调用技能 CLI(携带某个 Agent 的状态文件)：cli <state-file> --action ...
 cli() {
   local state="$1"; shift
   python3 "$SKILL_CLI" --base-url "$BASE_URL" --state-file "$state" "$@"
@@ -106,7 +112,7 @@ step_balance() {
 # ── 预检 ──────────────────────────────────────────────────────────────────
 log "预检"
 [ -n "$ADMIN_KEY" ] || { echo "错误: 请设置 ADMIN_API_KEY 环境变量" >&2; exit 2; }
-[ -x "$SKILL_CLI" ] || { echo "错误: 找不到技能 CLI: $SKILL_CLI" >&2; exit 2; }
+[ -f "$SKILL_CLI" ] || { echo "错误: 找不到技能 CLI: $SKILL_CLI" >&2; exit 2; }
 run "健康检查 /health" curl -sf -m 10 "$BASE_URL/health" -o "$TMP_DIR/health.json"
 [ "$STATUS" -eq 0 ] || { echo "健康检查失败，终止" >&2; exit 1; }
 echo "        服务: $(jget "$TMP_DIR/health.json" status) / DB $(jget "$TMP_DIR/health.json" services.database) / Redis $(jget "$TMP_DIR/health.json" services.redis)"
@@ -117,9 +123,9 @@ STATE_CALLER="$TMP_DIR/caller.json"
 STATE_WORKER="$TMP_DIR/worker.json"
 
 log "注册 Agent"
-run "注册 Caller（发布方）" cli "$STATE_CALLER" --action register \
+run "注册 Caller(发布方)" cli "$STATE_CALLER" --action register \
   --agent-name "SmokeCaller-$STAMP" --capabilities "smoke caller" --tags "smoke"
-run "注册 Worker（执行方）" cli "$STATE_WORKER" --action register \
+run "注册 Worker(执行方)" cli "$STATE_WORKER" --action register \
   --agent-name "SmokeWorker-$STAMP" --capabilities "smoke worker" --tags "smoke"
 
 CALLER_ID="$(jget "$STATE_CALLER" agent_id)"
@@ -137,7 +143,7 @@ run_loop() {
   local mode="$1"
   local task_id bid_id
 
-  log "[$mode] 创建市场任务（策略 bid，预算 30-40 XCL）"
+  log "[$mode] 创建市场任务(策略 bid，预算 30-40 XCL)"
   run "[$mode] create-task" cli "$STATE_CALLER" --action create-task \
     --title "Smoke $mode $STAMP" --description "automated smoke test ($mode)" \
     --budget-min 30 --budget-max 40 --assignment-strategy bid
@@ -153,7 +159,7 @@ run_loop() {
   echo "        Bid: $bid_id"
   [ -n "$bid_id" ] || { die "[$mode] 未拿到 bid_id"; return; }
 
-  log "[$mode] Caller 接受竞标（派活）"
+  log "[$mode] Caller 接受竞标(派活)"
   run "[$mode] accept-bid" cli "$STATE_CALLER" --action accept-bid \
     --task-id "$task_id" --bid-id "$bid_id"
 
@@ -172,7 +178,7 @@ run_loop() {
     run "[$mode] reject-result" cli "$STATE_CALLER" --action reject-result \
       --task-id "$task_id" --reason "smoke reject $mode"
 
-    log "[$mode] 管理员列出争议并仲裁（退款给调用方）"
+    log "[$mode] 管理员列出争议并仲裁(退款给调用方)"
     run "[$mode] disputes-list" admin_curl GET "/v1/admin/task-market/disputes?status=open&limit=50"
     local dispute_id
     dispute_id="$(python3 - "$TMP_DIR/[$mode] disputes-list.out" "$task_id" <<'PY'
@@ -193,13 +199,13 @@ PY
     step_balance "$STATE_CALLER" "Caller(退款后)"
   fi
 
-  log "[$mode] 校验最终状态（应 $final_status）"
+  log "[$mode] 校验最终状态(应 $final_status)"
   local actual
   actual="$(admin_curl GET "/v1/task-market/tasks/$task_id" | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["status"])')"
   if [ "$actual" = "$final_status" ]; then
     ok "[$mode] 任务状态 = $actual"
   else
-    die "[$mode] 任务状态 = $actual（期望 $final_status）"
+    die "[$mode] 任务状态 = $actual (期望 $final_status)"
   fi
 }
 
@@ -220,7 +226,7 @@ esac
 # ── 汇总 ───────────────────────────────────────────────────────────────────
 if [ "$STATUS" -eq 0 ]; then
   echo
-  log "✅ 冒烟通过：任务市场闭环（$MODE）全部步骤成功"
+  log "✅ 冒烟通过：任务市场闭环($MODE)全部步骤成功"
 else
   echo
   log "❌ 冒烟失败：存在失败步骤，详情见上方输出；临时文件保留在 $TMP_DIR"
