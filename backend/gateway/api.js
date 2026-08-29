@@ -151,17 +151,19 @@ router.get('/v1/search', async (req, res) => {
 router.post('/v1/agents/register', async (req, res) => {
   const { body, headers } = req;
   const signature = headers['x-agent-signature'];
-  
+  const timestampHeader = headers['x-agent-timestamp'];
+
   if (!signature) {
     return res.status(400).json(formatResponse(false, null, '缺少签名'));
   }
-  
+
   const validation = validateParams(body, ['agent_name', 'capabilities', 'public_key']);
   if (!validation.valid) {
     return res.status(400).json(formatResponse(false, null, validation.message));
   }
-  
-  const result = await registerNode(body, signature, req.ip);
+
+  const timestamp = timestampHeader !== undefined ? timestampHeader : undefined;
+  const result = await registerNode(body, signature, req.ip, timestamp);
   if (result.success) {
     const nodeId = result.data.agent_id;
     const node = topologyService.getNode(nodeId);
@@ -225,15 +227,19 @@ router.post('/v1/agents/:agent_id/heartbeat', validateUUIDParam("agent_id"), asy
   }
 });
 
-// 注册技能
-router.post('/v1/skills/register', async (req, res) => {
+// 注册技能（需登录 Agent 身份，且只能为自己注册/更新技能）
+router.post('/v1/skills/register', requireAuth, async (req, res) => {
   const { body } = req;
-  
+
   const validation = validateParams(body, ['name', 'description', 'category', 'version', 'node_id']);
   if (!validation.valid) {
     return res.status(400).json(formatResponse(false, null, validation.message));
   }
-  
+
+  if (body.node_id !== req.agentId) {
+    return res.status(403).json(formatResponse(false, null, '无权为其他节点注册技能'));
+  }
+
   const result = await registerSkill(body, body.node_id);
   if (result.success) {
     res.status(200).json(result);
@@ -312,23 +318,28 @@ router.post('/v1/tasks/run', requireAuth, skillLimiter, async (req, res) => {
   }
 });
 
-// 任务轮询
+// 任务轮询（绑定当前认证 Agent，防止窃取他人任务队列）
 router.get('/v1/tasks/poll', requireAuth, async (req, res) => {
   try {
-    const { agent_id } = req.headers;
-    
-    if (!agent_id) {
-      return res.status(400).json({ error: 'Agent ID required' });
+    // 队列归属以认证身份为准；header 中的 agent_id 仅作一致性校验
+    const agentId = req.agentId;
+    const headerAgentId = req.headers['agent_id'] || req.headers['x-agent-id'];
+
+    if (!agentId) {
+      return res.status(401).json({ error: 'Agent identity required' });
+    }
+    if (headerAgentId && headerAgentId !== agentId) {
+      return res.status(403).json({ error: '无权轮询其他节点的任务队列' });
     }
     
-    // 从 Redis 中获取节点的任务队列
+    // 从 Redis 中获取节点的任务队列（ioredis 流命令为全小写 xrange/xdel，COUNT 用变参形式）
     const redisClient = getRedis();
-    const tasks = await redisClient.xRange(`node:${agent_id}:tasks`, '-', '+', { count: 1 });
-    
+    const tasks = await redisClient.xrange(`node:${agentId}:tasks`, '-', '+', 'COUNT', 1);
+
     if (tasks.length === 0) {
       return res.status(200).json({ success: true, data: null });
     }
-    
+
     const task = tasks[0];
     const taskData = {
       task_id: task.message.task_id,
@@ -336,9 +347,9 @@ router.get('/v1/tasks/poll', requireAuth, async (req, res) => {
       payload: JSON.parse(task.message.payload),
       message_id: task.message.message_id
     };
-    
+
     // 从队列中移除任务
-    await redisClient.xDel(`node:${agent_id}:tasks`, task.id);
+    await redisClient.xdel(`node:${agentId}:tasks`, task.id);
     
     res.status(200).json({ success: true, data: taskData });
   } catch (error) {
@@ -358,16 +369,16 @@ router.get('/v1/tasks/:task_id', validateUUIDParam("task_id"), async (req, res) 
   }
 });
 
-// 完成任务
-router.post('/v1/tasks/:task_id/complete', validateUUIDParam("task_id"), async (req, res) => {
+// 完成任务（需登录 Agent 身份，且仅限任务的执行方或调用方）
+router.post('/v1/tasks/:task_id/complete', requireAuth, validateUUIDParam("task_id"), async (req, res) => {
   const { task_id } = req.params;
   const { result } = req.body;
-  
-  const response = await completeTask(task_id, result);
+
+  const response = await completeTask(task_id, result, null, { actorId: req.agentId });
   if (response.success) {
     res.status(200).json(response);
   } else {
-    res.status(400).json(response);
+    res.status(response.error === '任务不存在' ? 404 : 403).json(response);
   }
 });
 
@@ -388,6 +399,16 @@ router.post('/v1/billing/task/:task_id', requireAuth, validateUUIDParam("task_id
   try {
     const { task_id } = req.params;
     const { amount } = req.body;
+    if (!amount) return res.status(400).json({ error: 'amount required' });
+
+    // 只有该任务的执行方（node_id）可向调用方计费，防止任意 agent 任意扣款
+    const taskRes = await getPostgres().query('SELECT node_id, caller_id FROM tasks WHERE id = $1', [task_id]);
+    const task = taskRes.rows[0];
+    if (!task) return res.status(404).json({ error: '任务不存在' });
+    if (task.node_id !== req.agentId) {
+      return res.status(403).json({ error: '仅任务执行方可对该任务计费' });
+    }
+
     const result = await chargeTask(task_id, amount, buildAudit(req));
     res.status(result.success ? 200 : 400).json(result);
   } catch (error) {
@@ -395,7 +416,9 @@ router.post('/v1/billing/task/:task_id', requireAuth, validateUUIDParam("task_id
   }
 });
 
-router.post('/v1/billing/skill/:skill_id', requireAuth, validateUUIDParam("skill_id"), async (req, res) => {
+// 技能佣金入账属于平台结算操作：仅限系统管理员（Agent Key 持有者无权调用，
+// 否则任意 agent 可向账本写入任意金额的佣金记录）
+router.post('/v1/billing/skill/:skill_id', verifyApiKey, requireAdmin, validateUUIDParam("skill_id"), async (req, res) => {
   try {
     const { skill_id } = req.params;
     const { amount } = req.body;
@@ -920,7 +943,9 @@ router.post('/v1/tasks', requireAuth, async (req, res) => {
     const taskData = {
       type: type || title || 'general',
       payload: payload || { title, description, priority, tags },
-      node_id: target_agent_id || null
+      node_id: target_agent_id || null,
+      // 记录创建者：completeTask/updateTaskStatus 的归属校验依赖 caller_id
+      caller_id: req.agentId || null
     };
     const result = await createTask(taskData);
     res.status(result.success ? 201 : 400).json(result);
@@ -935,6 +960,13 @@ router.patch('/v1/tasks/:task_id/status', requireAuth, validateUUIDParam("task_i
     const { status, result } = req.body;
     if (!status) {
       return res.status(400).json(formatResponse(false, null, 'status 必填'));
+    }
+    // 仅任务的执行方或调用方可更新任务状态
+    const taskRes = await getPostgres().query('SELECT node_id, caller_id FROM tasks WHERE id = $1', [task_id]);
+    const task = taskRes.rows[0];
+    if (!task) return res.status(404).json(formatResponse(false, null, '任务不存在'));
+    if (task.node_id !== req.agentId && task.caller_id !== req.agentId) {
+      return res.status(403).json(formatResponse(false, null, '无权操作该任务'));
     }
     const response = await updateTaskStatus(task_id, status, result);
     res.status(response.success ? 200 : 400).json(response);
@@ -1148,7 +1180,7 @@ router.get('/v1/marketplace/orders', requireAuth, async (req, res) => {
 
 router.get('/v1/marketplace/orders/:order_id', requireAuth, async (req, res) => {
   try {
-    const result = await marketplaceService.getOrder(req.params.order_id);
+    const result = await marketplaceService.getOrder(req.params.order_id, { viewerId: req.agentId });
     res.json(result);
   } catch (error) { res.status(500).json({ success: false, error: error.message }); }
 });

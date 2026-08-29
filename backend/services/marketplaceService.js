@@ -308,7 +308,7 @@ export async function placeOrder(buyerId, skillId, payload = {}) {
   }
 }
 
-export async function getOrder(orderId) {
+export async function getOrder(orderId, { viewerId } = {}) {
   const pgPool = getPostgres();
 
   try {
@@ -324,6 +324,14 @@ export async function getOrder(orderId) {
 
     if (result.rows.length === 0) {
       return formatResponse(false, null, '订单不存在');
+    }
+
+    // 订单详情仅买卖双方可见（viewerId 缺省时不做限制，仅供内部调用）
+    if (viewerId) {
+      const order = result.rows[0];
+      if (order.buyer_id !== viewerId && order.seller_id !== viewerId) {
+        return formatResponse(false, null, '无权查看该订单');
+      }
     }
 
     return formatResponse(true, result.rows[0]);
