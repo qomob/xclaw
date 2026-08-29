@@ -10,7 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: ankane/pgvector:latest
+        # 与 docker-compose 保持一致：pgvector 镜像锁定 pg16 标签
+        image: ankane/pgvector:pg16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: test
@@ -33,9 +34,12 @@ jobs:
           --health-retries 10
     env:
       JWT_SECRET: ci-secret-change-me
+      API_KEY: xclw_ci_system_key_not_used_in_prod
+      ADMIN_API_KEY: xclw_ci_admin_key_must_differ
       DATABASE_URL: postgres://postgres:test@localhost:5432/xclaw
       REDIS_HOST: localhost
       REDIS_PORT: 6379
+      PORT: 8081
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -47,6 +51,21 @@ jobs:
         run: cd backend && npm ci
       - name: Unit tests
         run: cd backend && npm run test:unit -- --runInBand --no-watchman
+      - name: Start server for integration tests
+        run: |
+          cd backend
+          node server.js &
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8081/health > /dev/null; then
+              echo "server healthy"; exit 0
+            fi
+            sleep 2
+          done
+          echo "server failed to become healthy"; exit 1
+      - name: Integration tests
+        run: cd backend && npm run test:integration -- --runInBand --no-watchman
+      - name: SDK integration tests (live server)
+        run: cd backend && XCLAW_BASE_URL=http://localhost:8081 node ../sdk/test-integration.mjs
       - name: Dependency audit (fail on high+)
         run: cd backend && npm audit --audit-level=high --registry=https://registry.npmjs.org
 
@@ -61,9 +80,32 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install
         run: cd frontend && npm ci
+      - name: Lint
+        run: cd frontend && npm run lint
       - name: Build
         run: cd frontend && npm run build
       # 前端审计走过滤脚本：豁免已评估接受的 deck.gl/image-size DoS 通告（见脚本头部说明），
       # 其余 high/critical 仍会使 CI 失败
       - name: Dependency audit (fail on high+, with documented exemptions)
         run: node scripts/frontend-audit.mjs
+
+  # 密钥泄露扫描：全仓库历史检测硬编码凭据
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # 镜像可构建性检查：Dockerfile 改动必须在 CI 验证（不推送）
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend image
+        run: docker build -t xclaw-backend:ci ./backend
+      - name: Build frontend image
+        run: docker build -t xclaw-frontend:ci ./frontend
