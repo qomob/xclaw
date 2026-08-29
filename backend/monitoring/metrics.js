@@ -1,5 +1,6 @@
 // 指标监控文件
 import { getRedis, getPostgres } from '../core/dependencies.js';
+import logger from '../services/loggerService.js';
 import os from 'os';
 
 export default class MetricsManager {

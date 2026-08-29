@@ -1,5 +1,6 @@
 // 日志服务
 import { createLogger, format, transports } from 'winston';
+import DailyRotateFile from 'winston-daily-rotate-file';
 
 const { combine, timestamp, printf, colorize, align } = format;
 
@@ -29,18 +30,31 @@ const logFormat = combine(
   })
 );
 
+// 文件日志按天轮转（保留 14 天、单文件上限后归档），防止 backend_logs 卷内无界增长
+const fileTransports = [
+  new DailyRotateFile({
+    filename: 'logs/error-%DATE%.log',
+    datePattern: 'YYYY-MM-DD',
+    level: 'error',
+    maxSize: '50m',
+    maxFiles: '14d',
+    zippedArchive: true
+  }),
+  new DailyRotateFile({
+    filename: 'logs/combined-%DATE%.log',
+    datePattern: 'YYYY-MM-DD',
+    maxSize: '100m',
+    maxFiles: '14d',
+    zippedArchive: true
+  })
+];
+
 const logger = createLogger({
   level: process.env.LOG_LEVEL || 'info',
   format: logFormat,
   transports: [
     new transports.Console(),
-    new transports.File({
-      filename: 'logs/error.log',
-      level: 'error'
-    }),
-    new transports.File({
-      filename: 'logs/combined.log'
-    })
+    ...fileTransports
   ]
 });
 

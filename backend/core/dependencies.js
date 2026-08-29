@@ -36,6 +36,9 @@ export function initPostgres() {
 
 // 初始化 Redis 客户端
 export function initRedis() {
+  // 幂等：模块加载期 getRedis() 可能已建立首个连接，避免再建第二条导致连接泄漏
+  if (redisClient) return redisClient;
+
   const pw = config.database.redis.password;
   logger.info('Initializing Redis', { host: config.database.redis.host, port: config.database.redis.port, hasPassword: !!pw });
 
@@ -45,8 +48,9 @@ export function initRedis() {
     password: pw || undefined,
     enableReadyCheck: true,
     retryStrategy(times) {
-      if (times > 10) return null;
-      return Math.min(times * 200, 3000);
+      // 永不放弃：返回 null 会让 ioredis 永久停止重连，进程不自愈只能重启。
+      // 以 5s 封顶的退避持续重试，等待 Redis 恢复。
+      return Math.min(times * 200, 5000);
     }
   });
 
