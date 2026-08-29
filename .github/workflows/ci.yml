@@ -11,7 +11,7 @@ jobs:
     services:
       postgres:
         # 与 docker-compose 保持一致：pgvector 镜像锁定 pg16 标签
-        image: ankane/pgvector:pg16
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: test

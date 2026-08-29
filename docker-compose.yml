@@ -27,6 +27,9 @@ services:
       - NETWORK_ID=${NETWORK_ID:-default}
       - LOCAL_ENDPOINT=http://backend:8081
       - API_KEY=${API_KEY}
+      # 管理密钥/监控令牌必须显式透传,后端按 fail-closed 处理(缺失即禁用对应能力)
+      - ADMIN_API_KEY=${ADMIN_API_KEY:-}
+      - MONITOR_TOKEN=${MONITOR_TOKEN:-}
       - FEDERATION_KEY=${FEDERATION_KEY:-}
     depends_on:
       db:
@@ -150,7 +153,8 @@ services:
         max-file: "3"
 
   db:
-    image: ankane/pgvector:pg16
+    # 官方命名空间(ankane/ 已归档);存量 PG15 数据卷需在 override 中钉 pg15
+    image: pgvector/pgvector:pg16
     container_name: xclaw-db
     restart: unless-stopped
     # 预加载 pg_stat_statements（性能监控依赖）
