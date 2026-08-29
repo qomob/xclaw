@@ -13,7 +13,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY . .
 
 # /data/keys 供 entrypoint 持久化生成密钥；容器以非 root 的 node 用户运行
-RUN chmod +x /app/entrypoint.sh && \
+RUN chmod +x /app/entrypoint.sh /app/scripts/*.sh && \
     mkdir -p /data/keys /app/logs && \
     chown -R node:node /data /app
 
