@@ -4,7 +4,8 @@ FROM node:20-slim as build-stage
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install
+# npm ci + lockfile：可复现构建（勿改回 npm install）
+RUN npm ci
 
 COPY . .
 RUN npm run build

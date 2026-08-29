@@ -27,8 +27,8 @@ load_or_generate ENCRYPTION_KEY 32
 load_or_generate JWT_SECRET 64
 
 if [ -z "$REDIS_PASSWORD" ]; then
-  export REDIS_PASSWORD="xclaw_redis_secret"
-  echo "[entrypoint] WARNING: Using default REDIS_PASSWORD — set REDIS_PASSWORD env var for production"
+  echo "[entrypoint] ERROR: REDIS_PASSWORD is not set — refusing to start (insecure default removed)" >&2
+  exit 1
 fi
 
 exec npm start

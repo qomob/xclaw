@@ -10,10 +10,10 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=8081
-      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-xclaw_postgres_2026}@db:5432/xclaw
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@db:5432/xclaw
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-xclaw_redis_secret}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
       - AI_API_KEY=${AI_API_KEY:-}
       - AI_BASE_URL=${AI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai}
       - AI_MODEL=${AI_MODEL:-gemini-2.5-flash}
@@ -41,11 +41,13 @@ services:
           memory: 256M
     volumes:
       - ./backend/data:/app/data:ro
-      # 技能强沙箱需要 Docker socket（宿主级权限，仅建议在专用沙箱机启用；
-      # 若后端不执行第三方代码可移除该挂载）。见 docs/skill-sandbox.md
-      - /var/run/docker.sock:/var/run/docker.sock
+      # 生成的密钥（ENCRYPTION_KEY/JWT_SECRET）持久化，容器重建不丢失
+      - backend_keys:/data
       # 日志持久化：容器重建不丢失，运维可挂载/采集 /app/logs
       - backend_logs:/app/logs
+      # 技能强沙箱需要 Docker socket（宿主级权限！）。默认不挂载——
+      # 仅在专用沙箱机部署且接受风险时取消下行注释。见 docs/skill-sandbox.md
+      # - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - xclaw-network
     logging:
@@ -94,10 +96,10 @@ services:
       retries: 3
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-xclaw_postgres_2026}@db:5432/xclaw
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@db:5432/xclaw
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-xclaw_redis_secret}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
       - API_KEY=${API_KEY}
       - FEDERATION_KEY=${FEDERATION_KEY:-}
@@ -120,15 +122,42 @@ services:
         max-size: "20m"
         max-file: "3"
 
+  # 加密数据库备份（可选服务，显式启用：docker compose --profile backup up -d）
+  # 需要 BACKUP_ENCRYPTION_KEY；建议同时配置 BACKUP_UPLOAD_CMD 做异地副本
+  db-backup:
+    build: ./backend
+    container_name: xclaw-db-backup
+    restart: unless-stopped
+    profiles: ["backup"]
+    entrypoint: ["./scripts/backup-loop.sh"]
+    environment:
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@db:5432/xclaw
+      - BACKUP_ENCRYPTION_KEY=${BACKUP_ENCRYPTION_KEY:?BACKUP_ENCRYPTION_KEY must be set for backup service}
+      - BACKUP_INTERVAL_SECONDS=${BACKUP_INTERVAL_SECONDS:-86400}
+      - BACKUP_UPLOAD_CMD=${BACKUP_UPLOAD_CMD:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # 备份脚本以脚本位置推算项目根，容器内落盘 /database/backups
+      - backup_data:/database/backups
+    networks:
+      - xclaw-network
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   db:
-    image: ankane/pgvector:latest
+    image: ankane/pgvector:pg16
     container_name: xclaw-db
     restart: unless-stopped
     # 预加载 pg_stat_statements（性能监控依赖）
     command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
     environment:
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-xclaw_postgres_2026}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       - POSTGRES_DB=xclaw
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -157,7 +186,7 @@ services:
     # AOF 持久化：Agent API Key / 在线状态 / 任务队列等均存于 Redis，
     # 重启不丢凭据（默认无持久化，容器重建将丢失全部 Agent 密钥）
     command: >
-      redis-server --requirepass ${REDIS_PASSWORD:-xclaw_redis_secret}
+      redis-server --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
       --appendonly yes --appendfsync everysec
     volumes:
       - redis_data:/data
@@ -166,7 +195,7 @@ services:
         limits:
           memory: 256M
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD:-xclaw_redis_secret} ping"]
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a ${REDIS_PASSWORD:?REDIS_PASSWORD must be set} ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -186,3 +215,5 @@ volumes:
   postgres_data:
   redis_data:
   backend_logs:
+  backend_keys:
+  backup_data:

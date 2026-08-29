@@ -39,12 +39,14 @@ if [ ! -f .env ]; then
   JWT=$(openssl rand -hex 32)
   ENC=$(openssl rand -hex 32)
   API=$(openssl rand -hex 24)
+  ADMIN=$(openssl rand -hex 24)
+  MONITOR=$(openssl rand -hex 16)
   BAK=$(openssl rand -hex 16)
 
   # 用 Python 精确替换（避免 sed 特殊字符问题）
-  python3 - "$DOMAIN" "$PG_PW" "$RD_PW" "$JWT" "$ENC" "$API" "$BAK" <<'PYEOF'
+  python3 - "$DOMAIN" "$PG_PW" "$RD_PW" "$JWT" "$ENC" "$API" "$ADMIN" "$MONITOR" "$BAK" <<'PYEOF'
 import re, sys
-domain, pg_pw, rd_pw, jwt, enc, api, bak = sys.argv[1:]
+domain, pg_pw, rd_pw, jwt, enc, api, admin, monitor, bak = sys.argv[1:]
 path = '.env'
 s = open(path, encoding='utf-8').read()
 def rep(key, value):
@@ -56,7 +58,9 @@ def rep(key, value):
 rep('JWT_SECRET', jwt)
 rep('ENCRYPTION_KEY', enc)
 rep('API_KEY', 'xclw_' + api)
-rep('ADMIN_API_KEY', 'xclw_' + api)
+# 管理密钥必须与 API_KEY 不同：同值等于所有系统 Key 持有者都是 admin
+rep('ADMIN_API_KEY', 'xclw_' + admin)
+rep('MONITOR_TOKEN', monitor)
 rep('POSTGRES_PASSWORD', pg_pw)
 rep('REDIS_PASSWORD', rd_pw)
 rep('PUBLIC_URL', f'https://{domain}')
