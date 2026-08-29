@@ -10,12 +10,15 @@ import performanceService from '../services/performanceService.js';
 
 const router = Router();
 
-// 确保 service 已初始化
-router.use(async (_req, _res, next) => {
-  try {
-    await performanceService.initialize();
-  } catch {}
-  next();
+// 确保 service 已初始化（无前缀挂载时 router.use 会拦截所有进入请求——收敛到本路由器路径）
+router.use((req, res, next) => {
+  if (!req.path.startsWith('/v1/performance')) return next();
+  (async () => {
+    try {
+      await performanceService.initialize();
+    } catch {}
+    next();
+  })();
 });
 
 /**

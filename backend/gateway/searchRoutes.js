@@ -3,7 +3,12 @@ import { verifyApiKey } from './auth.js';
 import searchServiceV2 from '../services/searchServiceV2.js';
 
 const router = Router();
-router.use(verifyApiKey);
+// 无前缀挂载（api.js router.use(searchRoutes)）时 router.use 会拦截进入 apiRouter 的所有
+// 请求——必须收敛到本路由器自己的路径，否则 developer/security 等后挂载路由被误杀
+router.use((req, res, next) => {
+  if (!req.path.startsWith('/v1/search')) return next();
+  return verifyApiKey(req, res, next);
+});
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

@@ -24,7 +24,11 @@ async function ensureInitialized(req, res, next) {
   }
 }
 
-router.use(ensureInitialized);
+// 无前缀挂载时 router.use 会拦截所有进入请求——收敛到本路由器路径
+router.use((req, res, next) => {
+  if (!req.path.startsWith('/v1/security')) return next();
+  return ensureInitialized(req, res, next);
+});
 
 // ============================================================
 // OAuth2 端点

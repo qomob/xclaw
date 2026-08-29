@@ -4,7 +4,12 @@ import { verifyApiKey } from './auth.js';
 import * as mcpService from '../services/mcpService.js';
 
 const router = Router();
-router.use(verifyApiKey);
+// 无前缀挂载（api.js router.use(mcpRoutes)）时 router.use 会拦截进入 apiRouter 的所有
+// 请求——必须收敛到本路由器自己的路径，否则 developer/security 等后挂载路由被误杀
+router.use((req, res, next) => {
+  if (!req.path.startsWith('/v1/mcp')) return next();
+  return verifyApiKey(req, res, next);
+});
 
 // UUID 格式验证中间件
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
