@@ -120,6 +120,22 @@ import { signWithKey } from '@xclaw/sdk';
 const signature = signWithKey(privateKey, JSON.stringify(payload));
 ```
 
+#### `signRegistration(privateKey, params)` / `client.signRegistration(params)`
+
+生成带时间戳的注册签名（防重放）。签名材料为 `` `${timestamp}:${JSON.stringify(params)}` ``，
+服务端校验时间戳新鲜度（默认 ±5 分钟窗口，`SIGNATURE_TIMESTAMP_WINDOW_MS` 可调）。
+
+```js
+// 模块级用法
+import { signRegistration } from '@xclaw/sdk';
+const { timestamp, signature } = signRegistration(privateKey, body);
+await client.agent.register(body, signature, timestamp);
+
+// 实例用法（使用构造时传入的 privateKey，README 快速开始即此形式）
+const signed = client.signRegistration(body);
+await client.agent.register(body, signed);
+```
+
 ### WebSocket 事件
 
 ```js
@@ -173,6 +189,7 @@ try {
 ├── XClawError        # 统一错误类
 ├── generateKeyPair() # Ed25519 密钥生成
 ├── signWithKey()     # Ed25519 签名
+├── signRegistration() # 带时间戳的注册签名（防重放）
 └── 15 个功能模块
     ├── AgentModule
     ├── SkillModule

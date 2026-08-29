@@ -41,7 +41,12 @@ class HttpClient {
   constructor(opts) {
     this.baseURL = (opts.baseURL || 'http://localhost:8081').replace(/\/+$/, '');
     this._headers = { 'Content-Type': 'application/json' };
-    if (opts.apiKey) this._headers['Authorization'] = opts.apiKey;
+    // Agent API Key 走 x-api-key（后端 authMiddleware 的 Agent 认证通道）；
+    // 平台系统 Key 保留裸 Authorization 以兼容 verifyApiKey 路由
+    if (opts.apiKey) {
+      this._headers['Authorization'] = opts.apiKey;
+      this._headers['x-api-key'] = opts.apiKey;
+    }
     if (opts.jwt) this._headers['Authorization'] = `Bearer ${opts.jwt}`;
   }
 
@@ -53,6 +58,7 @@ class HttpClient {
   /** 设置 API Key */
   setApiKey(key) {
     this._headers['Authorization'] = key;
+    this._headers['x-api-key'] = key;
   }
 
   /**
@@ -107,17 +113,31 @@ class AgentModule {
 
   /**
    * 注册新 Agent（需要 Ed25519 签名）
+   * 推荐用法：用 signRegistration() 生成带时间戳的签名（防重放），否则使用旧格式
+   * （仅对 JSON.stringify(params) 签名，服务端仅兼容期内接受）。
    * @param {object} params
    * @param {string} params.agent_name - Agent 名称
    * @param {string} params.capabilities - 能力描述
    * @param {string} params.public_key - Ed25519 公钥
    * @param {string[]} [params.tags] - 标签数组
    * @param {string} [params.endpoint_url] - Agent 端点 URL
-   * @param {string} signature - Ed25519 签名 (base64)
+   * @param {string|{timestamp:number, signature:string}} signature - Ed25519 签名 (base64)，
+   *   或 signRegistration() 返回的对象
+   * @param {number} [timestamp] - 签名时间戳（毫秒）；提供时签名材料为 `${timestamp}:${JSON.stringify(params)}`
    * @returns {Promise<object>}
    */
-  async register(params, signature) {
-    return this._.post('/v1/agents/register', params, { 'x-agent-signature': signature });
+  async register(params, signature, timestamp) {
+    const headers = {};
+    if (signature && typeof signature === 'object') {
+      headers['x-agent-signature'] = signature.signature;
+      headers['x-agent-timestamp'] = String(signature.timestamp);
+    } else {
+      headers['x-agent-signature'] = signature;
+      if (timestamp !== undefined) {
+        headers['x-agent-timestamp'] = String(timestamp);
+      }
+    }
+    return this._.post('/v1/agents/register', params, headers);
   }
 
   /** 获取 Agent 详情 */
@@ -622,10 +642,12 @@ class AuthModule {
 
   /**
    * 登录获取 JWT（使用 API Key）
-   * @param {string} [apiKey] 显式传入 API Key；缺省时使用 HttpClient 已配置的 Key
+   * @param {string} [apiKey] 显式传入 API Key；缺省时取已配置的 Key
+   *   （若当前头是 `Bearer <jwt>` 则剥离前缀，避免把 JWT 误作 API Key 提交）
    */
   async login(apiKey) {
-    const key = apiKey || this._._headers['Authorization'] || '';
+    const headerKey = (this._._headers['Authorization'] || '').replace(/^Bearer\s+/i, '');
+    const key = apiKey || headerKey;
     const res = await this._.post('/v1/auth/login', { api_key: key });
     if (res.success && res.data?.token) {
       this._.setJwt(res.data.token);
@@ -743,7 +765,7 @@ class TaskMarketModule {
 
   /** 获取任务匹配 Agent */
   async match(taskId) {
-    return this._.get(`/v1/task-market/tasks/${taskId}/match`);
+    return this._.get(`/v1/task-market/tasks/${taskId}/matches`);
   }
 }
 
@@ -794,9 +816,9 @@ class FederationModule {
     return this._.post('/v1/federation/task/route', params);
   }
 
-  /** 联邦网络拓扑 */
+  /** 联邦网络拓扑概览 */
   async topology() {
-    return this._.get('/v1/federation/topology');
+    return this._.get('/v1/federation/topology/summary');
   }
 
   /** 注销联邦节点 */
@@ -833,14 +855,16 @@ class MonitorModule {
   /**
    * 时间序列数据
    * @param {object} [opts]
-   * @param {string} [opts.metric] - 指标名称
+   * 时序指标查询
+   * @param {string} metric - 指标名称（后端路由为 /v1/monitor/timeseries/:metric，必填）
+   * @param {object} [opts]
    * @param {string} [opts.interval] - 时间间隔
    * @param {string} [opts.start] - 开始时间
    * @param {string} [opts.end] - 结束时间
    */
-  async timeseries(opts = {}) {
+  async timeseries(metric, opts = {}) {
     const qs = buildQS(opts);
-    return this._.get(`/v1/monitor/timeseries${qs}`);
+    return this._.get(`/v1/monitor/timeseries/${encodeURIComponent(metric)}${qs}`);
   }
 
   /**
@@ -1010,6 +1034,19 @@ export function signWithKey(privateKeyBase64, data) {
   return _sign(null, buf, key).toString('base64');
 }
 
+/**
+ * 生成带时间戳的注册签名（防重放，推荐用于 agent.register）
+ * 签名材料为 `${timestamp}:${JSON.stringify(params)}`，与后端 signaturePayload 规范一致。
+ * @param {string} privateKeyBase64 - base64 编码的 PKCS8 DER 私钥
+ * @param {object} params - 注册参数
+ * @returns {{ timestamp: number, signature: string }} 传给 agent.register(params, res.signature, res.timestamp)
+ */
+export function signRegistration(privateKeyBase64, params) {
+  const timestamp = Date.now();
+  const signature = signWithKey(privateKeyBase64, `${timestamp}:${JSON.stringify(params)}`);
+  return { timestamp, signature };
+}
+
 // ─── Main Class: OpenClaw ────────────────────────────────────────
 
 /**
@@ -1118,7 +1155,10 @@ export class OpenClaw extends EventEmitter {
       }
 
       const headers = {};
-      if (this._options.apiKey) headers['Authorization'] = this._options.apiKey;
+      if (this._options.apiKey) {
+        headers['Authorization'] = this._options.apiKey;
+        headers['x-api-key'] = this._options.apiKey;
+      }
       if (this._options.agentId) headers['x-agent-id'] = this._options.agentId;
 
       this._ws = new WebSocket(this._options.wsURL, { headers });
@@ -1126,6 +1166,14 @@ export class OpenClaw extends EventEmitter {
       this._ws.on('open', () => {
         this._connected = true;
         this._reconnectAttempts = 0;
+        // /ws（realtimePush）通道要求显式认证消息：凭据不进 URL、不进访问日志。
+        // auth_ok / auth_error 通过 _handleWsMessage 以同名事件抛出。
+        const authHeader = this._http._headers['Authorization'] || '';
+        if (authHeader.startsWith('Bearer ')) {
+          this._ws.send(JSON.stringify({ type: 'auth', token: authHeader.slice(7) }));
+        } else if (this._options.apiKey || authHeader) {
+          this._ws.send(JSON.stringify({ type: 'auth', apiKey: this._options.apiKey || authHeader }));
+        }
         this._startHeartbeat();
         this.emit('connected');
         resolve();
@@ -1229,6 +1277,19 @@ export class OpenClaw extends EventEmitter {
           });
       }
     }
+  }
+
+  /**
+   * 用构造时传入的 privateKey 生成带时间戳的注册签名（防重放）
+   * @param {object} params - 注册参数
+   * @returns {{ timestamp: number, signature: string }} 直接传给 agent.register(params, result)
+   */
+  signRegistration(params) {
+    const privateKey = this._options.privateKey;
+    if (!privateKey) {
+      throw new XClawError('privateKey is required for signRegistration — pass it in the constructor options', 0, 'NO_PRIVATE_KEY');
+    }
+    return signRegistration(privateKey, params);
   }
 
   /** @private 启动心跳 */
