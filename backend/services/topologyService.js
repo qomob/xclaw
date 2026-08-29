@@ -200,6 +200,8 @@ class TopologyService {
               lng: parseFloat(info.lng) || 0
             });
             loaded++;
+            // 旧版本写入的键无 TTL,启动时统一刷新
+            await redisClient.expire(`topology:node:${nodeId}`, CACHE_TTL_SECONDS);
           }
         } catch (parseErr) {
           logger.warn('[Topology] Skip unparseable node', { nodeId, error: parseErr.message });
