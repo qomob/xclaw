@@ -106,6 +106,29 @@ export function generateSignature(data, privateKey) {
   }
 }
 
+// 签名重放防护：timestamp 超出窗口即拒绝（秒级时钟偏差可容忍，窗口可经环境变量调整）
+export const SIGNATURE_TIMESTAMP_WINDOW_MS = parseInt(process.env.SIGNATURE_TIMESTAMP_WINDOW_MS || '300000');
+export function isTimestampFresh(ts, windowMs = SIGNATURE_TIMESTAMP_WINDOW_MS) {
+  let t;
+  if (typeof ts === 'number') {
+    t = ts;
+  } else if (typeof ts === 'string' && /^\d+$/.test(ts.trim())) {
+    // HTTP 头携带的毫秒时间戳是数字字符串，Date.parse 无法解析，需先转数值
+    t = Number(ts.trim());
+  } else {
+    t = Date.parse(ts);
+  }
+  if (!Number.isFinite(t)) return false;
+  return Math.abs(Date.now() - t) <= windowMs;
+}
+
+// Ed25519 请求签名的标准材料：timestamp 与 body 绑定，截获的签名无法在窗口外重放。
+// 客户端与服务端必须使用同一拼接顺序。
+export function signaturePayload(timestamp, body) {
+  const bodyString = typeof body === 'string' ? body : JSON.stringify(body);
+  return `${timestamp}:${bodyString}`;
+}
+
 // 计算两个坐标之间的距离（Haversine 公式）
 export function calculateDistance(lat1, lon1, lat2, lon2) {
   const R = 6371; // 地球半径（公里）

@@ -17,7 +17,7 @@ import apiRouter from './gateway/api.js';
 
 // 核心模块
 import { initPostgres, initRedis, closeConnections, getRedis } from './core/dependencies.js';
-import { errorHandler } from './core/utils.js';
+import { isTimestampFresh } from './core/utils.js';
 import { handleHeartbeat } from './registry/nodeRegistry.js';
 import { runMigrations } from './core/migrations.js';
 
@@ -53,6 +53,13 @@ import auditMiddleware from './gateway/auditMiddleware.js';
 // ==========================================
 const app = express();
 const port = config.server.port;
+
+// 生产安全检查：管理密钥缺失时 admin 接口全部 403，显式提醒运维
+if (!config.security.adminApiKey) {
+  logger.warn('ADMIN_API_KEY is not set — all /v1/admin/* endpoints will return 403. Set a dedicated admin key (different from API_KEY) to enable the admin console.');
+} else if (config.security.adminApiKey === config.security.apiKey) {
+  logger.warn('ADMIN_API_KEY equals API_KEY — admin privilege separation is void. Generate a distinct admin key.');
+}
 
 // 先启动 HTTP 服务器
 const server = app.listen(port, config.server.host, async () => {
@@ -200,8 +207,14 @@ app.use(cors({
   origin: config.security.corsOrigins.length > 0
     ? config.security.corsOrigins
     : ['http://localhost:5173', 'http://127.0.0.1:5173', 'https://xclaw.network', 'https://skill.xclaw.network'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-agent-signature', 'x-agent-id']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+  // 覆盖前端/SDK 实际使用的自定义头，否则浏览器预检会拦截携带这些头的请求
+  allowedHeaders: [
+    'Content-Type', 'Authorization',
+    'x-api-key', 'x-agent-id', 'agent_id',
+    'x-agent-signature', 'x-agent-timestamp',
+    'x-federation-key', 'x-xclaw-signature'
+  ]
 }));
 
 // Phase 15: 全站 API 审计（fire-and-forget 写 audit_logs，失败静默不影响请求）
@@ -251,24 +264,29 @@ wss.on('connection', (ws, req) => {
   
   // 如果是 monitor 模式，验证 monitor token 后加入连接池
   if (agentId === 'monitor') {
-    const monitorToken = url.searchParams.get('token');
+    // fail-closed：未配置 MONITOR_TOKEN 时一律拒绝——monitor 通道会收到
+    // 全网拓扑与所有 P2P/广播消息副本，绝不能在无鉴权时开放
     const expectedToken = process.env.MONITOR_TOKEN;
-    if (expectedToken) {
-      let tokenValid = false;
-      try {
-        // timingSafeEqual 要求两缓冲区等长，先比长度避免异常崩溃
-        const provided = Buffer.from(monitorToken || '');
-        const expected = Buffer.from(expectedToken);
-        tokenValid = provided.length === expected.length
-          && crypto.timingSafeEqual(provided, expected);
-      } catch (err) {
-        logger.warn('Monitor token comparison error', { error: err.message });
-      }
-      if (!tokenValid) {
-        logger.warn('Monitor WebSocket connection rejected: invalid token');
-        ws.close(4003, 'Invalid monitor token');
-        return;
-      }
+    if (!expectedToken) {
+      logger.warn('Monitor WebSocket rejected: MONITOR_TOKEN is not configured');
+      ws.close(4003, 'Monitor token not configured');
+      return;
+    }
+    const monitorToken = url.searchParams.get('token');
+    let tokenValid = false;
+    try {
+      // timingSafeEqual 要求两缓冲区等长，先比长度避免异常崩溃
+      const provided = Buffer.from(monitorToken || '');
+      const expected = Buffer.from(expectedToken);
+      tokenValid = provided.length === expected.length
+        && crypto.timingSafeEqual(provided, expected);
+    } catch (err) {
+      logger.warn('Monitor token comparison error', { error: err.message });
+    }
+    if (!tokenValid) {
+      logger.warn('Monitor WebSocket connection rejected: invalid token');
+      ws.close(4003, 'Invalid monitor token');
+      return;
     }
     wsConnections.set(agentId, ws);
     logger.info('Monitor WebSocket connected');
@@ -315,6 +333,12 @@ wss.on('connection', (ws, req) => {
         const authData = JSON.stringify({ agent_id, timestamp });
         if (!authService.verifySignature(authData, signature, publicKeyPem)) {
           ws.close(4001, 'Invalid signature');
+          return;
+        }
+
+        // 重放防护：AUTH 签名材料包含 timestamp，超出窗口即拒绝
+        if (!isTimestampFresh(timestamp)) {
+          ws.close(4001, 'Signature timestamp expired');
           return;
         }
 
@@ -456,6 +480,11 @@ async function handleDirectMessage(message, authenticatedAgentId) {
   }
 
   if (signature) {
+    // 重放防护：带签名的消息要求 timestamp 新鲜（离线消息在入队时已验证）
+    if (!isTimestampFresh(timestamp)) {
+      logger.warn('Message rejected: stale timestamp', { sender_id, recipient_id });
+      return;
+    }
     const senderPublicKey = await authService.getAgentPublicKey(sender_id);
     if (!senderPublicKey) {
       logger.warn('Message rejected: sender not registered', { sender_id });
@@ -633,9 +662,6 @@ async function recoverOfflineMessages(agentId, ws) {
 
 // Data pump removed — interval timer disabled
 
-// 全局错误处理
-app.use(errorHandler);
-
 // 优雅关闭
 async function gracefulShutdown(signal) {
   logger.info('Shutting down server...', { signal });
@@ -657,5 +683,17 @@ async function gracefulShutdown(signal) {
 
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+// 进程级异常兜底：未捕获的 rejection 记录后继续运行（Node ≥15 默认会崩溃），
+// uncaughtException 时进程状态不可信，记录后以非零码退出交由 restart 策略拉起。
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled promise rejection', {
+    reason: reason instanceof Error ? reason.stack || reason.message : String(reason)
+  });
+});
+process.on('uncaughtException', (err) => {
+  logger.error('Uncaught exception — exiting', { error: err.stack || err.message });
+  process.exit(1);
+});
 
 logger.info('WebSocket server initialized and attached to HTTP server');

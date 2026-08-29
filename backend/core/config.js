@@ -32,7 +32,9 @@ const config = {
   security: {
     jwtSecret: process.env.JWT_SECRET,
     apiKey: process.env.API_KEY,
-    adminApiKey: process.env.ADMIN_API_KEY || process.env.API_KEY,
+    // 管理密钥必须独立配置：回退到 API_KEY 会让所有系统 Key 持有者获得 admin 权限。
+    // 未设置时 admin 接口一律 403（fail-closed）。
+    adminApiKey: process.env.ADMIN_API_KEY,
     tokenExpiry: parseInt(process.env.TOKEN_EXPIRY) || 86400, // 24小时
     corsOrigins: process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : ['https://xclaw.network', 'https://skill.xclaw.network']
   },

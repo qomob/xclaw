@@ -1,8 +1,9 @@
 // 认证管理文件
 import crypto from 'crypto';
-import { verifySignature } from '../core/utils.js';
+import { verifySignature, isTimestampFresh, signaturePayload } from '../core/utils.js';
 import { getNode } from '../registry/nodeRegistry.js';
 import config from '../core/config.js';
+import logger from '../services/loggerService.js';
 import { verifyCallbackSignature } from '../services/withdrawalExecutor.js';
 import authService from '../services/authService.js';
 
@@ -10,14 +11,29 @@ import authService from '../services/authService.js';
 export async function verifyRequestSignature(req, res, next) {
   const signature = req.headers['x-agent-signature'];
   const agentId = req.params.agent_id || req.body.node_id;
-  
+
   if (!signature || !agentId) {
     return res.status(401).json({
       success: false,
       error: 'Missing signature or agent ID'
     });
   }
-  
+
+  // 重放防护：新协议要求 x-agent-timestamp 参与签名材料（timestamp:body），
+  // 剥离头或重放超出窗口的请求均无法通过验签。
+  // 兼容期：未带 timestamp 的旧格式（仅 body）仍接受，但视为待废弃并告警。
+  const tsHeader = req.headers['x-agent-timestamp'];
+  if (tsHeader === undefined) {
+    logger.warn('Deprecation: unsigned timestamp in agent signature — replay protection inactive', {
+      agentId, path: req.path
+    });
+  } else if (!isTimestampFresh(tsHeader)) {
+    return res.status(401).json({
+      success: false,
+      error: 'Signature timestamp expired or invalid'
+    });
+  }
+
   // 获取节点信息
   const nodeResult = await getNode(agentId);
   if (!nodeResult.success) {
@@ -26,16 +42,18 @@ export async function verifyRequestSignature(req, res, next) {
       error: 'Agent not found'
     });
   }
-  
+
   // 验证签名
-  const requestData = JSON.stringify(req.body);
+  const requestData = tsHeader !== undefined
+    ? signaturePayload(tsHeader, req.body)
+    : JSON.stringify(req.body);
   if (!verifySignature(requestData, signature, nodeResult.data.public_key)) {
     return res.status(401).json({
       success: false,
       error: 'Invalid signature'
     });
   }
-  
+
   next();
 }
 
@@ -43,22 +61,25 @@ export async function verifyRequestSignature(req, res, next) {
 export function verifyApiKey(req, res, next) {
   const apiKey = req.headers['authorization'];
   const validApiKey = config.security.apiKey;
-  
+  const adminKey = config.security.adminApiKey;
+
   if (!validApiKey) {
     return res.status(500).json({
       success: false,
       error: 'Server configuration error: API_KEY not set'
     });
   }
-  
-  if (!apiKey || !safeEqual(apiKey, validApiKey)) {
+
+  // 独立管理密钥是合法凭据：可通认证且 isAdmin=true；
+  // 系统 Key 仅通认证（isAdmin=false）——两把钥匙必须不同值
+  if (!apiKey || (!safeEqual(apiKey, validApiKey) && !(adminKey && safeEqual(apiKey, adminKey)))) {
     return res.status(401).json({
       success: false,
       error: 'Invalid API key'
     });
   }
 
-  req.isAdmin = safeEqual(apiKey, config.security.adminApiKey);
+  req.isAdmin = !!(adminKey && safeEqual(apiKey, adminKey));
   next();
 }
 
@@ -123,14 +144,15 @@ export function requireOwnNode(bodyField = 'node_id') {
 
 /**
  * 联邦网络共享密钥校验（防止未授权实例写入/读取联邦数据）
- * 使用 FEDERATION_KEY 环境变量，未配置时回退 API_KEY
+ * fail-closed：未配置 FEDERATION_KEY 时联邦端点一律拒绝——
+ * 不回退系统 API_KEY，否则任意系统 Key 持有者即可跨网读写
  */
 export function requireFederationKey(req, res, next) {
-  const expected = process.env.FEDERATION_KEY || config.security.apiKey;
+  const expected = process.env.FEDERATION_KEY;
   if (!expected) {
-    return res.status(500).json({
+    return res.status(503).json({
       success: false,
-      error: 'FEDERATION_KEY not configured'
+      error: 'FEDERATION_KEY not configured — federation endpoints are disabled'
     });
   }
   const provided = req.headers['x-federation-key'] || '';
@@ -157,18 +179,23 @@ export function verifyWithdrawalCallback(req, res, next) {
 
 // 验证 WebSocket 连接
 export async function verifyWebSocketConnection(agentId, signature, timestamp) {
+  // 重放防护：timestamp 为签名材料的一部分，超出窗口即拒绝
+  if (!isTimestampFresh(timestamp)) {
+    return false;
+  }
+
   // 获取节点信息
   const nodeResult = await getNode(agentId);
   if (!nodeResult.success) {
     return false;
   }
-  
+
   // 验证签名
   const authData = JSON.stringify({ agent_id: agentId, timestamp });
   if (!verifySignature(authData, signature, nodeResult.data.public_key)) {
     return false;
   }
-  
+
   return true;
 }
 

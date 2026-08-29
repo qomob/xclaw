@@ -1,4 +1,4 @@
-import { generateUUID, verifySignature, generateSignature, calculateDistance, validateParams, generateAPIKey, formatResponse, errorHandler } from '../../core/utils.js';
+import { generateUUID, verifySignature, generateSignature, calculateDistance, validateParams, generateAPIKey, formatResponse, errorHandler, isTimestampFresh, signaturePayload, SIGNATURE_TIMESTAMP_WINDOW_MS } from '../../core/utils.js';
 import crypto from 'crypto';
 import { jest } from '@jest/globals';
 
@@ -40,6 +40,50 @@ describe('Core Utils Tests', () => {
       const signature = generateSignature(data, privateKey);
       const isValid = verifySignature('tampered-data', signature, publicKey);
       expect(isValid).toBe(false);
+    });
+  });
+
+  describe('Signature Replay Protection', () => {
+    test('isTimestampFresh accepts a current timestamp', () => {
+      expect(isTimestampFresh(Date.now())).toBe(true);
+      expect(isTimestampFresh(String(Date.now()))).toBe(true);
+      expect(isTimestampFresh(new Date().toISOString())).toBe(true);
+    });
+
+    test('isTimestampFresh rejects timestamps outside the window', () => {
+      const window = SIGNATURE_TIMESTAMP_WINDOW_MS;
+      expect(isTimestampFresh(Date.now() - window - 1000)).toBe(false);
+      expect(isTimestampFresh(Date.now() + window + 1000)).toBe(false);
+    });
+
+    test('isTimestampFresh rejects garbage input', () => {
+      expect(isTimestampFresh('not-a-date')).toBe(false);
+      expect(isTimestampFresh(undefined)).toBe(false);
+      expect(isTimestampFresh(null)).toBe(false);
+      expect(isTimestampFresh(Number.NaN)).toBe(false);
+    });
+
+    test('isTimestampFresh honors a custom window', () => {
+      const stale = Date.now() - 10 * 60 * 1000;
+      expect(isTimestampFresh(stale, 60 * 60 * 1000)).toBe(true);
+      expect(isTimestampFresh(stale, 60 * 1000)).toBe(false);
+    });
+
+    test('signaturePayload binds timestamp to the body', () => {
+      const ts = 1700000000000;
+      expect(signaturePayload(ts, { a: 1 })).toBe('1700000000000:{"a":1}');
+      expect(signaturePayload(ts, '{"a":1}')).toBe('1700000000000:{"a":1}');
+    });
+
+    test('a signature over signaturePayload must not verify against the bare body (anti-downgrade)', () => {
+      const ts = Date.now();
+      const body = { action: 'transfer', amount: 1 };
+      const pair = crypto.generateKeyPairSync('ed25519');
+      const signed = generateSignature(signaturePayload(ts, body), pair.privateKey);
+      // 攻击者剥离 timestamp 头重放：签名无法对裸 body 验证通过
+      expect(verifySignature(JSON.stringify(body), signed, pair.publicKey)).toBe(false);
+      // 正常路径：对 timestamp:body 验证通过
+      expect(verifySignature(signaturePayload(ts, body), signed, pair.publicKey)).toBe(true);
     });
   });
 

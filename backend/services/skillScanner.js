@@ -95,8 +95,9 @@ export async function sandboxRunLegacy(execution, timeoutMs = 5000) {
 }
 
 /**
- * 沙箱试跑：优先 Docker 强沙箱（断网/资源限制/禁提权/超时强杀），
- * 服务器无 Docker 或显式 SANDBOX_ENGINE=legacy 时回退轻量兜底。
+ * 沙箱试跑：仅接受 Docker 强沙箱（断网/资源限制/禁提权/超时强杀）。
+ * 无 Docker 时默认拒绝执行——legacy 兜底是在宿主机直接执行第三方代码，
+ * 必须显式设置 SANDBOX_ENGINE=legacy（仅限隔离 VM/一次性环境）才会启用。
  */
 export async function sandboxRun(execution, timeoutMs = 5000) {
   if (!execution || typeof execution !== 'object') {
@@ -113,8 +114,14 @@ export async function sandboxRun(execution, timeoutMs = 5000) {
         const r = await runInStrongSandbox({ language: type, code, timeoutMs });
         return { ...r, engine: 'docker' };
       }
-    } catch { /* 回退 legacy */ }
+    } catch { /* fall through */ }
+    return {
+      ok: false,
+      skipped: true,
+      reason: 'sandbox unavailable: Docker is required to run third-party skill code (set SANDBOX_ENGINE=legacy only in an isolated VM to allow host execution)'
+    };
   }
+  logger.warn('SANDBOX_ENGINE=legacy — executing third-party skill code on the host without network isolation');
   return { ...(await sandboxRunLegacy(execution, timeoutMs)), engine: 'legacy' };
 }
 

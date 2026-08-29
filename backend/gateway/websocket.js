@@ -2,7 +2,7 @@
 import { WebSocketServer as WSS } from 'ws';
 import { getNode, updateNodeStatus, handleHeartbeat } from '../registry/nodeRegistry.js';
 import { getRedis } from '../core/dependencies.js';
-import { verifySignature, formatResponse } from '../core/utils.js';
+import { verifySignature, formatResponse, isTimestampFresh } from '../core/utils.js';
 
 class WebSocketServer {
   constructor(server) {
@@ -80,9 +80,15 @@ class WebSocketServer {
 
   async handleAuth(ws, data) {
     const { agent_id, signature, timestamp } = data;
-    
+
     if (agent_id !== ws.agentId) {
       ws.close(4002, 'Agent ID mismatch');
+      return;
+    }
+
+    // 重放防护：AUTH 签名材料包含 timestamp，超出窗口即拒绝
+    if (!isTimestampFresh(timestamp)) {
+      ws.close(4005, 'Signature timestamp expired');
       return;
     }
 

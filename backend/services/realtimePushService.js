@@ -222,7 +222,15 @@ class RealtimePushService {
       return;
     }
 
-    client.agentId = msg.agentId || agentId;
+    // 身份绑定：以认证凭据解析出的 agentId 为准。客户端自报的 agentId 与凭据
+    // 不一致时直接拒绝——防止已认证 agent 冒充他人接收定向推送
+    if (msg.agentId && msg.agentId !== agentId) {
+      this._send(client.ws, { type: 'auth_error', message: 'agentId does not match the authenticated identity' });
+      client.ws.close(4403, 'Agent identity mismatch');
+      return;
+    }
+
+    client.agentId = agentId;
     client.authenticated = true;
     this._send(client.ws, { type: 'auth_ok', agentId: client.agentId });
     logger.info(`[RealtimePush] client ${client.clientId} authenticated as ${client.agentId}`);
