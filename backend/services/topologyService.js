@@ -1,9 +1,12 @@
-import { getRedis } from '../core/dependencies.js';
+import { getRedis, getPostgres } from '../core/dependencies.js';
 import { instanceId } from '../core/instance.js';
 import logger from './loggerService.js';
 
 const TOPO_SET = 'topology:nodes';
 const TOPO_EVENTS = 'xclaw:topology:events';
+// 拓扑缓存键 TTL:兜底防孤儿(绕过 API 的 DB 删除会让缓存永久残留,
+// 重启后幽灵节点复活)。正常节点注册时刷新 TTL。
+const CACHE_TTL_SECONDS = parseInt(process.env.TOPOLOGY_CACHE_TTL_SECONDS || '604800');
 
 class TopologyService {
   constructor() {
@@ -153,6 +156,7 @@ class TopologyService {
         lat: String(node.lat ?? 0),
         lng: String(node.lng ?? 0)
       });
+      await this._pub.expire(`topology:node:${node.id}`, CACHE_TTL_SECONDS);
       await this._pub.publish(TOPO_EVENTS, JSON.stringify({ node, links, instance: instanceId }));
     } catch (err) {
       logger.warn('[Topology] publishUpdate failed', { error: err.message, nodeId: node.id });
@@ -202,8 +206,55 @@ class TopologyService {
         }
       }
       logger.info('Topology loaded from Redis', { total: nodeIds.length, loaded });
+      await this._reconcileWithDatabase(nodeIds);
     } catch (error) {
       logger.error('Failed to load topology from Redis', { error: error.message });
+    }
+  }
+
+  /**
+   * 启动时与 DB 对账（拓扑事实源是 nodes 表）：
+   * a) 清除缓存孤儿——绕过 API 的 DB 删除（手工清库等）留下的幽灵节点；
+   * b) 补入 DB 有而缓存缺失的节点（缓存丢失/过期后自愈）。
+   */
+  async _reconcileWithDatabase(cacheNodeIds) {
+    try {
+      const { rows } = await getPostgres().query(
+        'SELECT node_id, name, status, tags, latitude, longitude FROM nodes'
+      );
+      const dbIds = new Set(rows.map(r => String(r.node_id)));
+
+      let removed = 0;
+      for (const nodeId of cacheNodeIds) {
+        if (!dbIds.has(String(nodeId))) {
+          logger.info('[Topology] Reconcile: removing orphaned cache node (not in DB)', { nodeId });
+          await this.publishDelete(nodeId);
+          removed++;
+        }
+      }
+
+      const cacheIds = new Set(cacheNodeIds.map(String));
+      let added = 0;
+      for (const r of rows) {
+        const id = String(r.node_id);
+        if (cacheIds.has(id) || this.hasNode(id)) continue;
+        await this.publishUpdate({
+          id,
+          name: r.name,
+          status: r.status || 'offline',
+          tags: Array.isArray(r.tags) ? r.tags : [],
+          lat: r.latitude ?? 0,
+          lng: r.longitude ?? 0
+        });
+        added++;
+      }
+
+      if (removed > 0 || added > 0) {
+        logger.info('[Topology] DB reconciliation complete', { removed, added, total: this.state.nodes.length });
+      }
+    } catch (error) {
+      // 对账失败不阻断启动——缓存仍可用，下轮重启再试
+      logger.warn('[Topology] DB reconciliation failed', { error: error.message });
     }
   }
 }
