@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { getPostgres, getRedis } from '../core/dependencies.js';
 import { generateUUID, calculateDistance, formatResponse } from '../core/utils.js';
 import temporalClient from '../workflows/temporalClient.js';
@@ -143,10 +144,10 @@ export async function getTaskLogs(taskId) {
 export async function createTask(taskData) {
   const pgPool = getPostgres();
   try {
-    const id = taskData.id || require('crypto').randomUUID();
+    const id = taskData.id || crypto.randomUUID();
     const { rows } = await pgPool.query(
-      `INSERT INTO tasks (id, type, payload, status, node_id, skill_id)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO tasks (id, type, payload, status, node_id, skill_id, caller_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
       [
         id,
@@ -154,10 +155,11 @@ export async function createTask(taskData) {
         taskData.payload || {},
         'pending',
         taskData.node_id || null,
-        taskData.skill_id || null
+        taskData.skill_id || null,
+        taskData.caller_id || null
       ]
     );
-    eventBus.emit('task.created', { task_id: id, skill_id: taskData.skill_id || null, node_id: taskData.node_id || null }, { sourceId: taskData.node_id || null });
+    eventBus.emit('task.created', { task_id: id, skill_id: taskData.skill_id || null, node_id: taskData.node_id || null, caller_id: taskData.caller_id || null }, { sourceId: taskData.caller_id || taskData.node_id || null });
     return { success: true, data: rows[0] };
   } catch (error) {
     logger.error('Failed to create task', { error: error.message });
@@ -359,7 +361,7 @@ export async function getNodeTasks(nodeId) {
   const redisClient = getRedis();
 
   try {
-    const tasks = await redisClient.xRange(`node:${nodeId}:tasks`, '-', '+');
+    const tasks = await redisClient.xrange(`node:${nodeId}:tasks`, '-', '+');
 
     const taskList = tasks.map(task => ({
       task_id: task.message.task_id,
@@ -376,7 +378,7 @@ export async function getNodeTasks(nodeId) {
   }
 }
 
-export async function completeTask(taskId, result, error = null) {
+export async function completeTask(taskId, result, error = null, options = {}) {
   const pgPool = getPostgres();
   const redisClient = getRedis();
 
@@ -391,6 +393,17 @@ export async function completeTask(taskId, result, error = null) {
     }
 
     const task = taskInfo.rows[0];
+
+    // 来自 HTTP 路由的调用必须校验操作者身份：
+    // 仅任务执行方（node_id）或调用方（caller_id）可标记任务完成，
+    // 否则任意 agent 可完成任务并触发对 caller 的扣款
+    if (options.actorId) {
+      const allowed = task.node_id === options.actorId || task.caller_id === options.actorId;
+      if (!allowed) {
+        return formatResponse(false, null, '无权操作该任务');
+      }
+    }
+
     const status = error ? 'failed' : 'completed';
     await pgPool.query(
       'UPDATE tasks SET status = $1, updated_at = NOW() WHERE id = $2',

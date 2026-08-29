@@ -24,7 +24,7 @@ jest.unstable_mockModule('../../core/dependencies.js', () => ({
     smembers: mockRedisSmembers,
     sismember: mockRedisSismember,
     xlen: mockRedisXlen,
-    xRange: mockRedisXRange,
+    xrange: mockRedisXRange,
     publish: mockRedisPublish,
   })),
 }));

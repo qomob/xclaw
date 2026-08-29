@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { getPostgres, getRedis } from '../core/dependencies.js';
 import logger from './loggerService.js';
 import crossNetworkService from './crossChainService.js';
