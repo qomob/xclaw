@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS nodes (
     longitude DOUBLE PRECISION DEFAULT 0,
     status VARCHAR(50) DEFAULT 'offline',
     reputation_score DECIMAL(3, 2) DEFAULT 1.0,
-    total_earnings DECIMAL(16, 2) DEFAULT 0,
+    -- 精度与 backend/registry/db.js、migrations/008 对齐（避免三源漂移）
+    total_earnings DECIMAL(16, 4) DEFAULT 0,
     last_heartbeat TIMESTAMP DEFAULT NOW(),
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
@@ -63,7 +64,8 @@ CREATE TABLE IF NOT EXISTS transactions (
     task_id UUID REFERENCES tasks(id),
     skill_id UUID REFERENCES skills(id),
     node_id UUID REFERENCES nodes(node_id),
-    amount DECIMAL(10, 2) NOT NULL,
+    -- 精度对齐 db.js（微额计费）并容纳 MAX_SINGLE_AMOUNT=1e6 的单笔；见 migrations/008
+    amount DECIMAL(18, 4) NOT NULL,
     type VARCHAR(50) NOT NULL,
     status VARCHAR(50) DEFAULT 'pending',
     idempotency_key VARCHAR(255) UNIQUE,
@@ -148,7 +150,7 @@ CREATE INDEX IF NOT EXISTS idx_agent_messages_created ON agent_messages(created_
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'nodes' AND column_name = 'total_earnings') THEN
-    ALTER TABLE nodes ADD COLUMN total_earnings DECIMAL(16, 2) DEFAULT 0;
+    ALTER TABLE nodes ADD COLUMN total_earnings DECIMAL(16, 4) DEFAULT 0;
   END IF;
 END
 $$;
@@ -231,9 +233,10 @@ VALUES
 ON CONFLICT (chain_id) DO NOTHING;
 
 -- Webhook 事件系统
+-- node_id 外键与 migrations/001 对齐（缺 FK 时删节点会留孤儿 webhook）
 CREATE TABLE IF NOT EXISTS webhooks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    node_id UUID NOT NULL,
+    node_id UUID NOT NULL REFERENCES nodes(node_id) ON DELETE CASCADE,
     url TEXT NOT NULL,
     events TEXT[] NOT NULL,
     secret TEXT NOT NULL,
@@ -244,13 +247,13 @@ CREATE TABLE IF NOT EXISTS webhooks (
 );
 
 CREATE INDEX IF NOT EXISTS idx_webhooks_node_id ON webhooks(node_id);
-CREATE INDEX IF NOT EXISTS idx_webhooks_active ON webhooks(active) WHERE active = TRUE;
+CREATE INDEX IF NOT EXISTS idx_webhooks_active ON webhooks(active);
 
 CREATE TABLE IF NOT EXISTS webhook_deliveries (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    webhook_id UUID REFERENCES webhooks(id) ON DELETE CASCADE,
-    event_type VARCHAR(100),
-    payload JSONB,
+    webhook_id UUID NOT NULL REFERENCES webhooks(id) ON DELETE CASCADE,
+    event_type VARCHAR(100) NOT NULL,
+    payload JSONB NOT NULL DEFAULT '{}',
     status VARCHAR(30) DEFAULT 'pending',
     attempts INTEGER DEFAULT 0,
     max_attempts INTEGER DEFAULT 5,
@@ -261,21 +264,25 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_webhook ON webhook_deliveries(webhook_id);
+-- 索引名与 migrations/001 一致，避免同名索引重复创建
+CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_webhook_id ON webhook_deliveries(webhook_id);
 CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_status ON webhook_deliveries(status);
-CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_retry ON webhook_deliveries(next_retry_at) WHERE status = 'retrying';
+CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_next_retry ON webhook_deliveries(next_retry_at) WHERE status IN ('pending', 'retrying');
+CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_created ON webhook_deliveries(created_at DESC);
 
--- 事件日志（eventBus 使用）
+-- 事件日志（eventBus 使用）；source_id 实际写入均为实体 UUID（agent/task/order/node）
 CREATE TABLE IF NOT EXISTS event_log (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     event_type VARCHAR(100) NOT NULL,
-    source_id VARCHAR(255),
+    source_id UUID,
     payload JSONB DEFAULT '{}',
+    metadata JSONB DEFAULT '{}',
     created_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_event_log_type ON event_log(event_type);
 CREATE INDEX IF NOT EXISTS idx_event_log_created ON event_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_event_log_source ON event_log(source_id);
 
 -- 计费账户
 CREATE TABLE IF NOT EXISTS billing_accounts (

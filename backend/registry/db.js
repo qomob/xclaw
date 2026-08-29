@@ -19,7 +19,7 @@ export async function initDatabase() {
         longitude DOUBLE PRECISION DEFAULT 0,
         status VARCHAR(50) DEFAULT 'offline',
         reputation_score DECIMAL(3, 2) DEFAULT 1.0,
-        total_earnings DECIMAL(14, 4) DEFAULT 0,
+        total_earnings DECIMAL(16, 4) DEFAULT 0,
         last_heartbeat TIMESTAMP,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
@@ -72,7 +72,7 @@ export async function initDatabase() {
         task_id UUID REFERENCES tasks(id),
         skill_id UUID REFERENCES skills(id),
         node_id UUID REFERENCES nodes(node_id),
-        amount DECIMAL(10, 4) NOT NULL,
+        amount DECIMAL(18, 4) NOT NULL,
         type VARCHAR(50) NOT NULL,
         status VARCHAR(50) DEFAULT 'pending',
         created_at TIMESTAMP DEFAULT NOW(),
