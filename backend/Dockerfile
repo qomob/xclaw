@@ -13,9 +13,11 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY . .
 
 # /data/keys 供 entrypoint 持久化生成密钥；容器以非 root 的 node 用户运行
+# /data/keys 供 entrypoint 持久化生成密钥;/database/backups 供 db-backup 服务写入
+# (命名卷首次挂载继承镜像内目录属主,否则 root 属主的空卷使 node 用户无法写入)
 RUN chmod +x /app/entrypoint.sh /app/scripts/*.sh && \
-    mkdir -p /data/keys /app/logs && \
-    chown -R node:node /data /app
+    mkdir -p /data/keys /app/logs /database/backups && \
+    chown -R node:node /data /app /database
 
 EXPOSE 8081
 

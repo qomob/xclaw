@@ -136,6 +136,7 @@ services:
     environment:
       - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@db:5432/xclaw
       - BACKUP_ENCRYPTION_KEY=${BACKUP_ENCRYPTION_KEY:?BACKUP_ENCRYPTION_KEY must be set for backup service}
+      - BACKUP_DIR=/database/backups
       - BACKUP_INTERVAL_SECONDS=${BACKUP_INTERVAL_SECONDS:-86400}
       - BACKUP_UPLOAD_CMD=${BACKUP_UPLOAD_CMD:-}
     depends_on:

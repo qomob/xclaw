@@ -13,7 +13,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-BACKUP_DIR="${PROJECT_ROOT}/database/backups"
+# BACKUP_DIR 可覆盖默认路径（容器内 db-backup 服务通过环境变量注入）
+BACKUP_DIR="${BACKUP_DIR:-${PROJECT_ROOT}/database/backups}"
 ENC_DIR="${BACKUP_DIR}/encrypted"
 
 if [ -z "${BACKUP_ENCRYPTION_KEY:-}" ]; then

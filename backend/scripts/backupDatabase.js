@@ -32,8 +32,8 @@ const password = url.password;
 const host = url.hostname;
 const port = url.port || 5432;
 
-// 备份目录（相对脚本位置，避免依赖运行目录）
-const backupDir = path.join(projectRoot, 'database/backups');
+// 备份目录（相对脚本位置，避免依赖运行目录；容器内通过 BACKUP_DIR 注入）
+const backupDir = process.env.BACKUP_DIR || path.join(projectRoot, 'database/backups');
 if (!fs.existsSync(backupDir)) {
   fs.mkdirSync(backupDir, { recursive: true });
 }
