@@ -26,12 +26,14 @@ class DeveloperService {
     if (this.initialized) return;
 
     const pg = getPostgres();
+    // API Key 仅存 SHA-256 哈希 + 可识别前缀，不存明文
     await pg.query(`
       CREATE TABLE IF NOT EXISTS developer_profiles (
         developer_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         name VARCHAR(255) NOT NULL,
         email VARCHAR(255) UNIQUE,
-        sandbox_api_key VARCHAR(255),
+        sandbox_api_key_hash TEXT,
+        sandbox_api_key_prefix VARCHAR(20),
         plan VARCHAR(50) DEFAULT 'free',
         rate_limit INTEGER DEFAULT 100,
         created_at TIMESTAMP DEFAULT NOW(),
@@ -53,15 +55,55 @@ class DeveloperService {
         key_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         developer_id UUID REFERENCES developer_profiles(developer_id) ON DELETE CASCADE,
         name VARCHAR(255),
-        api_key VARCHAR(255) NOT NULL,
+        api_key_hash TEXT NOT NULL,
+        key_prefix VARCHAR(20),
         permissions JSONB DEFAULT '{"read": true, "write": false}',
         last_used TIMESTAMP,
         created_at TIMESTAMP DEFAULT NOW(),
         revoked_at TIMESTAMP
       );
     `);
+    await pg.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_developer_profiles_sandbox_key_hash ON developer_profiles(sandbox_api_key_hash) WHERE sandbox_api_key_hash IS NOT NULL`);
+    await pg.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_developer_api_keys_key_hash ON developer_api_keys(api_key_hash)`);
+    await this._upgradeLegacyPlaintextKeys(pg);
 
     this.initialized = true;
+  }
+
+  /**
+   * 历史明文键升级（幂等）：回填哈希+前缀后删除明文列。
+   * 全新安装（哈希建表）不含明文列，直接跳过。
+   */
+  async _upgradeLegacyPlaintextKeys(pg) {
+    const plans = [
+      { table: 'developer_profiles', legacy: 'sandbox_api_key', hash: 'sandbox_api_key_hash', prefix: 'sandbox_api_key_prefix' },
+      { table: 'developer_api_keys', legacy: 'api_key', hash: 'api_key_hash', prefix: 'key_prefix' }
+    ];
+    for (const p of plans) {
+      const hasLegacy = await pg.query(
+        `SELECT 1 FROM information_schema.columns WHERE table_name = $1 AND column_name = $2`,
+        [p.table, p.legacy]
+      );
+      if (hasLegacy.rowCount === 0) continue;
+
+      const hasHash = await pg.query(
+        `SELECT 1 FROM information_schema.columns WHERE table_name = $1 AND column_name = $2`,
+        [p.table, p.hash]
+      );
+      if (hasHash.rowCount === 0) {
+        await pg.query(`ALTER TABLE ${p.table} ADD COLUMN ${p.hash} TEXT, ADD COLUMN ${p.prefix} VARCHAR(20)`);
+      }
+      const { rows } = await pg.query(
+        `SELECT * FROM ${p.table} WHERE ${p.legacy} IS NOT NULL AND ${p.hash} IS NULL`
+      );
+      for (const row of rows) {
+        await pg.query(
+          `UPDATE ${p.table} SET ${p.hash} = $2, ${p.prefix} = $3 WHERE ${p.legacy === 'api_key' ? 'key_id' : 'developer_id'} = $1`,
+          [row[p.legacy === 'api_key' ? 'key_id' : 'developer_id'], createHash('sha256').update(row[p.legacy]).digest('hex'), String(row[p.legacy]).slice(0, 13)]
+        );
+      }
+      await pg.query(`ALTER TABLE ${p.table} DROP COLUMN ${p.legacy}`);
+    }
   }
 
   /**
@@ -74,6 +116,11 @@ class DeveloperService {
     const raw = randomUUID() + '-' + Date.now() + '-' + randomUUID();
     const hash = createHash('sha256').update(raw).digest('hex');
     return `${prefix}_${hash.substring(0, 40)}`;
+  }
+
+  /** 开发者 API Key 的存储形态：SHA-256 hex（不落明文） */
+  _hashKey(apiKey) {
+    return createHash('sha256').update(String(apiKey)).digest('hex');
   }
 
   /**
@@ -91,9 +138,9 @@ class DeveloperService {
       const developerId = randomUUID();
 
       await pg.query(
-        `INSERT INTO developer_profiles (developer_id, name, email, sandbox_api_key)
-         VALUES ($1, $2, $3, $4)`,
-        [developerId, name, email || null, sandboxApiKey]
+        `INSERT INTO developer_profiles (developer_id, name, email, sandbox_api_key_hash, sandbox_api_key_prefix)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [developerId, name, email || null, this._hashKey(sandboxApiKey), sandboxApiKey.slice(0, 13)]
       );
 
       // 创建默认 sandbox agent
@@ -135,7 +182,7 @@ class DeveloperService {
 
     try {
       const { rows } = await pg.query(
-        `SELECT developer_id, name, email, sandbox_api_key, plan, rate_limit, created_at, updated_at
+        `SELECT developer_id, name, email, sandbox_api_key_prefix, plan, rate_limit, created_at, updated_at
          FROM developer_profiles WHERE developer_id = $1`,
         [developerId]
       );
@@ -426,9 +473,9 @@ class DeveloperService {
       const perms = permissions || { read: true, write: false };
 
       await pg.query(
-        `INSERT INTO developer_api_keys (key_id, developer_id, name, api_key, permissions)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [keyId, developerId, name || 'default', apiKey, JSON.stringify(perms)]
+        `INSERT INTO developer_api_keys (key_id, developer_id, name, api_key_hash, key_prefix, permissions)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [keyId, developerId, name || 'default', this._hashKey(apiKey), apiKey.slice(0, 13), JSON.stringify(perms)]
       );
 
       return {

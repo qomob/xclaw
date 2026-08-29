@@ -104,7 +104,10 @@ class AuthService {
       const expectedSig = base64urlEncode(
         crypto.createHmac('sha256', JWT_SECRET).update(signingInput).digest()
       );
-      if (sigB64 !== expectedSig) {
+      // 常数时间比较：防止逐字节比较的时序侧信道泄露签名前缀
+      const sigBuf = Buffer.from(sigB64);
+      const expBuf = Buffer.from(expectedSig);
+      if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
         logger.warn('Token signature mismatch');
         return null;
       }
@@ -146,19 +149,38 @@ class AuthService {
     return this.agentPublicKeys.has(agentId);
   }
 
+  /**
+   * API Key 仅以 SHA-256 哈希落库：Redis（含 AOF 备份/快照）被读取时凭据不可复用。
+   * 历史明文索引（apikey:<key>）在验证命中时自动迁移为哈希索引。
+   */
+  hashApiKey(apiKey) {
+    return crypto.createHash('sha256').update(String(apiKey)).digest('hex');
+  }
+
   async generateApiKey(agentId) {
     const apiKey = `ak_${crypto.randomBytes(24).toString('base64url')}`;
     const redis = getRedis();
-    await redis.set(`apikey:${apiKey}`, agentId);
-    await redis.set(`agent_apikey:${agentId}`, apiKey);
+    const hash = this.hashApiKey(apiKey);
+    await redis.set(`apikey_hash:${hash}`, agentId);
+    await redis.set(`agent_apikey:${agentId}`, hash);
     logger.info('API key generated', { agentId, keyPrefix: apiKey.substring(0, 10) });
     return apiKey;
   }
 
   async verifyApiKey(apiKey) {
     const redis = getRedis();
-    const agentId = await redis.get(`apikey:${apiKey}`);
+    const hash = this.hashApiKey(apiKey);
+    let agentId = await redis.get(`apikey_hash:${hash}`);
     if (agentId) {
+      return { valid: true, agentId };
+    }
+    // 兼容历史明文索引：命中即迁移为哈希并删除明文
+    agentId = await redis.get(`apikey:${apiKey}`);
+    if (agentId) {
+      await redis.set(`apikey_hash:${hash}`, agentId);
+      await redis.set(`agent_apikey:${agentId}`, hash);
+      await redis.del(`apikey:${apiKey}`);
+      logger.info('Migrated legacy plaintext API key index to hashed storage', { agentId });
       return { valid: true, agentId };
     }
     return { valid: false };
@@ -166,11 +188,19 @@ class AuthService {
 
   async deleteApiKey(apiKey) {
     const redis = getRedis();
-    const agentId = await redis.get(`apikey:${apiKey}`);
+    const hash = this.hashApiKey(apiKey);
+    let removed = await redis.del(`apikey_hash:${hash}`);
+    let agentId = await redis.get(`apikey_hash:${hash}`);
+    // 历史明文索引兼容清理
+    const legacyAgentId = await redis.get(`apikey:${apiKey}`);
+    if (legacyAgentId) {
+      agentId = agentId || legacyAgentId;
+      removed += await redis.del(`apikey:${apiKey}`);
+    }
     if (agentId) {
       await redis.del(`agent_apikey:${agentId}`);
     }
-    return (await redis.del(`apikey:${apiKey}`)) > 0;
+    return removed > 0;
   }
 
   async authMiddleware(req, res, next) {

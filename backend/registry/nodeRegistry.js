@@ -1,20 +1,28 @@
 // 节点注册管理文件
 import { getPostgres, getRedis } from '../core/dependencies.js';
-import { generateUUID, verifySignature, formatResponse } from '../core/utils.js';
+import { generateUUID, verifySignature, formatResponse, isTimestampFresh, signaturePayload } from '../core/utils.js';
 import config from '../core/config.js';
+import logger from '../services/loggerService.js';
 import authService from '../services/authService.js';
 import topologyService from '../services/topologyService.js';
 import { lookup } from '../core/geoip.js';
 import { searchAgentsByIntent } from '../services/searchEngine.js';
 import eventBus from '../services/eventBus.js';
 
-export async function registerNode(nodeData, signature, clientIp) {
+// timestamp：可选。携带时签名材料为 `timestamp:body` 且强制新鲜（防重放）；
+// 未携带时兼容旧格式（仅 body），由调用方（api.js）记录废弃告警。
+export async function registerNode(nodeData, signature, clientIp, timestamp) {
   const pgPool = getPostgres();
   const redisClient = getRedis();
-  
+
   try {
     // 验证签名
-    const dataString = JSON.stringify(nodeData);
+    const dataString = timestamp !== undefined
+      ? signaturePayload(timestamp, nodeData)
+      : JSON.stringify(nodeData);
+    if (timestamp !== undefined && !isTimestampFresh(timestamp)) {
+      return formatResponse(false, null, '签名时间戳过期或无效');
+    }
     if (!verifySignature(dataString, signature, nodeData.public_key)) {
       return formatResponse(false, null, '签名验证失败');
     }
@@ -137,13 +145,19 @@ export async function registerNode(nodeData, signature, clientIp) {
 
     authService.registerAgent(nodeId, nodeData.public_key);
 
-    // 生成 API key 用于认证（如果不存在）
-    let apiKey = null;
-    apiKey = await redisClient.get(`agent_apikey:${nodeId}`);
-    if (!apiKey) {
-      apiKey = await authService.generateApiKey(nodeId);
-      await redisClient.set(`agent_apikey:${nodeId}`, apiKey);
+    // 生成 API key 用于认证。哈希存储后无法回显存量 Key——
+    // 重注册视为凭据轮换：吊销旧 Key（可能为哈希或历史明文）并签发新 Key
+    const existing = await redisClient.get(`agent_apikey:${nodeId}`);
+    if (existing) {
+      if (/^[0-9a-f]{64}$/.test(existing)) {
+        await redisClient.del(`apikey_hash:${existing}`);
+      } else {
+        await redisClient.del(`apikey:${existing}`);
+      }
+      await redisClient.del(`agent_apikey:${nodeId}`);
+      logger.info('Rotating agent API key on re-registration', { nodeId });
     }
+    const apiKey = await authService.generateApiKey(nodeId);
 
     eventBus.emit('agent.registered', { node_id: nodeId, name: nodeData.agent_name, capabilities: nodeData.capabilities }, { sourceId: nodeId });
     return formatResponse(true, {

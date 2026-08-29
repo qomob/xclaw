@@ -7,6 +7,7 @@
  */
 
 import { Router } from 'express';
+import crypto from 'crypto';
 import { verifyApiKey } from './auth.js';
 import config from '../core/config.js';
 import developerService from '../services/developerService.js';
@@ -23,9 +24,13 @@ router.use(async (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const systemApiKey = config.security.apiKey;
 
-  // 系统级 API Key — 直接放行
-  if (authHeader && authHeader === systemApiKey) {
-    return next();
+  // 系统级 API Key — 直接放行（常数时间比较）
+  if (authHeader && systemApiKey) {
+    const a = Buffer.from(authHeader);
+    const b = Buffer.from(systemApiKey);
+    if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+      return next();
+    }
   }
 
   // 非 API Key — 拒绝
@@ -33,14 +38,15 @@ router.use(async (req, res, next) => {
     return res.status(401).json({ success: false, error: 'Authorization header required' });
   }
 
-  // 尝试匹配开发者级 API Key
+  // 尝试匹配开发者级 API Key（哈希查找——数据库中不存明文）
   try {
     const pg = getPostgres();
+    const keyHash = crypto.createHash('sha256').update(authHeader).digest('hex');
 
-    // 查 developer_profiles.sandbox_api_key
+    // 查 developer_profiles.sandbox_api_key_hash
     const { rows } = await pg.query(
-      `SELECT developer_id FROM developer_profiles WHERE sandbox_api_key = $1`,
-      [authHeader]
+      `SELECT developer_id FROM developer_profiles WHERE sandbox_api_key_hash = $1`,
+      [keyHash]
     );
     if (rows.length > 0) {
       req.developerId = rows[0].developer_id;
@@ -49,8 +55,8 @@ router.use(async (req, res, next) => {
 
     // 查 developer_api_keys (未吊销的)
     const { rows: keyRows } = await pg.query(
-      `SELECT developer_id FROM developer_api_keys WHERE api_key = $1 AND revoked_at IS NULL`,
-      [authHeader]
+      `SELECT developer_id FROM developer_api_keys WHERE api_key_hash = $1 AND revoked_at IS NULL`,
+      [keyHash]
     );
     if (keyRows.length > 0) {
       req.developerId = keyRows[0].developer_id;
