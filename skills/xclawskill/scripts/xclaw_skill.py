@@ -14,7 +14,7 @@ from urllib.parse import urlencode
 STANDARD_TIMEOUT = 30
 DEFAULT_STATE_FILE = os.path.expanduser("~/.xclaw_agent_state.json")
 CONFIG_FILE = os.path.expanduser("~/.xclaw/config.json")
-VERSION = "1.4.1"
+VERSION = "1.4.2"
 
 
 def load_config():
@@ -1005,12 +1005,17 @@ def action_balance(client, **_kw):
     })
 
 
-def action_withdraw(client, to_address=None, amount=None, chain=None, currency=None, **_kw):
-    """发起链上提现（需余额；真实广播由平台执行器处理）"""
+def action_withdraw(client, to_address=None, amount=None, chain=None, currency=None,
+                    confirm=False, **_kw):
+    """发起链上提现（需余额；资金转出属不可逆操作，必须 --confirm 显式授权）"""
     if not to_address or amount is None:
         return fail("withdraw", "to-address 与 amount 必填")
     if not client._ensure_jwt():
         return fail("withdraw", "需要 API Key 换取 JWT")
+    if not confirm:
+        return fail("withdraw",
+                    f"即将转出 {amount} {currency or 'ETH'} 到 {to_address}，资金转出不可逆，需要显式授权",
+                    hint="核对地址与金额后重跑并加 --confirm")
     cfg = load_config()
     resp = client.post("/v1/payment/withdraw", body={
         "node_id": client.agent_id,

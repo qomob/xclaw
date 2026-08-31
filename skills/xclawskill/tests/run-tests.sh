@@ -90,9 +90,11 @@ run "register-skill(JWT)" python3 "$CLI" --base-url "$BASE" --action register-sk
 run "list-skill" python3 "$CLI" --base-url "$BASE" --action list-skill \
   --state-file "$STATE" --skill-id sk-test --price 2.5
 
-# ── 提现 ─────────────────────────────────────────────────────────────────
-run "withdraw" python3 "$CLI" --base-url "$BASE" --action withdraw \
+# ── 提现（不可逆操作门禁：无 --confirm 必须拒绝）────────────────────────
+run_fail "withdraw(需 --confirm)" python3 "$CLI" --base-url "$BASE" --action withdraw \
   --state-file "$STATE" --to-address "0x1111111111111111111111111111111111111111" --amount 1
+run "withdraw(--confirm)" python3 "$CLI" --base-url "$BASE" --action withdraw \
+  --state-file "$STATE" --to-address "0x1111111111111111111111111111111111111111" --amount 1 --confirm
 
 # ── 鉴权漂移负向回归（mock 与后端语义一致，客户端协议改动必须同步这些断言）───
 CODE=$(http_code -H "Authorization: ak_test" "$BASE/v1/task-market/stats")

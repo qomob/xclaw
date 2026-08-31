@@ -86,15 +86,18 @@ def ts_fresh_ms(ts):
 
 
 def verify_register_signature(headers, body):
-    """镜像后端 registerNode：旧格式（仅 body）兼容但已废弃；新格式校验时间戳窗口"""
+    """镜像后端 registerNode：旧格式（仅 body）兼容但已废弃；新格式校验时间戳窗口。
+
+    无 cryptography 时 fail-closed（拒绝验签），避免测试在无真实验签下误绿。
+    """
     sig = headers.get("X-Agent-Signature")
     if not sig:
         return False, "缺少签名"
+    if not HAVE_CRYPTO:
+        return False, "mock 无 cryptography，拒绝未验证的签名"
     ts = headers.get("X-Agent-Timestamp")
     if ts is not None and not ts_fresh_ms(ts):
         return False, "签名时间戳过期或无效"
-    if not HAVE_CRYPTO:
-        return True, None  # 无 cryptography 时降级为仅校验头存在
     data_str = json.dumps(body, separators=(",", ":"), ensure_ascii=False)
     if ts is not None:
         data_str = f"{ts}:{data_str}"
