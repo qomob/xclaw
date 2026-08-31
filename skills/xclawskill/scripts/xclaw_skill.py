@@ -14,7 +14,7 @@ from urllib.parse import urlencode
 STANDARD_TIMEOUT = 30
 DEFAULT_STATE_FILE = os.path.expanduser("~/.xclaw_agent_state.json")
 CONFIG_FILE = os.path.expanduser("~/.xclaw/config.json")
-VERSION = "1.4.0"
+VERSION = "1.4.1"
 
 
 def load_config():
@@ -112,9 +112,10 @@ class XClawClient:
         self.state_file = state_file
 
         state = load_state(state_file) if state_file else {}
-        # 优先级：显式参数 > 环境变量 > 状态文件持久化的 API Key
-        self.api_key = api_key or os.environ.get("XCLAW_API_KEY", "") or state.get("api_key", "")
-        self.jwt = jwt or os.environ.get("XCLAW_JWT", "") or state.get("jwt", "")
+        # 凭据来源仅两个：显式 --api-key/--jwt 参数，或 0600 权限的状态文件。
+        # 刻意不读环境变量：避免「env 凭据 → 网络请求」的污点链（ClawHub 静态扫描红线）。
+        self.api_key = api_key or state.get("api_key", "")
+        self.jwt = jwt or state.get("jwt", "")
         # 状态文件里的 JWT 只有 24h 有效期：过期即丢弃，后续动作按需用 API Key 重新换取
         if self.jwt and self._jwt_expired(self.jwt):
             self.jwt = ""
@@ -1030,19 +1031,87 @@ def action_withdraw(client, to_address=None, amount=None, chain=None, currency=N
     })
 
 
-def action_self_upgrade(client, **_kw):
-    """一键升级：从 GitHub 拉取最新版本（仅限 git 安装）"""
+def _verify_sha256sums(repo_root):
+    """按 SHA256SUMS 校验安装内容完整性；返回 (ok, 失败/缺失文件列表)"""
+    sums_path = os.path.join(repo_root, "SHA256SUMS")
+    if not os.path.exists(sums_path):
+        return False, ["SHA256SUMS 缺失"]
+    import hashlib
+    bad = []
+    with open(sums_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            expected, rel = line.split(None, 1)
+            rel = rel.strip().lstrip("*")
+            target = os.path.join(repo_root, rel)
+            if not os.path.exists(target):
+                bad.append(rel)
+                continue
+            h = hashlib.sha256()
+            with open(target, "rb") as fh:
+                for chunk in iter(lambda: fh.read(65536), b""):
+                    h.update(chunk)
+            if h.hexdigest() != expected:
+                bad.append(rel)
+    return (not bad), bad
+
+
+def action_self_upgrade(client, confirm=False, **_kw):
+    """升级到远端最新 vX.Y.Z tag（仅限 git 安装；替换本地代码需 --confirm 显式授权）
+
+    不使用 git pull 跟踪分支：锁定 tag、checkout 后强制 SHA256SUMS 校验，失败自动回退。
+    """
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(script_dir)
     if not os.path.isdir(os.path.join(repo_root, ".git")):
         return fail("self-upgrade", "非 git 安装，请重新运行 install.sh 安装最新版",
                     hint="curl -fsSL https://raw.githubusercontent.com/qomob/xclawskill/main/install.sh | bash")
+    if not confirm:
+        return fail("self-upgrade", "升级会替换本地代码，需要显式授权",
+                    hint="确认后重跑并加 --confirm")
+    import re
     import subprocess
-    try:
-        subprocess.run(["git", "-C", repo_root, "pull", "--ff-only"], check=True, capture_output=True)
-        return ok("self-upgrade", {"message": "已升级到最新版，重新运行 xclaw-skill --version 确认"})
-    except Exception as e:
-        return fail("self-upgrade", f"升级失败: {e}")
+
+    def _run(args):
+        return subprocess.run(args, cwd=repo_root, capture_output=True, text=True)
+
+    prev_head = _run(["git", "rev-parse", "HEAD"]).stdout.strip()
+    tags = _run(["git", "ls-remote", "--tags", "--refs", "origin"])
+    if tags.returncode != 0:
+        return fail("self-upgrade", f"无法获取远端 tag: {tags.stderr.strip()}")
+    versions = []
+    for ref in tags.stdout.splitlines():
+        m = re.search(r"refs/tags/v(\d+)\.(\d+)\.(\d+)$", ref.strip())
+        if m:
+            versions.append(tuple(int(x) for x in m.groups()))
+    if not versions:
+        return fail("self-upgrade", "远端没有任何 vX.Y.Z tag")
+    latest = max(versions)
+    tag = "v" + ".".join(map(str, latest))
+    current = tuple(int(x) for x in VERSION.split("."))
+    if latest <= current:
+        return ok("self-upgrade", {"message": f"已是最新版 {VERSION}（远端最新 {tag}）", "tag": tag})
+
+    fetch = _run(["git", "fetch", "--depth", "1", "--force", "origin",
+                  f"refs/tags/{tag}:refs/tags/{tag}"])
+    if fetch.returncode != 0:
+        return fail("self-upgrade", f"拉取 {tag} 失败: {fetch.stderr.strip()}")
+    co = _run(["git", "checkout", "--quiet", tag])
+    if co.returncode != 0:
+        return fail("self-upgrade", f"checkout {tag} 失败: {co.stderr.strip()}")
+
+    sums_ok, bad = _verify_sha256sums(repo_root)
+    if not sums_ok:
+        _run(["git", "checkout", "--quiet", prev_head])
+        return fail("self-upgrade", f"{tag} 文件校验失败，已回退原版本",
+                    hint="校验失败: " + ", ".join(bad[:5]))
+    return ok("self-upgrade", {
+        "message": f"已升级到 {tag}（SHA256SUMS 校验通过），运行 xclaw-skill --version 确认",
+        "previous_version": VERSION,
+        "tag": tag,
+    })
 
 
 ACTIONS = {
@@ -1162,6 +1231,8 @@ def main():
     parser.add_argument("--currency", default=None, help="Withdraw currency (default ETH)")
     parser.add_argument("--interval", type=int, default=20,
                         help="Heartbeat interval in seconds (default: 20, TTL is 30)")
+    parser.add_argument("--confirm", action="store_true",
+                        help="Explicitly authorize code-modifying actions (self-upgrade)")
 
     args = parser.parse_args()
     if args.version:
@@ -1206,6 +1277,7 @@ def main():
         "amount": args.amount,
         "chain": args.chain,
         "currency": args.currency,
+        "confirm": args.confirm,
         "state_file": args.state_file,
     }
 

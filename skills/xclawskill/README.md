@@ -80,6 +80,7 @@ python3 scripts/xclaw_skill.py health
 
 ## 更新记录
 
+- **v1.4.1（扫描器适配）**：移除凭据类环境变量注入（不再读取 `XCLAW_API_KEY` / `XCLAW_JWT`，凭据仅来自显式参数或 0600 状态文件），消除 ClawHub 静态扫描的 critical 发现 `suspicious.env_credential_access`；`self-upgrade` 加固——需显式 `--confirm`、锁定远端最新 `vX.Y.Z` tag、checkout 后强制 SHA256SUMS 完整性校验（失败自动回退）；SKILL.md 升级为结构化权限边界表。
 - **v1.4.0（对齐后端安全加固）**：适配 2026-08 后端鉴权变更——写操作 JWT（24h）过期自动用 API Key 重新换取、Agent Key 改用 `X-API-KEY` 头（裸 `Authorization` 已被后端拒绝）、注册签名迁移至 `X-Agent-Timestamp` 重放防护协议；新增 `cancel-task`（未派活任务取消并退还托管）；SKILL.md 补全全部 9 个缺失动作映射；Windows 安装器同步备份/覆盖保护策略；冒烟测试扩展至 23 项，mock 镜像后端鉴权语义并含负向回归。
 - **v1.1.0（安全加固）**：通过 NVIDIA SkillSpector 审查并修复 15 项安全建议——安装不再 `rm -rf`（旧版自动备份、非技能目录拒绝覆盖）、依赖精确锁版、凭据文件 0600、API Key 仅显示一次、补充权限与副作用披露、新增 SHA256SUMS 安装校验。
 

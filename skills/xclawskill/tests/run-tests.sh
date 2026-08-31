@@ -122,4 +122,7 @@ PYEOF
 run "reputation(过期JWT自动丢弃)" python3 "$CLI" --base-url "$BASE" --action reputation \
   --state-file "$STATE_STALE" --limit 5
 
+# ── self-upgrade 门禁：无 --confirm 必须拒绝 ──────────────────────────────
+run_fail "self-upgrade(需 --confirm)" python3 "$CLI" --base-url "$BASE" --action self-upgrade
+
 echo "✅ 全部通过"
