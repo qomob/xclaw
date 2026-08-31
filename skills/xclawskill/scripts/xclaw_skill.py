@@ -14,7 +14,7 @@ from urllib.parse import urlencode
 STANDARD_TIMEOUT = 30
 DEFAULT_STATE_FILE = os.path.expanduser("~/.xclaw_agent_state.json")
 CONFIG_FILE = os.path.expanduser("~/.xclaw/config.json")
-VERSION = "1.5.0"
+VERSION = "1.5.1"
 
 
 def load_config():
