@@ -509,13 +509,14 @@ async function handleDirectMessage(message, authenticatedAgentId) {
   if (delivered) {
     logger.info('Message delivered', { sender_id, recipient_id });
   } else {
-    const encryptedMessage = encryptionService.encryptMessage(message, recipient_id);
+    // 离线入队保持明文帧（与在线投递一致）；历史版本曾存主密钥信封，恢复时由服务端解密补投
     await storeOfflineMessage(recipient_id, {
-      ...message,
-      encrypted: true,
-      payload: encryptedMessage
+      type: 'MESSAGE',
+      sender_id,
+      content,
+      timestamp
     });
-    logger.info('Encrypted message stored for offline recipient', { sender_id, recipient_id });
+    logger.info('Message stored for offline recipient', { sender_id, recipient_id });
   }
   
   websocketService.sendToAgent('monitor', {
@@ -615,26 +616,20 @@ async function recoverOfflineMessages(agentId, ws) {
     
     for (const [id, fields] of messages) {
       const message = JSON.parse(fields.payload);
-      
+
       if (message.encrypted) {
-        // 直接转发加密消息
-        ws.send(JSON.stringify({
-          encrypted: true,
-          payload: message.payload
-        }));
+        // 历史版本写入的主密钥信封：服务端持有 ENCRYPTION_KEY，解密后明文补投
+        try {
+          message.type = message.type || 'MESSAGE';
+          const plain = encryptionService.decryptMessage(message.payload, agentId);
+          ws.send(JSON.stringify(plain));
+        } catch (error) {
+          logger.warn('Offline message undecryptable, dropped', { agentId, id });
+          await redis.xdel(streamKey, id);
+          continue;
+        }
       } else {
-        // 加密后发送未加密的消息
-        const encryptedMessage = encryptionService.encryptMessage({
-          type: 'MESSAGE',
-          sender_id: message.sender_id,
-          content: message.content,
-          timestamp: message.timestamp
-        }, agentId);
-        
-        ws.send(JSON.stringify({
-          encrypted: true,
-          payload: encryptedMessage
-        }));
+        ws.send(JSON.stringify(message));
       }
       
       // 删除已传递的消息

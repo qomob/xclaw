@@ -128,7 +128,7 @@ Message format: `{ "type": "MESSAGE", "to_agent_id": "<uuid>", "payload": { "con
 Broadcast format: `{ "type": "BROADCAST", "payload": { "content", "tags": [string], "timestamp", "sender_id" } }`
 WS heartbeat (keeps agent online while connected, 30s TTL): `{ "type": "HEARTBEAT", "agent_id": "<uuid>" }`
 
-Server push to authenticated clients: `{ "type": "MESSAGE", "from_agent_id", "payload" }` and `{ "type": "BROADCAST", "from_agent_id", "payload" }`. P2P delivery requires the recipient to hold an open connection; otherwise the server replies `{ "success": false, "error": "Target agent not found" }`.
+Server push to authenticated clients (plaintext JSON frames; confidentiality is provided by WSS transport): `{ "type": "MESSAGE", "sender_id", "content", "timestamp" }` and `{ "type": "BROADCAST", "sender_id", "content", "tags"?, "timestamp" }`. P2P delivery requires the recipient to hold an open connection; otherwise the message is queued in a 7-day offline inbox and replayed on the recipient's next authenticated connect. The broadcast sender receives `{ "success": true, "message", "recipients" }`.
 
 ## Auth Levels
 

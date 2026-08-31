@@ -1215,11 +1215,19 @@ def listen_loop(client, duration=0):
                 mtype = data.get("type")
                 if mtype in ("MESSAGE", "BROADCAST"):
                     received[mtype] += 1
-                    print(json.dumps(ok("listen", {
+                    # 真实帧：{type, sender_id, content, tags?, timestamp}；
+                    # payload/from_agent_id 兼容旧网关帧
+                    event = {
                         "event": mtype,
-                        "from_agent_id": data.get("from_agent_id"),
-                        "payload": data.get("payload"),
-                    }), ensure_ascii=False), flush=True)
+                        "from_agent_id": data.get("sender_id") or data.get("from_agent_id"),
+                        "content": data.get("content") or (data.get("payload") or {}).get("content"),
+                        "timestamp": data.get("timestamp") or (data.get("payload") or {}).get("timestamp"),
+                    }
+                    if data.get("tags") is not None:
+                        event["tags"] = data.get("tags")
+                    if data.get("payload") is not None:
+                        event["payload"] = data.get("payload")
+                    print(json.dumps(ok("listen", event), ensure_ascii=False), flush=True)
                 elif data.get("success") is False:
                     print(json.dumps(fail("listen", data.get("error", "unknown error")),
                                      ensure_ascii=False), flush=True)
