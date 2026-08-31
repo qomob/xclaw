@@ -31,6 +31,29 @@ services:
       - ADMIN_API_KEY=${ADMIN_API_KEY:-}
       - MONITOR_TOKEN=${MONITOR_TOKEN:-}
       - FEDERATION_KEY=${FEDERATION_KEY:-}
+      - FEDERATION_PATH_PREFIX=${FEDERATION_PATH_PREFIX:-/api}
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      # 可观测性：告警 Webhook / 告警周期 / 指标快照周期
+      - ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL:-}
+      - ALERT_CHECK_INTERVAL=${ALERT_CHECK_INTERVAL:-60000}
+      - ALERT_COOLDOWN_MS=${ALERT_COOLDOWN_MS:-600000}
+      - METRICS_SNAPSHOT_INTERVAL=${METRICS_SNAPSHOT_INTERVAL:-60000}
+      # 实时通道限制
+      - WS_MAX_CONNECTIONS=${WS_MAX_CONNECTIONS:-500}
+      - WS_MSG_RATE_LIMIT=${WS_MSG_RATE_LIMIT:-60}
+      - WS_MSG_RATE_WINDOW_MS=${WS_MSG_RATE_WINDOW_MS:-10000}
+      - WS_RATE_LIMIT=${WS_RATE_LIMIT:-240}
+      - WS_RATE_WINDOW_MS=${WS_RATE_WINDOW_MS:-60000}
+      # 可信结算验收窗口
+      - TASK_VERIFICATION_HOURS=${TASK_VERIFICATION_HOURS:-24}
+      # 提现执行器（留空 = dry-run）
+      - WITHDRAWAL_EXECUTOR_URL=${WITHDRAWAL_EXECUTOR_URL:-}
+      - WITHDRAWAL_EXECUTOR_SECRET=${WITHDRAWAL_EXECUTOR_SECRET:-}
+      - WITHDRAWAL_CALLBACK_SECRET=${WITHDRAWAL_CALLBACK_SECRET:-}
+      - WITHDRAWAL_EXECUTOR_TIMEOUT=${WITHDRAWAL_EXECUTOR_TIMEOUT:-30000}
+      # IP 地理定位（可选）
+      - MAXMIND_LICENSE_KEY=${MAXMIND_LICENSE_KEY:-}
     depends_on:
       db:
         condition: service_healthy
@@ -108,6 +131,12 @@ services:
       - FEDERATION_KEY=${FEDERATION_KEY:-}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
       - INSTANCE_ID=maintenance
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - TASK_VERIFICATION_HOURS=${TASK_VERIFICATION_HOURS:-24}
+      - VERIFICATION_PROCESS_INTERVAL=${VERIFICATION_PROCESS_INTERVAL:-60000}
+      - MAINT_REPUTATION_INTERVAL=${MAINT_REPUTATION_INTERVAL:-1800000}
+      - MAINT_DECAY_INTERVAL=${MAINT_DECAY_INTERVAL:-3600000}
+      - MAINT_CLEANUP_INTERVAL=${MAINT_CLEANUP_INTERVAL:-86400000}
     depends_on:
       db:
         condition: service_healthy
@@ -133,6 +162,14 @@ services:
     restart: unless-stopped
     profiles: ["backup"]
     entrypoint: ["./scripts/backup-loop.sh"]
+    # 覆盖镜像继承的 backend HEALTHCHECK（本服务无 HTTP 端口）；
+    # 改为校验"48 小时内有新的加密备份"，备份循环卡死时能真实报警
+    healthcheck:
+      test: ["CMD-SHELL", "find /database/backups/encrypted -name '*.enc' -mmin -2880 | grep -q ."]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
     environment:
       - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@db:5432/xclaw
       - BACKUP_ENCRYPTION_KEY=${BACKUP_ENCRYPTION_KEY:?BACKUP_ENCRYPTION_KEY must be set for backup service}
