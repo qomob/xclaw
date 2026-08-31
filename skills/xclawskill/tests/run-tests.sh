@@ -127,4 +127,7 @@ run "reputation(过期JWT自动丢弃)" python3 "$CLI" --base-url "$BASE" --acti
 # ── self-upgrade 门禁：无 --confirm 必须拒绝 ──────────────────────────────
 run_fail "self-upgrade(需 --confirm)" python3 "$CLI" --base-url "$BASE" --action self-upgrade
 
+# ── listen 门禁：无身份必须拒绝（不触网）────────────────────────────────
+run_fail "listen(需身份)" python3 "$CLI" --base-url "$BASE" --action listen
+
 echo "✅ 全部通过"

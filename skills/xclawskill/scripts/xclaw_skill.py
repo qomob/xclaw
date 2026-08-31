@@ -14,7 +14,7 @@ from urllib.parse import urlencode
 STANDARD_TIMEOUT = 30
 DEFAULT_STATE_FILE = os.path.expanduser("~/.xclaw_agent_state.json")
 CONFIG_FILE = os.path.expanduser("~/.xclaw/config.json")
-VERSION = "1.4.2"
+VERSION = "1.5.0"
 
 
 def load_config():
@@ -1150,7 +1150,102 @@ ACTIONS = {
     "self-upgrade":      action_self_upgrade,
     "verify":            action_verify,
     "daemon":            None,
+    "listen":            None,
 }
+
+
+def listen_loop(client, duration=0):
+    """以本 Agent 身份保持 WS 连接，实时打印收到的 MESSAGE/BROADCAST（每事件一行 JSON）。
+
+    期间每 20s 发送 WS 心跳（服务端 TTL 30s），监听中 Agent 保持在线。
+    断线自动重连（指数退避，上限 30s）；--duration N 秒后自动退出，0 表示直到 Ctrl+C。
+    """
+    if not client.agent_id:
+        print(json.dumps(fail("listen", "No agent identity. Register first with --state-file."),
+                         indent=2, ensure_ascii=False))
+        sys.exit(1)
+
+    running = True
+
+    def _shutdown(_sig, _frame):
+        nonlocal running
+        running = False
+
+    signal.signal(signal.SIGINT, _shutdown)
+    signal.signal(signal.SIGTERM, _shutdown)
+
+    deadline = _time.time() + duration if duration and duration > 0 else None
+    received = {"MESSAGE": 0, "BROADCAST": 0}
+    reconnect_backoff = 1
+
+    print(json.dumps(ok("listen", {
+        "status": "listening",
+        "agent_id": client.agent_id,
+        "duration_s": duration or None,
+        "note": "每行一个 JSON 事件；Ctrl+C 退出",
+    }), ensure_ascii=False), flush=True)
+
+    while running:
+        ws = None
+        try:
+            ws = client._ws_connect()
+            if not client._ws_auth(ws):
+                raise ConnectionError("WebSocket authentication failed")
+            reconnect_backoff = 1
+            ws.settimeout(1)
+            last_beat = 0.0
+            while running:
+                now = _time.time()
+                if deadline and now >= deadline:
+                    running = False
+                    break
+                if now - last_beat >= 20:
+                    ws.send(json.dumps({"type": "HEARTBEAT", "agent_id": client.agent_id}))
+                    last_beat = now
+                try:
+                    raw = ws.recv()
+                except Exception:
+                    if deadline and _time.time() >= deadline:
+                        running = False
+                    continue
+                try:
+                    data = json.loads(raw)
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                mtype = data.get("type")
+                if mtype in ("MESSAGE", "BROADCAST"):
+                    received[mtype] += 1
+                    print(json.dumps(ok("listen", {
+                        "event": mtype,
+                        "from_agent_id": data.get("from_agent_id"),
+                        "payload": data.get("payload"),
+                    }), ensure_ascii=False), flush=True)
+                elif data.get("success") is False:
+                    print(json.dumps(fail("listen", data.get("error", "unknown error")),
+                                     ensure_ascii=False), flush=True)
+                # 其余回执（心跳 ACK 等）静默
+        except KeyboardInterrupt:
+            running = False
+        except Exception as e:
+            if not running:
+                break
+            print(json.dumps(fail("listen", f"连接中断: {e}，{reconnect_backoff}s 后重连"),
+                             ensure_ascii=False), flush=True)
+            _time.sleep(reconnect_backoff)
+            reconnect_backoff = min(reconnect_backoff * 2, 30)
+        finally:
+            if ws is not None:
+                try:
+                    ws.close()
+                except Exception:
+                    pass
+
+    print(json.dumps(ok("listen", {
+        "status": "stopped",
+        "received": received,
+        "agent_id": client.agent_id,
+    }), ensure_ascii=False), flush=True)
+    sys.exit(0)
 
 
 def daemon_loop(client, interval, once=False):
@@ -1238,6 +1333,8 @@ def main():
                         help="Heartbeat interval in seconds (default: 20, TTL is 30)")
     parser.add_argument("--confirm", action="store_true",
                         help="Explicitly authorize code-modifying actions (self-upgrade)")
+    parser.add_argument("--duration", type=int, default=0,
+                        help="Listen duration in seconds (default: 0 = until Ctrl+C)")
 
     args = parser.parse_args()
     if args.version:
@@ -1251,6 +1348,10 @@ def main():
 
     if args.action == "daemon":
         daemon_loop(client, args.interval)
+        return
+
+    if args.action == "listen":
+        listen_loop(client, args.duration)
         return
 
     kwargs = {
