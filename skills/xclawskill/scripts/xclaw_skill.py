@@ -14,7 +14,7 @@ from urllib.parse import urlencode
 STANDARD_TIMEOUT = 30
 DEFAULT_STATE_FILE = os.path.expanduser("~/.xclaw_agent_state.json")
 CONFIG_FILE = os.path.expanduser("~/.xclaw/config.json")
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 
 
 def load_config():
@@ -114,7 +114,10 @@ class XClawClient:
         state = load_state(state_file) if state_file else {}
         # 优先级：显式参数 > 环境变量 > 状态文件持久化的 API Key
         self.api_key = api_key or os.environ.get("XCLAW_API_KEY", "") or state.get("api_key", "")
-        self.jwt = jwt or os.environ.get("XCLAW_JWT", "")
+        self.jwt = jwt or os.environ.get("XCLAW_JWT", "") or state.get("jwt", "")
+        # 状态文件里的 JWT 只有 24h 有效期：过期即丢弃，后续动作按需用 API Key 重新换取
+        if self.jwt and self._jwt_expired(self.jwt):
+            self.jwt = ""
         self.agent_id = state.get("agent_id")
         pk_bytes = state.get("private_key_bytes")
         if pk_bytes and pk_bytes.startswith("{") and os.environ.get("XCLAW_STATE_PASSPHRASE"):
@@ -134,12 +137,28 @@ class XClawClient:
             self.private_key = None
             self.public_key_pem = None
 
+    @staticmethod
+    def _jwt_expired(token):
+        """本地解析 JWT exp（不验签——仅用于判断是否需要重新换取）"""
+        try:
+            payload = token.split(".")[1]
+            payload += "=" * (-len(payload) % 4)
+            data = json.loads(base64.urlsafe_b64decode(payload))
+            return int(data.get("exp", 0)) <= int(_time.time())
+        except Exception:
+            return True
+
     def _headers(self, extra=None):
         h = {"Content-Type": "application/json", "Accept": "application/json"}
         if self.jwt:
             h["Authorization"] = f"Bearer {self.jwt}"
         elif self.api_key:
-            h["Authorization"] = self.api_key
+            if str(self.api_key).startswith("ak_"):
+                # Agent Key：后端 authMiddleware 只认 X-API-KEY 头（裸 Authorization 会被 401）
+                h["X-API-KEY"] = self.api_key
+            else:
+                # 系统级 Key：verifyApiKey 直接比对 Authorization 头原值
+                h["Authorization"] = self.api_key
         if extra:
             h.update(extra)
         return h
@@ -180,8 +199,11 @@ class XClawClient:
         ).decode("utf-8")
         self.private_key = private_key
 
-    def _sign(self, data):
+    def _sign(self, data, timestamp=None):
+        """Ed25519 签名；timestamp 给定时按新协议签 "{timestamp}:{body}"（服务端重放防护要求）"""
         data_str = json.dumps(data, separators=(",", ":"), ensure_ascii=False)
+        if timestamp is not None:
+            data_str = f"{timestamp}:{data_str}"
         signature = self.private_key.sign(data_str.encode("utf-8"))
         return base64.b64encode(signature).decode("utf-8")
 
@@ -233,10 +255,13 @@ class XClawClient:
         })
 
     def _ensure_jwt(self):
-        """需要 Agent 级鉴权的操作自动用 API Key 换取 JWT（缓存到实例与状态文件）"""
+        """需要 Agent 级鉴权的操作自动用 API Key 换取 JWT（缓存到实例与状态文件）
+
+        仅 Agent Key（ak_ 前缀）可换取；系统级 Key 由网关裸 Authorization 通道处理。
+        """
         if self.jwt:
             return True
-        if not self.api_key:
+        if not self.api_key or not str(self.api_key).startswith("ak_"):
             return False
         resp = self.post("/v1/auth/login", body={"api_key": self.api_key})
         if resp.get("success") and resp.get("data", {}).get("token"):
@@ -261,12 +286,16 @@ def action_register(client, agent_name, capabilities, tags, state_file=None, **_
     body = {
         "agent_name": agent_name,
         "capabilities": capabilities,
-        "tags": [t.strip() for t in tags.split(",")] if isinstance(tags, str) else (tags or []),
+        "tags": ([t.strip() for t in tags.split(",") if t.strip()]
+                 if isinstance(tags, str) and tags else (tags or [])),
         "public_key": client.public_key_pem,
     }
-    signature = client._sign(body)
+    # 新协议：携带 X-Agent-Timestamp 并签 "{timestamp}:{body}"，旧格式（仅签 body）已被服务端标记废弃
+    ts_header = str(int(_time.time() * 1000))
+    signature = client._sign(body, timestamp=ts_header)
     result = client.post("/v1/agents/register", body=body,
-                         headers_extra={"X-Agent-Signature": signature})
+                         headers_extra={"X-Agent-Signature": signature,
+                                        "X-Agent-Timestamp": ts_header})
 
     if result.get("success"):
         client.agent_id = result["data"].get("agent_id")
@@ -865,6 +894,23 @@ def action_accept_bid(client, task_id=None, bid_id=None, **_kw):
     })
 
 
+def action_cancel_task(client, task_id=None, **_kw):
+    """调用方取消任务（任务须未派活；托管资金自动退回）"""
+    if not task_id:
+        return fail("cancel-task", "task-id is required")
+    if not client._ensure_jwt():
+        return fail("cancel-task", "需要 API Key 换取 JWT（--api-key 或状态文件）")
+    resp = client.post(f"/v1/task-market/tasks/{task_id}/cancel")
+    if not resp.get("success"):
+        return fail("cancel-task", resp.get("error", "取消失败"))
+    data = resp.get("data", {})
+    return ok("cancel-task", {
+        "task_id": task_id,
+        "status": data.get("status", "cancelled"),
+        "escrow_refunded": bool(data.get("escrow_refunded")),
+    })
+
+
 def action_setup(client, agent_name=None, capabilities=None, tags=None, **_kw):
     """初始化配置：写入干净的默认配置（仅管理我们自己的键，不合并历史身份/密钥）"""
     cfg = {
@@ -888,6 +934,9 @@ def action_register_skill(client, skill_name=None, description=None, category=No
         return fail("register-skill", "skill-name / description / category 必填")
     if not client.agent_id:
         return fail("register-skill", "需要 Agent 身份，请先运行 register（--state-file）")
+    # 后端已对该端点启用鉴权（2026-08 起 requireAuth）：JWT 缺失/过期时用 API Key 自动换取
+    if not client._ensure_jwt():
+        return fail("register-skill", "需要 API Key 换取 JWT（--api-key 或状态文件）")
     resp = client.post("/v1/skills/register", body={
         "name": skill_name,
         "description": description,
@@ -1018,6 +1067,7 @@ ACTIONS = {
     "create-task":       action_create_task,
     "submit-bid":        action_submit_bid,
     "accept-bid":        action_accept_bid,
+    "cancel-task":       action_cancel_task,
     "register-skill":    action_register_skill,
     "list-skill":        action_list_skill,
     "delist-skill":      action_delist_skill,
