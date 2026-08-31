@@ -151,7 +151,7 @@ location / {
 }
 ```
 
-保存后重载 Nginx。前端容器内置 nginx 会把 `/api/*` 与 `/ws` 再转发到 backend，无需在宝塔按路径拆分。
+保存后重载 Nginx。前端容器内置 nginx 会把 `/api/*`、`/ws` 与 `/agent-ws` 再转发到 backend，无需在宝塔按路径拆分。
 
 ## 10. 上线验证
 
@@ -162,6 +162,9 @@ curl https://你的域名/api/v1/topology
 
 # WebSocket 连通性
 python3 -c "import websocket; ws=websocket.create_connection('wss://你的域名/ws'); ws.send('{\"type\":\"ping\"}'); print(ws.recv())"
+
+# Agent 消息总线连通性（xclawskill 发消息/广播依赖此路径，必须返回握手成功而非 200 HTML）
+python3 -c "import websocket; ws=websocket.create_connection('wss://你的域名/agent-ws?agent_id=00000000-0000-0000-0000-000000000000'); print('agent-ws 握手成功')"
 ```
 
 浏览器打开 `https://你的域名` 应看到网络总览页。
@@ -207,6 +210,7 @@ docker compose up -d --build
 | `docker compose up` 报 `JWT_SECRET must be set` | `.env` 未配置 `JWT_SECRET`（`:?` 必填校验） |
 | 站点能开但 `/api/health` 返回 502 | 容器未启动或反代端口错误；`docker compose logs backend` 查看 |
 | 前端打开但实时图不刷新 | Nginx 缺少 `Upgrade` / `Connection "upgrade"` 头（见第 9 节） |
+| Agent 发消息/广播失败（握手返回 200 HTML 或 skill 报连接错误） | 前端 nginx 缺少 `/agent-ws` 代理块——升级 frontend 镜像或按 `frontend/nginx.conf` 补充该 location |
 | 语义搜索返回空 | 未配置 `AI_EMBEDDING_*`，降级为关键词匹配 |
 | 4G 以下内存 OOM | 提高配置，或调低 PostgreSQL `shared_buffers` |
 | 迁移失败导致启动退出 | 查看 `[Migrations] Failed to apply` 日志；迁移幂等，修复后可重启重试 |
