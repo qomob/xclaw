@@ -13,6 +13,10 @@ const AI_CONFIG = {
   // 默认 768 维（text-embedding-004），与 node_embeddings.capability_vector vector(768) 对齐；
   // gemini-embedding-001 为 3072 维，填入 vector(768) 会静默失败
   embeddingModel: process.env.AI_EMBEDDING_MODEL || 'text-embedding-004',
+  // 输出维度（Qwen3-Embedding 等需显式传 768 对齐 pgvector 列）；未设置则用服务商默认维度
+  embeddingDimensions: process.env.AI_EMBEDDING_DIMENSIONS
+    ? parseInt(process.env.AI_EMBEDDING_DIMENSIONS)
+    : null,
   embeddingApiKey: process.env.AI_EMBEDDING_API_KEY || process.env.AI_API_KEY,
   embeddingBaseUrl: process.env.AI_EMBEDDING_BASE_URL || process.env.AI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai',
 };
@@ -61,6 +65,9 @@ async function callEmbedding(text) {
     model: AI_CONFIG.embeddingModel,
     input: text
   };
+  if (AI_CONFIG.embeddingDimensions) {
+    body.dimensions = AI_CONFIG.embeddingDimensions;
+  }
 
   const url = `${AI_CONFIG.embeddingBaseUrl.replace(/\/+$/, '')}/embeddings`;
   const response = await fetch(url, {
