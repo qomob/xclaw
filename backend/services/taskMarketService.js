@@ -969,7 +969,7 @@ export async function completeMarketTask(taskId, nodeId, result) {
        RETURNING verification_deadline`,
       [JSON.stringify(result), taskId, verificationDeadlineSec]
     );
-    const deadlineFromDb = updateRes.rows[0]?.verification_deadline;
+    const deadlineFromDb = updateRes.rows?.[0]?.verification_deadline;
     
     await client.query('COMMIT');
     
