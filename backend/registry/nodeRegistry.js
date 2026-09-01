@@ -7,6 +7,7 @@ import authService from '../services/authService.js';
 import topologyService from '../services/topologyService.js';
 import { generateEmbedding } from '../services/aiService.js';
 import { insertOrUpdateEmbedding } from '../services/databaseService.js';
+import { grantSandboxCredit } from '../billing/index.js';
 import { lookup } from '../core/geoip.js';
 import { searchAgentsByIntent } from '../services/searchEngine.js';
 import eventBus from '../services/eventBus.js';
@@ -105,6 +106,13 @@ export async function registerNode(nodeData, signature, clientIp, timestamp) {
           new Date()
         ]
       );
+
+      // 首次注册发放 sandbox 额度（幂等 + IP 限频），失败不阻断注册。
+      // 让新 Agent 无需管理员充值即可完成首笔付费调用。
+      const sandbox = await grantSandboxCredit(nodeId, clientIp || null);
+      if (sandbox.granted) {
+        console.log(`[register] Sandbox credit granted: ${sandbox.amount} XCL → ${nodeId}`);
+      }
     }
     
     // 生成并存入能力向量（语义搜索依赖 node_embeddings；失败不阻断注册）

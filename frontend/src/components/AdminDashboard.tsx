@@ -81,6 +81,40 @@ interface MonitorAlert {
   acknowledged: boolean;
 }
 
+interface OwtuWeek {
+  week_start: string;
+  total_settlements: number;
+  organic_settlements: number;
+  organic_volume: number;
+}
+
+interface FundingMixItem {
+  type: string;
+  count: number;
+  total_amount: number;
+}
+
+/** 北极星 OWTU + 30 天漏斗（GET /v1/admin/analytics/growth） */
+interface GrowthAnalytics {
+  owtu: {
+    current_week: number;
+    prev_week: number;
+    delta_pct: number;
+    weekly: OwtuWeek[];
+  };
+  funnel_30d: {
+    registrations: number;
+    discoveries: number;
+    market_tasks_created: number;
+    orders_created: number;
+    settlements: number;
+    callers_total: number;
+    callers_repeat: number;
+    repeat_rate: number;
+    funding_mix: FundingMixItem[];
+  };
+}
+
 /** Build mock hourly buckets from events for the last 24 hours */
 function buildHourBuckets(events: AdminEvent[]): HourBucket[] {
   const now = new Date();
@@ -157,6 +191,7 @@ export default function AdminDashboard() {
   const [monitorAlerts, setMonitorAlerts] = useState<MonitorAlert[]>([]);
   const [federationStatus, setFederationStatus] = useState<{ total_peers: number; active_peers: number } | null>(null);
   const [taskMarketStats, setTaskMarketStats] = useState<{ open_tasks: number; total_bids: number } | null>(null);
+  const [growth, setGrowth] = useState<GrowthAnalytics | null>(null);
 
   // Tab state
   const [activeTab, setActiveTab] = useState('overview');
@@ -236,7 +271,8 @@ export default function AdminDashboard() {
         adminFetch<{ success: boolean; data: MonitorAlert[] }>('/v1/monitor/alerts?limit=10', apiKey),
         adminFetch<{ success: boolean; data: { total_peers: number; active_peers: number } }>('/v1/federation/status', apiKey),
         adminFetch<{ success: boolean; data: { open_tasks: number; total_bids: number } }>('/v1/task-market/stats', apiKey),
-      ]).then(([healthRes, dbRes, redisRes, kpiRes, alertsRes, fedRes, tmRes]) => {
+        adminFetch<{ success: boolean; data: GrowthAnalytics }>('/v1/admin/analytics/growth', apiKey),
+      ]).then(([healthRes, dbRes, redisRes, kpiRes, alertsRes, fedRes, tmRes, growthRes]) => {
         if (healthRes.status === 'fulfilled' && healthRes.value.success) setMonitorHealth(healthRes.value.data);
         if (dbRes.status === 'fulfilled' && dbRes.value.success) setDbStats(dbRes.value.data);
         if (redisRes.status === 'fulfilled' && redisRes.value.success) setRedisInfo(redisRes.value.data);
@@ -244,6 +280,7 @@ export default function AdminDashboard() {
         if (alertsRes.status === 'fulfilled' && alertsRes.value.success) setMonitorAlerts(alertsRes.value.data || []);
         if (fedRes.status === 'fulfilled' && fedRes.value.success) setFederationStatus(fedRes.value.data);
         if (tmRes.status === 'fulfilled' && tmRes.value.success) setTaskMarketStats(tmRes.value.data);
+        if (growthRes.status === 'fulfilled' && growthRes.value.success) setGrowth(growthRes.value.data);
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
@@ -551,6 +588,71 @@ export default function AdminDashboard() {
                 <div className="flex items-center justify-between py-2 border-t border-slate-800">
                   <span className="text-slate-400 text-sm">Total Revenue</span>
                   <span className="text-white font-semibold">{formatRevenue(kpis.total_revenue)}</span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-6 text-slate-400 text-sm">Loading...</div>
+          )}
+        </div>
+
+        {/* North Star: OWTU (organic weekly transactions) + 30d funnel */}
+        <div className="rounded-lg sm:rounded-xl border border-cyan-500/30 bg-[#111827] p-3 sm:p-5">
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <h2 className="text-xs sm:text-sm font-semibold text-white uppercase tracking-wider">
+              North Star · OWTU
+            </h2>
+            <span className="text-[10px] text-slate-500">organic weekly transactions</span>
+          </div>
+          {growth ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-lg bg-slate-800/50 p-3 text-center">
+                  <div className="text-xs text-slate-400">This Week</div>
+                  <div className={`text-2xl font-bold ${growth.owtu.current_week > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {growth.owtu.current_week}
+                  </div>
+                </div>
+                <div className="rounded-lg bg-slate-800/50 p-3 text-center">
+                  <div className="text-xs text-slate-400">Last Week</div>
+                  <div className="text-2xl font-bold text-slate-300">{growth.owtu.prev_week}</div>
+                </div>
+                <div className="rounded-lg bg-slate-800/50 p-3 text-center">
+                  <div className="text-xs text-slate-400">WoW</div>
+                  <div className={`text-2xl font-bold ${growth.owtu.delta_pct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {growth.owtu.delta_pct > 0 ? '+' : ''}{growth.owtu.delta_pct}%
+                  </div>
+                </div>
+              </div>
+              <div className="text-[11px] text-slate-500 leading-relaxed">
+                口径：escrow 结算数，caller 资金含 sandbox/自助充值（排除管理员 topup 流量）。
+                本指标 = 0 说明市场仍靠脚本与输血运行。
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+                <div className="rounded bg-slate-800/40 p-2 text-center">
+                  <div className="text-[10px] text-slate-400">注册(30d)</div>
+                  <div className="text-sm font-bold text-cyan-400">{growth.funnel_30d.registrations}</div>
+                </div>
+                <div className="rounded bg-slate-800/40 p-2 text-center">
+                  <div className="text-[10px] text-slate-400">发现(30d)</div>
+                  <div className="text-sm font-bold text-sky-400">{growth.funnel_30d.discoveries}</div>
+                </div>
+                <div className="rounded bg-slate-800/40 p-2 text-center">
+                  <div className="text-[10px] text-slate-400">意图(30d)</div>
+                  <div className="text-sm font-bold text-violet-400">{growth.funnel_30d.market_tasks_created + growth.funnel_30d.orders_created}</div>
+                </div>
+                <div className="rounded bg-slate-800/40 p-2 text-center">
+                  <div className="text-[10px] text-slate-400">复购率(30d)</div>
+                  <div className="text-sm font-bold text-amber-400">{growth.funnel_30d.repeat_rate}%</div>
+                </div>
+              </div>
+              {growth.funnel_30d.funding_mix.length > 0 && (
+                <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1 border-t border-slate-800">
+                  {growth.funnel_30d.funding_mix.map((f) => (
+                    <span key={f.type} className="text-[11px] text-slate-400">
+                      {f.type}: <span className="text-slate-200">{f.count}</span> 笔 / {formatRevenue(f.total_amount)}
+                    </span>
+                  ))}
                 </div>
               )}
             </div>

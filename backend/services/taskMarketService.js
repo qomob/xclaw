@@ -482,6 +482,76 @@ export async function autoAssignTask(taskId) {
   }
 }
 
+/**
+ * 直接派单（一行调用路径专用）：把 direct 策略任务指派给指定提供方。
+ * 仅限 assignment_strategy='direct' 且尚未指派的任务，调用方须与任务创建者一致——
+ * 普通竞标任务仍走 acceptBid，避免绕过托管调额逻辑。
+ * @param {string} taskId - 任务 ID
+ * @param {string} workerId - 提供方 Agent ID
+ * @param {string} callerId - 创建任务的调用方（鉴权用）
+ */
+export async function directAssignTask(taskId, workerId, callerId) {
+  const pgPool = getPostgres();
+  const client = await pgPool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const taskRes = await client.query(
+      'SELECT * FROM tasks WHERE id = $1 AND caller_id = $2 FOR UPDATE',
+      [taskId, callerId]
+    );
+    if (!taskRes.rows.length) {
+      await client.query('ROLLBACK');
+      return { success: false, error: '任务不存在或无权操作' };
+    }
+    const task = taskRes.rows[0];
+    if (task.assignment_strategy !== 'direct' || task.status !== 'assigned' || task.node_id) {
+      await client.query('ROLLBACK');
+      return { success: false, error: '任务不是待派单的 direct 任务' };
+    }
+
+    // 提供方须真实存在
+    const workerRes = await client.query('SELECT node_id FROM nodes WHERE node_id = $1', [workerId]);
+    if (!workerRes.rows.length) {
+      await client.query('ROLLBACK');
+      return { success: false, error: '提供方 Agent 不存在' };
+    }
+
+    const reward = Math.round((parseFloat(task.escrow_amount) || 0) * 100) / 100;
+    await client.query(
+      `UPDATE tasks SET node_id = $1, reward_amount = $2, assigned_at = now(), updated_at = now()
+       WHERE id = $3`,
+      [workerId, reward, taskId]
+    );
+
+    await client.query('COMMIT');
+
+    // 事件驱动派活：与 acceptBid/autoAssignTask 相同的 TASK 帧推送
+    try {
+      websocketService.sendToAgent(workerId, {
+        type: 'TASK',
+        market: true,
+        task_id: taskId,
+        skill_id: task.skill_id,
+        price: reward,
+        payload: task.payload || {}
+      });
+    } catch (pushErr) {
+      logger.warn('Failed to push TASK on direct assign', { error: pushErr.message, taskId });
+    }
+
+    logger.info('Task direct-assigned', { taskId, worker: workerId, reward });
+    return { success: true, data: { task_id: taskId, assigned_to: workerId, reward } };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    logger.error('Failed to direct-assign task', { error: error.message, taskId });
+    return { success: false, error: error.message };
+  } finally {
+    client.release();
+  }
+}
+
 // ============================================
 // 任务市场浏览
 // ============================================

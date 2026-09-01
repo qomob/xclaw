@@ -38,9 +38,10 @@ import { generateText, generateEmbedding } from '../services/aiService.js';
 import {
   computeMatchScore, findBestMatches, placeBid, getTaskBids, acceptBid, autoAssignTask,
   browseTasks, getMarketStats, createMarketTask, completeMarketTask,
-  acceptTaskResult, rejectTaskResult, cancelMarketTaskByCaller,
+  acceptTaskResult, rejectTaskResult, cancelMarketTaskByCaller, directAssignTask,
   listDisputes, resolveDispute, processVerificationDeadlines
 } from '../services/taskMarketService.js';
+import { getGrowthOverview } from '../services/growthAnalyticsService.js';
 import { verifyApiKey, verifyApiKeyOrAgent, requireAdmin, requireAgentId, requireOwnNode, requireFederationKey } from './auth.js';
 import { verifyWithdrawalCallback } from './auth.js';
 import { processPendingWithdrawals, handleWithdrawalCallback } from '../services/withdrawalExecutor.js';
@@ -55,6 +56,18 @@ import eventBus from '../services/eventBus.js';
 
 const router = express.Router();
 const requireAuth = authService.authMiddleware.bind(authService);
+
+// 发现事件埋点（增长漏斗第二层）：搜索/发现动作统一落 event_log。
+// 匿名搜索也计数（sourceId 为空），metadata 标记是否来自已认证 Agent。
+function emitDiscovery(source, query, req) {
+  const q = query == null ? '' : String(query).trim();
+  if (q.length < 2) return; // 过滤空查询与单击打字噪声
+  eventBus.emit(
+    'skill.discovered',
+    { query: q.slice(0, 200), source },
+    { sourceId: req.agentId || null, metadata: { anonymous: !req.agentId } }
+  );
+}
 
 // UUID 格式验证中间件
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -185,20 +198,22 @@ router.get('/v1/agents/online', async (req, res) => {
 // 发现节点
 router.get('/v1/agents/discover', async (req, res) => {
   const { query, tags, limit } = req.query;
-  
+
   const parsedTags = tags ? tags.split(',') : [];
   const parsedLimit = limit ? parseInt(limit) : 5;
-  
+
+  emitDiscovery('agents_discover', query, req);
   const result = await discoverNodes(query, parsedTags, parsedLimit);
   res.status(200).json(result);
 });
 
 router.get('/v1/agents/search', async (req, res) => {
   const { query, tags, limit } = req.query;
-  
+
   const parsedTags = tags ? tags.split(',') : [];
   const parsedLimit = limit ? parseInt(limit) : 5;
-  
+
+  emitDiscovery('agents_search', query, req);
   const result = await discoverNodes(query, parsedTags, parsedLimit);
   res.status(200).json(result);
 });
@@ -251,11 +266,79 @@ router.post('/v1/skills/register', requireAuth, async (req, res) => {
 // 搜索技能
 router.get('/v1/skills/search', async (req, res) => {
   const { query, category, limit } = req.query;
-  
+
   const parsedLimit = limit ? parseInt(limit) : 10;
-  
+
+  emitDiscovery('skills_search', query, req);
   const result = await searchSkills(query, category, parsedLimit);
   res.status(200).json(result);
+});
+
+// 一行调用：按技能 ID 直接下单（托管计价）并派给提供方 Agent。
+// 认证用 Agent 身份（JWT / x-api-key），余额含 sandbox 额度——
+// 这是"陌生 Agent 5 分钟完成第一笔付费调用"的关键路径。
+router.post('/v1/call/:skill_id', requireAuth, validateUUIDParam("skill_id"), async (req, res) => {
+  try {
+    const { input, note } = req.body || {};
+
+    const skillResult = await getSkill(req.params.skill_id);
+    if (!skillResult.success) {
+      return res.status(404).json(formatResponse(false, null, '技能不存在'));
+    }
+    const skill = skillResult.data;
+
+    // 市场定价即调用价格：未上架的技能不开放一行调用（提供方无结算依据）
+    if (!skill.is_listed) {
+      return res.status(400).json(formatResponse(false, null, '技能未上架市场，无法调用'));
+    }
+    const price = Math.round((parseFloat(skill.price) || 0) * 100) / 100;
+    if (price <= 0) {
+      return res.status(400).json(formatResponse(false, null, '技能价格无效'));
+    }
+    if (skill.node_id === req.agentId) {
+      return res.status(400).json(formatResponse(false, null, '不能调用自己提供的技能'));
+    }
+
+    const created = await createMarketTask({
+      caller_id: req.agentId,
+      skill_id: skill.id,
+      type: 'skill_call',
+      title: `Call: ${skill.name}`,
+      description: note || `One-line call via /v1/call/${skill.id}`,
+      payload: { input: input ?? {}, skill_id: skill.id },
+      budget_min: price,
+      budget_max: price,
+      assignment_strategy: 'direct'
+    });
+    if (!created.success) {
+      return res.status(400).json(formatResponse(false, null, created.error || '创建调用任务失败'));
+    }
+
+    const assigned = await directAssignTask(created.data.task_id, skill.node_id, req.agentId);
+    if (!assigned.success) {
+      return res.status(500).json(formatResponse(false, null, assigned.error || '派单失败'));
+    }
+
+    eventBus.emit('skill.called', {
+      skill_id: skill.id,
+      caller_id: req.agentId,
+      provider_id: skill.node_id,
+      task_id: created.data.task_id,
+      price
+    }, { sourceId: req.agentId });
+
+    res.status(200).json(formatResponse(true, {
+      task_id: created.data.task_id,
+      skill_id: skill.id,
+      provider_id: skill.node_id,
+      price,
+      escrow_amount: created.data.escrow_amount,
+      escrow_status: created.data.escrow_status,
+      status: 'assigned'
+    }));
+  } catch (error) {
+    res.status(500).json(formatResponse(false, null, '调用失败'));
+  }
 });
 
 // 获取技能分类
@@ -916,6 +999,7 @@ router.post('/v1/search', async (req, res) => {
     if (!query) {
       return res.status(400).json(formatResponse(false, null, 'query 必填'));
     }
+    emitDiscovery('semantic_search', query, req);
     const agents = await searchAgentsByIntent(query);
     res.json(formatResponse(true, { agents, query, scope }));
   } catch (error) {
@@ -1572,6 +1656,13 @@ router.get('/v1/admin/dashboard', verifyApiKey, requireAdmin, async (req, res) =
 });
 
 // 2. 节点列表（分页 + 筛选）
+// 增长分析：北极星指标 OWTU + 30 天漏斗（口径见 growthAnalyticsService）
+router.get('/v1/admin/analytics/growth', verifyApiKey, requireAdmin, async (req, res) => {
+  const weeks = parseInt(req.query.weeks) || 8;
+  const result = await getGrowthOverview({ weeks: Math.min(Math.max(weeks, 1), 26) });
+  res.status(result.success ? 200 : 500).json(result);
+});
+
 router.get('/v1/admin/nodes', verifyApiKey, requireAdmin, async (req, res) => {
   try {
     const { status, search, limit = '50', offset = '0' } = req.query;

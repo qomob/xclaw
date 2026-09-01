@@ -240,6 +240,18 @@ class SkillModule {
   async listByAgent(agentId) {
     return this._.get(`/v1/agents/${agentId}/skills`);
   }
+
+  /**
+   * 一行调用：按技能 ID 直接下单（市场价托管）并派给提供方 Agent。
+   * 返回 task_id 后，结果由调用方通过 taskMarket.acceptResult 验收放款；
+   * 新注册 Agent 的 sandbox 额度可直接用于支付。
+   * @param {string} skillId - 技能 ID
+   * @param {object} [input] - 传给提供方的输入
+   * @param {object} [opts] - { note: 任务说明 }
+   */
+  async call(skillId, input, opts = {}) {
+    return this._.post(`/v1/call/${skillId}`, { input: input ?? {}, note: opts.note });
+  }
 }
 
 // ─── Module: Task ────────────────────────────────────────────────

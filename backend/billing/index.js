@@ -10,6 +10,11 @@ const TASK_BASE_PRICE = parseFloat(process.env.TASK_BASE_PRICE || '0.01');
 const MAX_SINGLE_AMOUNT = parseFloat(process.env.MAX_SINGLE_AMOUNT || '1000000');
 const BALANCE_CACHE_TTL = parseInt(process.env.BALANCE_CACHE_TTL || '30');
 
+// ── Sandbox 注册额度（自助首笔交易闭环：新 Agent 免管理员即可完成首笔付费调用）──
+const SANDBOX_GRANT_ENABLED = process.env.SANDBOX_GRANT_ENABLED !== 'false';
+const SANDBOX_GRANT_AMOUNT = Math.round((parseFloat(process.env.SANDBOX_GRANT_AMOUNT) || 10) * 100) / 100;
+const SANDBOX_GRANT_IP_DAILY_LIMIT = parseInt(process.env.SANDBOX_GRANT_IP_DAILY_LIMIT) || 3;
+
 function validateAmount(amount) {
   const num = Number(amount);
   if (!Number.isFinite(num) || num <= 0) {
@@ -229,6 +234,86 @@ export async function refundEscrowInTx(client, taskId) {
   );
 
   return { success: true, amount: escrow };
+}
+
+/**
+ * 注册 sandbox 额度发放（自助获客闸门：替代"管理员线下核验充值"的关键路径角色）
+ *
+ * 防滥用设计：
+ *   - 幂等：idempotency_key = sandbox_grant:<nodeId>，nodeId 源自公钥哈希，
+ *     同一公钥终身只发放一次（重复注册/密钥轮换不重发）
+ *   - IP 限频：同 IP 24h 内最多 SANDBOX_GRANT_IP_DAILY_LIMIT 次（女巫批量注册的成本线）
+ *   - 额度刻意压小：够完成小额任务，不足以转移出金（提现另有链上执行器）
+ *
+ * 失败一律非阻断（注册主流程不受影响），返回 { granted, amount?, reason? }
+ */
+export async function grantSandboxCredit(nodeId, ip = null) {
+  if (!SANDBOX_GRANT_ENABLED) return { granted: false, reason: 'disabled' };
+  if (!(SANDBOX_GRANT_AMOUNT > 0)) return { granted: false, reason: 'invalid_amount' };
+
+  const pgPool = getPostgres();
+  const client = await pgPool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const existing = await client.query(
+      'SELECT 1 FROM transactions WHERE idempotency_key = $1',
+      [`sandbox_grant:${nodeId}`]
+    );
+    if (existing.rows.length > 0) {
+      await client.query('ROLLBACK');
+      return { granted: false, reason: 'already_granted' };
+    }
+
+    if (ip) {
+      const recent = await client.query(
+        `SELECT COUNT(*)::int AS n
+           FROM transactions
+          WHERE type = 'sandbox_grant'
+            AND status = 'completed'
+            AND metadata->>'ip' = $1
+            AND created_at > NOW() - INTERVAL '24 hours'`,
+        [ip]
+      );
+      if (recent.rows[0].n >= SANDBOX_GRANT_IP_DAILY_LIMIT) {
+        await client.query('ROLLBACK');
+        logger.warn('Sandbox grant blocked by IP daily limit', { nodeId, ip });
+        return { granted: false, reason: 'ip_daily_limit' };
+      }
+    }
+
+    const balance = await creditAccount(client, nodeId, SANDBOX_GRANT_AMOUNT);
+    await client.query(
+      `INSERT INTO transactions
+        (id, node_id, amount, type, status, idempotency_key, reason, metadata)
+       VALUES ($1, $2, $3, 'sandbox_grant', 'completed', $4, $5, $6)`,
+      [
+        crypto.randomUUID(),
+        nodeId,
+        SANDBOX_GRANT_AMOUNT,
+        `sandbox_grant:${nodeId}`,
+        'Registration sandbox credit',
+        JSON.stringify({ ip, source: 'registration' })
+      ]
+    );
+
+    await client.query('COMMIT');
+    await invalidateBalanceCache(nodeId);
+
+    logger.info('Sandbox credit granted', { nodeId, amount: SANDBOX_GRANT_AMOUNT, ip });
+    eventBus.emit(
+      'billing.sandbox_granted',
+      { node_id: nodeId, amount: SANDBOX_GRANT_AMOUNT, sandbox: true },
+      { sourceId: nodeId }
+    );
+    return { granted: true, amount: SANDBOX_GRANT_AMOUNT, balance };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    logger.error('Sandbox grant failed', { error: error.message, nodeId });
+    return { granted: false, reason: 'error' };
+  } finally {
+    client.release();
+  }
 }
 
 async function getCachedBalance(nodeId) {
