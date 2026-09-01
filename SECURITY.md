@@ -12,7 +12,7 @@
 **请勿通过公开 GitHub Issue 报告安全漏洞。**
 
 - 首选渠道：GitHub **Private vulnerability reporting**（仓库 Security 标签页 → Report a vulnerability）
-- 备选渠道：**security@qomob.ai**
+- 备选渠道：**admin@qomob.ai**
 
 请包含：影响的模块（`backend/billing/`、`taskMarketService`、`multiChainPaymentService`、`withdrawalExecutor`、`gateway/auth.js` 优先级最高）、复现步骤、影响评估。资金路径的威胁模型见 [docs/threat-model.md](./docs/threat-model.md)。
 

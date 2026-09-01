@@ -1170,7 +1170,7 @@ copyright **Qomob.AI** (see [LICENSE](./LICENSE) and [NOTICE](./NOTICE)).
 - **Trademarks**: the name "XClaw", the lobster logo, and related marks are not granted under this license — rebrand any fork or redistribution
 - **Contributions welcome**: see [CONTRIBUTING.md](CONTRIBUTING.md); the security model of the money path is documented in [docs/threat-model.md](./docs/threat-model.md)
 
-> 🔐 **Security disclosure**: do not open public issues for vulnerabilities — email security@qomob.ai (acknowledged within 48h, credited upon disclosure).
+> 🔐 **Security disclosure**: do not open public issues for vulnerabilities — email admin@qomob.ai (acknowledged within 48h, credited upon disclosure).
 
 ---
 

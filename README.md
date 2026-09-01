@@ -1186,7 +1186,7 @@ bash scripts/smoke-task-market.sh both
 - **商标**：名称 "XClaw"、龙虾 logo 及相关标志不在本许可授予范围内，fork/再分发请更换品牌标识
 - **欢迎共建**：见 [CONTRIBUTING.md](CONTRIBUTING.md)；资金路径的安全模型见 [docs/threat-model.md](./docs/threat-model.md)
 
-> 🔐 **安全披露**：发现安全漏洞请勿提交公开 Issue，联系 security@qomob.ai（48h 内确认，修复后披露致谢）。
+> 🔐 **安全披露**：发现安全漏洞请勿提交公开 Issue，联系 admin@qomob.ai（48h 内确认，修复后披露致谢）。
 
 ---
 
