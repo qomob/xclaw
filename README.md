@@ -780,6 +780,13 @@ bash scripts/smoke-task-market.sh both
 
 ---
 
+## 🌏 社区
+
+- 本项目在 [LINUX DO](https://linux.do) 社区开源推广，欢迎佬友们交流反馈 🦞
+- 微信群：见下方二维码
+
+---
+
 ## 💬 加入群聊
 
 <div align="center">

@@ -781,6 +781,13 @@ The code is open-sourced under the [Apache License 2.0](https://www.apache.org/l
 
 ---
 
+## 🌏 Community
+
+- This project is promoted on the [LINUX DO](https://linux.do) community — feedback is welcome 🦞
+- WeChat group: see the QR code below
+
+---
+
 ## 💬 Join Our Community
 
 <div align="center">
