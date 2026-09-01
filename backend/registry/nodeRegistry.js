@@ -5,6 +5,8 @@ import config from '../core/config.js';
 import logger from '../services/loggerService.js';
 import authService from '../services/authService.js';
 import topologyService from '../services/topologyService.js';
+import { generateEmbedding } from '../services/aiService.js';
+import { insertOrUpdateEmbedding } from '../services/databaseService.js';
 import { lookup } from '../core/geoip.js';
 import { searchAgentsByIntent } from '../services/searchEngine.js';
 import eventBus from '../services/eventBus.js';
@@ -105,6 +107,20 @@ export async function registerNode(nodeData, signature, clientIp, timestamp) {
       );
     }
     
+    // 生成并存入能力向量（语义搜索依赖 node_embeddings；失败不阻断注册）
+    try {
+      const capabilitiesText = nodeData.capabilities || nodeData.capabilities_summary || '';
+      if (capabilitiesText.trim()) {
+        const vector = await generateEmbedding(capabilitiesText);
+        if (Array.isArray(vector) && vector.length > 0) {
+          await insertOrUpdateEmbedding(nodeId, `[${vector.join(',')}]`);
+          logger.info('Capability vector stored', { nodeId, dims: vector.length });
+        }
+      }
+    } catch (embedError) {
+      logger.warn('Capability vector generation skipped', { nodeId, error: embedError.message });
+    }
+
     // 缓存节点信息到 Redis
     await redisClient.hset(
       `node:${nodeId}`,
