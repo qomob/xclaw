@@ -40,6 +40,14 @@ const mockAdjustEscrow = jest.fn().mockResolvedValue({ success: true, amount: 10
 const mockReleaseEscrow = jest.fn().mockResolvedValue({ success: true, amount: 10, worker_balance: 0 });
 const mockRefundEscrow = jest.fn().mockResolvedValue({ success: true, amount: 10 });
 const mockInvalidateCache = jest.fn();
+// 保证金（迭代 2）：默认成功路径，费率按 0.1 估算与真实实现一致
+const mockComputeStake = jest.fn((reward) => {
+  const r = Number(reward) || 0;
+  return r > 0 ? Math.round(r * 0.1 * 100) / 100 : 0;
+});
+const mockStakeFunds = jest.fn().mockResolvedValue({ success: true, amount: 3.5 });
+const mockReleaseStake = jest.fn().mockResolvedValue({ success: true, amount: 3.5 });
+const mockSlashStake = jest.fn().mockResolvedValue({ success: true, stake: 3.5, compensation: 1.75 });
 const mockEmitEvent = jest.fn();
 
 jest.unstable_mockModule('../../billing/index.js', () => ({
@@ -47,6 +55,10 @@ jest.unstable_mockModule('../../billing/index.js', () => ({
   adjustEscrowInTx: mockAdjustEscrow,
   releaseEscrowInTx: mockReleaseEscrow,
   refundEscrowInTx: mockRefundEscrow,
+  computeStakeForReward: mockComputeStake,
+  stakeFundsInTx: mockStakeFunds,
+  releaseStakeInTx: mockReleaseStake,
+  slashStakeInTx: mockSlashStake,
   invalidateBalanceCache: mockInvalidateCache,
 }));
 

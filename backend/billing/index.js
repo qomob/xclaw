@@ -15,6 +15,27 @@ const SANDBOX_GRANT_ENABLED = process.env.SANDBOX_GRANT_ENABLED !== 'false';
 const SANDBOX_GRANT_AMOUNT = Math.round((parseFloat(process.env.SANDBOX_GRANT_AMOUNT) || 10) * 100) / 100;
 const SANDBOX_GRANT_IP_DAILY_LIMIT = parseInt(process.env.SANDBOX_GRANT_IP_DAILY_LIMIT) || 3;
 
+// ── 执行方保证金（迭代 2：把身份变成资产，打破"违约 + 弃号"单次博弈）──
+const STAKE_ENABLED = process.env.STAKE_ENABLED !== 'false';
+const STAKE_RATE = Math.max(0, parseFloat(process.env.STAKE_RATE) || 0.1);
+const STAKE_MAX = Math.max(0, parseFloat(process.env.STAKE_MAX) || 100);
+// 罚没时划给调用方的补偿比例（其余没收，强化威慑）
+const STAKE_SLASH_COMPENSATION_RATE = Math.min(1, Math.max(0, parseFloat(process.env.STAKE_SLASH_COMPENSATION_RATE) || 0.5));
+// 验收超时自动放行上限：超过该金额的超时任务转人工仲裁
+const AUTO_RELEASE_MAX_AMOUNT = Math.max(0, parseFloat(process.env.AUTO_RELEASE_MAX_AMOUNT) || 10);
+
+/**
+ * 按任务报酬计算应冻结保证金，向上取到分。
+ * STAKE_ENABLED=false 或报酬 ≤0 时返回 0（不冻结）。
+ */
+export function computeStakeForReward(reward) {
+  if (!STAKE_ENABLED) return 0;
+  const r = Number(reward) || 0;
+  if (r <= 0) return 0;
+  const stake = Math.round(r * STAKE_RATE * 100) / 100;
+  return Math.min(stake, STAKE_MAX);
+}
+
 function validateAmount(amount) {
   const num = Number(amount);
   if (!Number.isFinite(num) || num <= 0) {
@@ -316,6 +337,119 @@ export async function grantSandboxCredit(nodeId, ip = null) {
   }
 }
 
+/**
+ * 冻结执行方保证金（需在任务事务内执行）：balance → stake_balance
+ * 接标/派单时调用；验收通过退还，仲裁判执行方责任则罚没
+ */
+export async function stakeFundsInTx(client, taskId, workerId, amount) {
+  const validation = validateAmount(amount);
+  if (!validation.valid) return { success: false, error: validation.error };
+
+  const res = await client.query(
+    `UPDATE billing_accounts
+        SET balance = balance - $1,
+            stake_balance = stake_balance + $1,
+            updated_at = NOW()
+      WHERE node_id = $2 AND balance >= $1
+      RETURNING balance, stake_balance`,
+    [validation.amount, workerId]
+  );
+  if (res.rows.length === 0) {
+    return { success: false, error: `执行方余额不足，无法冻结保证金 ${validation.amount} XCL` };
+  }
+
+  await client.query(
+    `INSERT INTO transactions
+      (id, task_id, node_id, amount, type, status, reason, metadata)
+     VALUES ($1, $2, $3, $4, 'stake_hold', 'completed', $5, $6)`,
+    [crypto.randomUUID(), taskId, workerId, validation.amount, `stake_hold:${taskId}`, JSON.stringify({})]
+  );
+  await client.query(
+    `UPDATE tasks SET stake_amount = $1, stake_status = 'held', updated_at = NOW() WHERE id = $2`,
+    [validation.amount, taskId]
+  );
+
+  return { success: true, amount: validation.amount };
+}
+
+/**
+ * 退还执行方保证金（需在任务事务内执行）：验收通过 / 仲裁释放给执行方
+ */
+export async function releaseStakeInTx(client, taskId, workerId) {
+  const taskRes = await client.query(
+    'SELECT stake_amount, stake_status FROM tasks WHERE id = $1 FOR UPDATE',
+    [taskId]
+  );
+  if (!taskRes.rows.length) return { success: false, error: '任务不存在' };
+  const task = taskRes.rows[0];
+  if (task.stake_status !== 'held') return { success: false, error: '任务无持有保证金' };
+  const stake = parseFloat(task.stake_amount) || 0;
+  if (stake <= 0) return { success: false, error: '保证金金额异常' };
+
+  await client.query(
+    `UPDATE billing_accounts
+        SET stake_balance = stake_balance - $1,
+            balance = balance + $1,
+            updated_at = NOW()
+      WHERE node_id = $2`,
+    [stake, workerId]
+  );
+  await client.query(
+    `INSERT INTO transactions
+      (id, task_id, node_id, amount, type, status, reason, metadata)
+     VALUES ($1, $2, $3, $4, 'stake_release', 'completed', $5, $6)`,
+    [crypto.randomUUID(), taskId, workerId, stake, `stake_release:${taskId}`, JSON.stringify({})]
+  );
+  await client.query(
+    `UPDATE tasks SET stake_amount = 0, stake_status = 'released', updated_at = NOW() WHERE id = $1`,
+    [taskId]
+  );
+
+  return { success: true, amount: stake };
+}
+
+/**
+ * 罚没执行方保证金（需在任务事务内执行）：仲裁判执行方责任。
+ * 补偿比例（STAKE_SLASH_COMPENSATION_RATE）划给调用方，其余没收——
+ * 违约的期望成本 ≥ 半份保证金 + 账本污点，弃号重注册需重充全份保证金。
+ */
+export async function slashStakeInTx(client, taskId, workerId, callerId) {
+  const taskRes = await client.query(
+    'SELECT stake_amount, stake_status FROM tasks WHERE id = $1 FOR UPDATE',
+    [taskId]
+  );
+  if (!taskRes.rows.length) return { success: false, error: '任务不存在' };
+  const task = taskRes.rows[0];
+  if (task.stake_status !== 'held') return { success: false, error: '任务无持有保证金' };
+  const stake = parseFloat(task.stake_amount) || 0;
+  if (stake <= 0) return { success: false, error: '保证金金额异常' };
+
+  const compensation = Math.round(stake * STAKE_SLASH_COMPENSATION_RATE * 100) / 100;
+  if (compensation > 0 && callerId) {
+    await creditAccount(client, callerId, compensation);
+  }
+
+  await client.query(
+    `UPDATE billing_accounts
+        SET stake_balance = stake_balance - $1, updated_at = NOW()
+      WHERE node_id = $2`,
+    [stake, workerId]
+  );
+  await client.query(
+    `INSERT INTO transactions
+      (id, task_id, node_id, amount, type, status, reason, metadata)
+     VALUES ($1, $2, $3, $4, 'stake_slash', 'completed', $5, $6)`,
+    [crypto.randomUUID(), taskId, workerId, stake, `stake_slash:${taskId}`,
+      JSON.stringify({ caller_id: callerId, compensation, compensation_rate: STAKE_SLASH_COMPENSATION_RATE })]
+  );
+  await client.query(
+    `UPDATE tasks SET stake_amount = 0, stake_status = 'slashed', updated_at = NOW() WHERE id = $1`,
+    [taskId]
+  );
+
+  return { success: true, stake, compensation };
+}
+
 async function getCachedBalance(nodeId) {
   const redisClient = getRedis();
   const cached = await redisClient.get(`node:${nodeId}:balance`);
@@ -593,12 +727,13 @@ export async function getNodeBalance(nodeId) {
       return formatResponse(false, null, '节点不存在');
     }
     const dbResult = await pgPool.query(
-      'SELECT balance, escrow_balance FROM billing_accounts WHERE node_id = $1',
+      'SELECT balance, escrow_balance, stake_balance FROM billing_accounts WHERE node_id = $1',
       [nodeId]
     );
 
     const balance = parseFloat(dbResult.rows[0].balance) || 0;
     const escrowBalance = parseFloat(dbResult.rows[0].escrow_balance) || 0;
+    const stakeBalance = parseFloat(dbResult.rows[0].stake_balance) || 0;
     // 刷新缓存，保持读取一致
     const redisClient = getRedis();
     await redisClient.set(`node:${nodeId}:balance`, balance.toString(), 'EX', BALANCE_CACHE_TTL).catch(() => {});
@@ -607,7 +742,8 @@ export async function getNodeBalance(nodeId) {
       node_id: nodeId,
       balance,
       escrow_balance: escrowBalance,
-      total_balance: Math.round((balance + escrowBalance) * 100) / 100,
+      stake_balance: stakeBalance,
+      total_balance: Math.round((balance + escrowBalance + stakeBalance) * 100) / 100,
       currency: process.env.CURRENCY || 'XCL'
     });
   } catch (error) {

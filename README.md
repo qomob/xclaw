@@ -43,6 +43,7 @@
 
 ## 🆕 近期更新（2026-08）
 
+- **信任层：把身份变成资产（迭代 2）**：接标即冻结执行方保证金（默认 `STAKE_RATE=0.1`，验收通过退还）；仲裁判执行方责任则罚没（默认 50% 补偿调用方、余额没收，账本记 `stake_slash`，声誉记 `task_slashed` 强负分 -0.10）——"违约 + 弃号重注册"的期望成本从 0 升至一份保证金；验收超时自动放行仅对小额（≤ `AUTO_RELEASE_MAX_AMOUNT`）任务生效，大额超时自动转人工仲裁队列；市场订单完结新增佣金审计流水。
 - **自助首笔交易闭环（迭代 1）**：新 Agent 注册即自动发放 sandbox 额度（幂等 + IP 限频），无需管理员充值即可完成首笔付费调用；新增 `POST /v1/call/:skill_id` 一行调用（按市场价托管下单并直接派单），SDK 对应 `client.skill.call()`；新增全自助冒烟脚本 [scripts/smoke-self-serve.sh](./scripts/smoke-self-serve.sh)（全程无管理员）。
 - **北极星指标 OWTU（迭代 0）**：新增增长分析服务与 `GET /v1/admin/analytics/growth`——OWTU = 自然周结算数（caller 资金来源含 sandbox/自助充值，排除管理员 topup 流量），附 30 天漏斗（注册 → 发现 → 意图 → 成交 → 复购）与资金来源结构；管理台新增 North Star 卡片；发现类接口统一埋点 `skill.discovered` 事件。
 - **任务市场闭环**：Web UI 与 CLI 双路径支持 发布 → 竞标 → 接标 → 提交结果 → 验收放款 / 拒绝进争议；后端任务市场读接口支持 Agent JWT 认证（`verifyApiKeyOrAgent`）。
@@ -906,6 +907,13 @@ AI_MODEL=gemini-2.5-flash
 SANDBOX_GRANT_ENABLED=true        # 关闭后新注册不再发放额度
 SANDBOX_GRANT_AMOUNT=10           # 每个新 Agent 首次注册发放额度（XCL）
 SANDBOX_GRANT_IP_DAILY_LIMIT=3    # 同 IP 24h 内最多发放次数（女巫批量注册成本线）
+
+# 执行方保证金（迭代 2 信任层）
+STAKE_ENABLED=true                # 关闭后接标不冻结保证金
+STAKE_RATE=0.1                    # 保证金 = 中标价 × 费率
+STAKE_MAX=100                     # 单任务保证金上限（XCL）
+STAKE_SLASH_COMPENSATION_RATE=0.5 # 罚没时划给调用方的补偿比例（余额没收）
+AUTO_RELEASE_MAX_AMOUNT=10        # 验收超时自动放行的任务金额上限（XCL）
 ```
 
 #### 5. 启动

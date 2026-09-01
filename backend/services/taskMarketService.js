@@ -5,7 +5,7 @@ import { computeTrustScore } from './socialGraphService.js';
 import crypto from 'crypto';
 import eventBus from './eventBus.js';
 import websocketService from './websocketService.js';
-import { escrowFundsInTx, adjustEscrowInTx, releaseEscrowInTx, refundEscrowInTx, invalidateBalanceCache } from '../billing/index.js';
+import { escrowFundsInTx, adjustEscrowInTx, releaseEscrowInTx, refundEscrowInTx, computeStakeForReward, stakeFundsInTx, releaseStakeInTx, slashStakeInTx, invalidateBalanceCache } from '../billing/index.js';
 import { logReputationEvent } from './reputationService.js';
 
 const VERIFICATION_WINDOW_MS = (parseInt(process.env.TASK_VERIFICATION_HOURS || '24', 10)) * 60 * 60 * 1000;
@@ -363,6 +363,16 @@ export async function acceptBid(taskId, bidId, callerId) {
         return { success: false, error: adjust.error };
       }
     }
+
+    // 可信执行：接标即冻结执行方保证金（违约/弃号可罚没，见 resolveDispute）
+    const stakeAmount = computeStakeForReward(bid.proposed_price);
+    if (stakeAmount > 0) {
+      const stake = await stakeFundsInTx(client, taskId, bid.bidder_id, stakeAmount);
+      if (!stake.success) {
+        await client.query('ROLLBACK');
+        return { success: false, error: stake.error };
+      }
+    }
     
     // 标记中标
     await client.query(
@@ -438,18 +448,41 @@ export async function autoAssignTask(taskId) {
     }
     
     const winner = matches[0];
-    
-    // 更新任务
-    await pgPool.query(
-      `UPDATE tasks SET 
-         status = 'assigned',
-         node_id = $1,
-         reward_amount = $2,
-         assigned_at = now(),
-         updated_at = now()
-       WHERE id = $3`,
-      [winner.node_id, task.budget_max || task.budget_min || 0, taskId]
-    );
+
+    // 分配 + 保证金冻结放在同一事务：避免"已派单但保证金冻结失败"的中间态
+    const client = await pgPool.connect();
+    let reward;
+    try {
+      await client.query('BEGIN');
+
+      reward = Math.round((parseFloat(task.budget_max) || parseFloat(task.budget_min) || 0) * 100) / 100;
+      await client.query(
+        `UPDATE tasks SET
+           status = 'assigned',
+           node_id = $1,
+           reward_amount = $2,
+           assigned_at = now(),
+           updated_at = now()
+         WHERE id = $3`,
+        [winner.node_id, reward, taskId]
+      );
+
+      const stakeAmount = computeStakeForReward(reward);
+      if (stakeAmount > 0) {
+        const stake = await stakeFundsInTx(client, taskId, winner.node_id, stakeAmount);
+        if (!stake.success) {
+          await client.query('ROLLBACK');
+          return { success: false, error: stake.error };
+        }
+      }
+
+      await client.query('COMMIT');
+    } catch (txErr) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      return { success: false, error: txErr.message };
+    } finally {
+      client.release();
+    }
 
     // 事件驱动派活：向自动匹配的 Agent 推送 TASK
     try {
@@ -524,6 +557,16 @@ export async function directAssignTask(taskId, workerId, callerId) {
        WHERE id = $3`,
       [workerId, reward, taskId]
     );
+
+    // 一行调用同样冻结执行方保证金，与竞标路径同一信任规则
+    const stakeAmount = computeStakeForReward(reward);
+    if (stakeAmount > 0) {
+      const stake = await stakeFundsInTx(client, taskId, workerId, stakeAmount);
+      if (!stake.success) {
+        await client.query('ROLLBACK');
+        return { success: false, error: stake.error };
+      }
+    }
 
     await client.query('COMMIT');
 
@@ -910,31 +953,35 @@ export async function completeMarketTask(taskId, nodeId, result) {
     }
     
     // 提交执行结果：进入验收窗口（调用方可在截止前接受/拒绝，超时自动放行）
-    const verificationDeadline = new Date(Date.now() + VERIFICATION_WINDOW_MS);
-    await client.query(
-      `UPDATE tasks SET 
+    // deadline 由 DB 时钟计算（now() + interval）：node-pg 序列化 Date 会丢时区语义，
+    // 与 UTC NOW() 比较时在非 UTC 部署下产生 8 小时偏移（存量 bug，此处根治）
+    const verificationDeadlineSec = Math.round(VERIFICATION_WINDOW_MS / 1000);
+    const updateRes = await client.query(
+      `UPDATE tasks SET
          status = 'submitted',
          verification_status = 'pending',
          submitted_at = now(),
-         verification_deadline = $3,
+         verification_deadline = now() + make_interval(secs => $3),
          result = $1,
          result_evidence = $1,
          updated_at = now()
-       WHERE id = $2`,
-      [JSON.stringify(result), taskId, verificationDeadline]
+       WHERE id = $2
+       RETURNING verification_deadline`,
+      [JSON.stringify(result), taskId, verificationDeadlineSec]
     );
+    const deadlineFromDb = updateRes.rows[0]?.verification_deadline;
     
     await client.query('COMMIT');
     
-    logger.info('Task submitted for verification', { taskId, nodeId, deadline: verificationDeadline.toISOString() });
+    logger.info('Task submitted for verification', { taskId, nodeId, deadline: deadlineFromDb });
     eventBus.emit('task.submitted', { task_id: taskId, node_id: nodeId }, { sourceId: nodeId });
-    
+
     return {
       success: true,
       data: {
         task_id: taskId,
         status: 'submitted',
-        verification_deadline: verificationDeadline.toISOString()
+        verification_deadline: deadlineFromDb
       }
     };
   } catch (error) {
@@ -984,6 +1031,17 @@ export async function acceptTaskResult(taskId, callerId, opts = {}) {
       return { success: false, error: release.error };
     }
 
+    // 验收通过：退还执行方保证金
+    let stakeReleased = 0;
+    if (task.stake_status === 'held' && parseFloat(task.stake_amount) > 0) {
+      const stakeBack = await releaseStakeInTx(client, taskId, task.node_id);
+      if (!stakeBack.success) {
+        await client.query('ROLLBACK');
+        return { success: false, error: stakeBack.error };
+      }
+      stakeReleased = stakeBack.amount;
+    }
+
     await client.query(
       `UPDATE tasks SET
          status = 'completed',
@@ -999,7 +1057,7 @@ export async function acceptTaskResult(taskId, callerId, opts = {}) {
     await invalidateBalanceCache(callerId);
     await invalidateBalanceCache(task.node_id);
 
-    logger.info('Task result accepted', { taskId, callerId, worker: task.node_id, amount: release.amount, auto: !!opts.auto });
+    logger.info('Task result accepted', { taskId, callerId, worker: task.node_id, amount: release.amount, stakeReleased, auto: !!opts.auto });
     eventBus.emit('task.completed', { task_id: taskId, result: task.result, worker_id: task.node_id }, { sourceId: task.node_id });
 
     // 声誉联动：验证通过才计入完成
@@ -1009,7 +1067,7 @@ export async function acceptTaskResult(taskId, callerId, opts = {}) {
       logger.warn('Reputation event failed', { error: repErr.message, taskId });
     }
 
-    return { success: true, data: { task_id: taskId, status: 'completed', released_amount: release.amount, auto: !!opts.auto } };
+    return { success: true, data: { task_id: taskId, status: 'completed', released_amount: release.amount, stake_released: stakeReleased, auto: !!opts.auto } };
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch (_) {}
     logger.error('Failed to accept task result', { error: error.message, taskId });
@@ -1193,6 +1251,16 @@ export async function resolveDispute(disputeId, resolution, adminId) {
           return { success: false, error: release.error };
         }
       }
+      // 仲裁认定执行方尽责：退还保证金
+      let stakeReleased = 0;
+      if (task.stake_status === 'held' && parseFloat(task.stake_amount) > 0) {
+        const stakeBack = await releaseStakeInTx(client, task.id, task.node_id);
+        if (!stakeBack.success) {
+          await client.query('ROLLBACK');
+          return { success: false, error: stakeBack.error };
+        }
+        stakeReleased = stakeBack.amount;
+      }
       await client.query(
         `UPDATE tasks SET
            status = 'completed',
@@ -1204,12 +1272,22 @@ export async function resolveDispute(disputeId, resolution, adminId) {
         [task.id]
       );
       try { await logReputationEvent(task.node_id, 'task_completed', { task_id: task.id, dispute: true }); } catch (_) {}
+      logger.info('Dispute stake released to worker', { disputeId, taskId: task.id, stakeReleased });
     } else {
       if (task.escrow_status === 'held') {
         const refund = await refundEscrowInTx(client, task.id);
         if (!refund.success) {
           await client.query('ROLLBACK');
           return { success: false, error: refund.error };
+        }
+      }
+      // 仲裁认定执行方违约：罚没保证金（部分补偿调用方，其余没收）
+      let slash = { success: false };
+      if (task.stake_status === 'held' && parseFloat(task.stake_amount) > 0 && task.node_id) {
+        slash = await slashStakeInTx(client, task.id, task.node_id, task.caller_id);
+        if (!slash.success) {
+          await client.query('ROLLBACK');
+          return { success: false, error: slash.error };
         }
       }
       await client.query(
@@ -1221,7 +1299,14 @@ export async function resolveDispute(disputeId, resolution, adminId) {
          WHERE id = $1`,
         [task.id]
       );
-      try { await logReputationEvent(task.node_id, 'task_failed', { task_id: task.id, dispute: true }); } catch (_) {}
+      // 声誉联动：罚没记强负分（task_slashed），无保证金可罚维持 task_failed
+      try {
+        if (slash.success) {
+          await logReputationEvent(task.node_id, 'task_slashed', { task_id: task.id, dispute: true, stake: slash.stake });
+        } else {
+          await logReputationEvent(task.node_id, 'task_failed', { task_id: task.id, dispute: true });
+        }
+      } catch (_) {}
     }
 
     await client.query(
@@ -1250,13 +1335,19 @@ export async function resolveDispute(disputeId, resolution, adminId) {
   }
 }
 
+// 验收超时自动放行上限：低于该金额维持"超时视为接受"（小额摩擦成本考虑），
+// 超过则转人工仲裁——堵住"免保证金 + 大额自动放行"的组合攻击面
+const AUTO_RELEASE_MAX_AMOUNT = Math.max(0, parseFloat(process.env.AUTO_RELEASE_MAX_AMOUNT) || 10);
+
 /**
- * 处理验收超时：到期的 submitted 任务自动放行（调用方超时视为接受）
+ * 处理验收超时：
+ *   - 小额任务（≤ AUTO_RELEASE_MAX_AMOUNT）：自动放行（调用方超时视为接受）
+ *   - 大额任务：转入争议队列由管理员仲裁，资金继续托管
  */
 export async function processVerificationDeadlines(limit = 50) {
   const pgPool = getPostgres();
   const result = await pgPool.query(
-    `SELECT id AS task_id, caller_id
+    `SELECT id AS task_id, caller_id, escrow_amount
      FROM tasks
      WHERE verification_status = 'pending'
        AND verification_deadline <= NOW()
@@ -1266,8 +1357,43 @@ export async function processVerificationDeadlines(limit = 50) {
 
   const results = [];
   for (const row of result.rows) {
+    if (parseFloat(row.escrow_amount) > AUTO_RELEASE_MAX_AMOUNT) {
+      // 大额超时：先条件更新再落争议记录（同事务，幂等防并发重复）
+      const client = await pgPool.connect();
+      try {
+        await client.query('BEGIN');
+        const upd = await client.query(
+          `UPDATE tasks SET verification_status = 'disputed', updated_at = now()
+           WHERE id = $1 AND verification_status = 'pending'`,
+          [row.task_id]
+        );
+        if (upd.rowCount === 0) {
+          await client.query('ROLLBACK');
+          results.push({ task_id: row.task_id, skipped: true });
+          continue;
+        }
+        const dispute = await client.query(
+          `INSERT INTO task_disputes (task_id, opened_by, reason, evidence)
+           VALUES ($1, NULL, $2, $3) RETURNING id`,
+          [row.task_id,
+            '验收超时未处理：任务金额超过自动放行上限，转人工仲裁',
+            JSON.stringify({ source: 'verification_timeout', escrow_amount: parseFloat(row.escrow_amount) })]
+        );
+        await client.query('COMMIT');
+        logger.warn('Verification timeout routed to dispute', { taskId: row.task_id, disputeId: dispute.rows[0].id });
+        results.push({ task_id: row.task_id, auto_released: false, routed_to_dispute: true, dispute_id: dispute.rows[0].id });
+      } catch (err) {
+        try { await client.query('ROLLBACK'); } catch (_) {}
+        logger.error('Failed to route timeout to dispute', { error: err.message, taskId: row.task_id });
+        results.push({ task_id: row.task_id, error: err.message });
+      } finally {
+        client.release();
+      }
+      continue;
+    }
+
     const r = await acceptTaskResult(row.task_id, row.caller_id, { auto: true });
-    results.push({ task_id: row.task_id, ...r });
+    results.push({ task_id: row.task_id, auto_released: r.success, ...r });
   }
   return results;
 }

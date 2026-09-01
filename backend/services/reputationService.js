@@ -326,6 +326,7 @@ export async function logReputationEvent(nodeId, eventType, eventData = {}) {
     task_completed: 0.02,
     task_failed: -0.03,
     task_timeout: -0.02,
+    task_slashed: -0.10, // 保证金罚没：仲裁认定违约的强负分
     order_completed: 0.03,
     order_failed: -0.04,
     order_refunded: -0.05,

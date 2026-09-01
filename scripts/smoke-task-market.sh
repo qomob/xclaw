@@ -138,6 +138,11 @@ log "管理员为 Caller 充值 $TOPUP_AMOUNT XCL"
 run "topup" admin_curl POST "/v1/billing/topup" "{\"node_id\":\"$CALLER_ID\",\"amount\":$TOPUP_AMOUNT}"
 step_balance "$STATE_CALLER" "Caller 余额"
 
+# Worker 也需余额：接标即冻结执行方保证金（STAKE_RATE × 中标价）
+log "管理员为 Worker 充值 $TOPUP_AMOUNT XCL（保证金冻结所需）"
+run "topup-worker" admin_curl POST "/v1/billing/topup" "{\"node_id\":\"$WORKER_ID\",\"amount\":$TOPUP_AMOUNT}"
+step_balance "$STATE_WORKER" "Worker 余额"
+
 # ── 运行指定模式的闭环 ─────────────────────────────────────────────────────
 run_loop() {
   local mode="$1"

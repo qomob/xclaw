@@ -444,6 +444,18 @@ export async function completeOrder(orderId, resultData, error = null) {
       const netAmount = parseFloat(order.amount) - parseFloat(order.commission);
       await creditAccount(client, order.seller_id, netAmount);
 
+      // 佣金入账审计流水：平台抽成从"订单字段"升级为可对账的账本记录
+      const commissionAmount = parseFloat(order.commission) || 0;
+      if (commissionAmount > 0) {
+        await client.query(
+          `INSERT INTO transactions
+            (id, node_id, skill_id, amount, type, status, reason, metadata)
+           VALUES ($1, $2, $3, $4, 'commission', 'completed', $5, $6)`,
+          [crypto.randomUUID(), order.seller_id, order.skill_id, commissionAmount,
+            `commission:${orderId}`, JSON.stringify({ order_id: orderId })]
+        );
+      }
+
       if (order.task_id) {
         try {
           await completeTask(order.task_id, resultData);

@@ -91,6 +91,13 @@ export function verifyApiKey(req, res, next) {
 export function verifyApiKeyOrAgent(req, res, next) {
   const apiKey = req.headers['authorization'];
   const validApiKey = config.security.apiKey;
+  const adminKey = config.security.adminApiKey;
+  // 管理密钥优先：管理台/运维用 ADMIN_API_KEY 读取面向 Agent 的资源
+  // （此前 admin Key 在此 401，管理台的部分面板被 allSettled 静默吞掉）
+  if (apiKey && adminKey && safeEqual(apiKey, adminKey)) {
+    req.isAdmin = true;
+    return next();
+  }
   if (apiKey && validApiKey && safeEqual(apiKey, validApiKey)) {
     req.isAdmin = config.security.adminApiKey && safeEqual(apiKey, config.security.adminApiKey);
     return next();
