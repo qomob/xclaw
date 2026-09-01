@@ -17,7 +17,7 @@ services:
       - AI_API_KEY=${AI_API_KEY:-}
       - AI_BASE_URL=${AI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai}
       - AI_MODEL=${AI_MODEL:-gemini-2.5-flash}
-      - AI_EMBEDDING_MODEL=${AI_EMBEDDING_MODEL:-gemini-embedding-001}
+      - AI_EMBEDDING_MODEL=${AI_EMBEDDING_MODEL:-text-embedding-004}
       - AI_EMBEDDING_BASE_URL=${AI_EMBEDDING_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai}
       - AI_EMBEDDING_API_KEY=${AI_EMBEDDING_API_KEY:-}
       - PUBLIC_URL=${PUBLIC_URL:-https://xclaw.network}

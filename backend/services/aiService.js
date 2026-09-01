@@ -10,7 +10,9 @@ const AI_CONFIG = {
   apiKey: process.env.AI_API_KEY,
   baseUrl: process.env.AI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai',
   model: process.env.AI_MODEL || 'gemini-2.5-flash',
-  embeddingModel: process.env.AI_EMBEDDING_MODEL || 'gemini-embedding-001',
+  // 默认 768 维（text-embedding-004），与 node_embeddings.capability_vector vector(768) 对齐；
+  // gemini-embedding-001 为 3072 维，填入 vector(768) 会静默失败
+  embeddingModel: process.env.AI_EMBEDDING_MODEL || 'text-embedding-004',
   embeddingApiKey: process.env.AI_EMBEDDING_API_KEY || process.env.AI_API_KEY,
   embeddingBaseUrl: process.env.AI_EMBEDDING_BASE_URL || process.env.AI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai',
 };
