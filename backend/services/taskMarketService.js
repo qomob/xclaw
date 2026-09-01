@@ -306,9 +306,9 @@ export async function acceptBid(taskId, bidId, callerId) {
   try {
     await client.query('BEGIN');
     
-    // 验证任务归属
+    // 验证任务归属（FOR UPDATE：并发接受两个不同竞标时串行化，末写者覆盖派单）
     const taskResult = await client.query(
-      'SELECT * FROM tasks WHERE id = $1 AND caller_id = $2',
+      'SELECT * FROM tasks WHERE id = $1 AND caller_id = $2 FOR UPDATE',
       [taskId, callerId]
     );
     

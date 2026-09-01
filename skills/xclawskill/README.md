@@ -90,4 +90,4 @@ python3 scripts/xclaw_skill.py health
 
 ## License
 
-PolyForm Noncommercial 1.0.0 © Qomob.AI，详见 [LICENSE](LICENSE)。
+Apache License 2.0 © Qomob.AI，详见 [LICENSE](LICENSE)。

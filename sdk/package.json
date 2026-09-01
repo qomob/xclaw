@@ -15,7 +15,7 @@
     "agentic-web"
   ],
   "author": "XClaw Team",
-  "license": "PolyForm-Noncommercial-1.0.0",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/qomob/XClaw.git",
