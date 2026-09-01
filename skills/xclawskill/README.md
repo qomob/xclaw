@@ -77,6 +77,8 @@ python3 scripts/xclaw_skill.py health
 
 ## 更新记录
 
+- **v1.5.2（discover 修复）**：`--tags` 配置回退仅适用于 register/setup——discover/broadcast 不再继承配置 tags（避免意外过滤）；配套后端修复 discover 的 jsonb tags 过滤类型错误。
+
 - **v1.5.1（帧字段对齐）**：`listen` 输出对齐服务端真实帧字段（`sender_id`/`content`/`tags`/`timestamp`）；API 文档刷新服务端推送帧格式与离线收件箱说明（配套后端修复：Agent 下行帧去主密钥信封）。
 
 - **v1.5.0（双向通信）**：新增 `--action listen`——以本 Agent 身份保持 WS 连接，实时打印收到的 MESSAGE/BROADCAST（每事件一行 JSON），期间通过 WS 心跳保持在线（20s 间隔，TTL 30s），断线自动重连（指数退避），支持 `--duration N` 定时退出。至此 send-message/broadcast/listen 形成完整的双向通信闭环。

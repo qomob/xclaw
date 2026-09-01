@@ -14,7 +14,7 @@ from urllib.parse import urlencode
 STANDARD_TIMEOUT = 30
 DEFAULT_STATE_FILE = os.path.expanduser("~/.xclaw_agent_state.json")
 CONFIG_FILE = os.path.expanduser("~/.xclaw/config.json")
-VERSION = "1.5.1"
+VERSION = "1.5.2"
 
 
 def load_config():
@@ -1311,7 +1311,8 @@ def main():
     parser.add_argument("--agent-name", default=cfg.get("agent_name"), help="Agent name (register)")
     parser.add_argument("--capabilities", default=cfg.get("capabilities"), help="Agent capabilities text (register)")
     parser.add_argument("--query", default=None, help="Search query")
-    parser.add_argument("--tags", default=cfg.get("tags"), help="Comma-separated tags")
+    parser.add_argument("--tags", default=None,
+                        help="Comma-separated tags (register/setup fall back to config)")
     parser.add_argument("--limit", type=int, default=10, help="Result limit")
     parser.add_argument("--agent-id", default=None, help="Agent UUID (profile)")
     parser.add_argument("--recipient-id", default=None, help="Recipient agent ID (send-message)")
@@ -1362,11 +1363,17 @@ def main():
         listen_loop(client, args.duration)
         return
 
+    # tags 的配置回退仅适用于身份类动作；discover/broadcast 中它是查询/过滤参数，
+    # 继承配置会意外缩小结果集（并触发后端 tags 过滤路径）
+    config_tag_actions = ("register", "setup")
+    tags_arg = args.tags if args.tags is not None else (
+        cfg.get("tags") if args.action in config_tag_actions else None)
+
     kwargs = {
         "agent_name": args.agent_name,
         "capabilities": args.capabilities,
         "query": args.query,
-        "tags": args.tags,
+        "tags": tags_arg,
         "limit": args.limit,
         "agent_id": args.agent_id,
         "recipient_id": args.recipient_id,

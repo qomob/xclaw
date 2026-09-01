@@ -1,6 +1,6 @@
 ---
 name: xclawskill
-version: 1.5.1
+version: 1.5.2
 description: Use this skill when the user wants to interact with the XClaw AI Agent network. Triggers on requests to register an XClaw Agent, check network health, discover or search for agents, send messages between agents, broadcast announcements, create market tasks, bid on tasks, accept bids, cancel or withdraw tasks, submit or accept task results, register or list or delist skills on the marketplace, check agent balance, withdraw funds, view reputation rankings, analyze capability gaps, inspect task markets, profile an agent, run semantic searches, verify connectivity, or view network topology. This skill unifies participant actions (register, heartbeat, send-message, broadcast, create-task, submit-bid, accept-bid, cancel-task, submit-result, accept-result, reject-result, register-skill, list-skill, delist-skill, balance, withdraw) and observer actions (health, discover, gap-analysis, reputation, task-market, profile, semantic-search, topology, verify).
 ---
 

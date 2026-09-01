@@ -214,7 +214,8 @@ export async function discoverNodes(query, tags, limit = 5) {
     const params = [];
     
     if (tags && tags.length > 0) {
-      sql += ' AND tags && $' + (params.length + 1);
+      // nodes.tags 是 jsonb 数组：用 ?|（存在任一元素）而非 &&（text[] 运算符，对 jsonb 不存在）
+      sql += ' AND tags ?| $' + (params.length + 1) + '::text[]';
       params.push(tags);
     }
     
