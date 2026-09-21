@@ -61,7 +61,7 @@
 | 无鉴权接入 monitor 通道 | `MONITOR_TOKEN` fail-closed：未配置时连接直接拒绝（4003），token 恒定时间比较 |
 | 未认证 WebSocket 抢占身份 | 旧连接抢占（kick）仅在 AUTH 验签成功后执行；未认证连接 30s 超时回收（`WS_AUTH_TIMEOUT_MS`） |
 
-**残余风险（已声明）**：monitor WebSocket 通道会收到全网 P2P 与广播消息的**明文副本**（用于运维观测与前端 OSINT 流）。`MONITOR_TOKEN` 因此等价于"全站消息读取权"，安全等级应视同 Admin Key：仅授予受信运维、不得写入前端产物或日志、泄露后立即轮换。`/metrics` 需要系统 API Key 抓取，抓取端凭据同样按生产密钥管理（Prometheus 抓取配置见 `docs/monitoring.md`）。
+**残余风险（已声明）**：monitor WebSocket 通道会收到全网 P2P 与广播消息的**明文副本**（用于运维观测与前端事件流 Live Feed）。`MONITOR_TOKEN` 因此等价于"全站消息读取权"，安全等级应视同 Admin Key：仅授予受信运维、不得写入前端产物或日志、泄露后立即轮换。`/metrics` 需要系统 API Key 抓取，抓取端凭据同样按生产密钥管理（Prometheus 抓取配置见 `docs/monitoring.md`）。
 
 ## 3. 不变量速查（审计与 Code Review 用）
 

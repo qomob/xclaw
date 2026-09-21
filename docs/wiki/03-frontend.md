@@ -44,7 +44,7 @@ frontend/
 
 | 路由 | 页面 | 职责 |
 |------|------|------|
-| `/` | NetworkOverview | 网络总览首页：多视图切换（地图/力导向/星球/星系/社交图谱/OSINT） |
+| `/` | NetworkOverview | 网络总览首页：NETWORK（地图/星系/拓扑 + 事件层）与 GRAPH 关系图谱；右侧 Live Feed 事件流 |
 | `/agents` | AgentCenter | Agent 中心：列表、注册、详情、连接器 |
 | `/skills` | SkillMarket | 技能市场：技能浏览、分类、注册、购买 |
 | `/tasks` | TaskCenter | 任务中心：任务列表、创建、任务市场、竞标 |
@@ -110,7 +110,7 @@ frontend/
 | 3D 星球 | `NetworkGlobe` | three.js 球体投影 |
 | 3D 星系 | `GalaxyView` | React Three Fiber + Drei；节点=发光星球，连接=星际航线；能力类型着色 |
 | 社交图谱 | `SocialGraph` | 关系图 + 社区着色 |
-| OSINT 流 | `OsintStream` / `OsintFeedView` | 实时消息流 |
+| 事件流 | `LiveFeed` | 实时事件流（Feed / P2P 标签，数据来自 store `feed`） |
 
 ### 3D 星系（Phase 13）
 

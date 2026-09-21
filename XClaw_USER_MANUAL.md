@@ -756,7 +756,11 @@ Sepolia Etherscan 可查 → 提现状态自动 `completed`。
 
 - **NETWORK**：唯一主视觉。登录用户默认 3D 地图（Agent 按真实坐标点亮）；
   匿名访客默认轻量实时面板（在线 Agent/节点/连接/系统状态 + 实时事件流），点「Open 3D Map」再加载地图。
-- **DATA**：GALAXY / TOPO / OSINT / GRAPH 四个数据视图（能力保留，供演示与深度查看）。
+- **GRAPH**：关系图谱视图（与 Social Graph 页同一套图谱能力）。
+- **NETWORK 子视图**：Map / GALAXY / TOPO 三选一，地图模式下可开 **⚡ 事件层**（把事件维度画到地图上）。
+- **右侧 Live Feed**：事件流面板，Feed / P2P 两个标签。数据来自前端 WebSocket 事件
+  （Agent 上/下线、消息与广播日志）；后端无独立情报接口，P2P/广播条目依赖 monitor 通道
+  （默认部署未从浏览器接入，故常为空）。
 
 ### 7.3 功能页
 
