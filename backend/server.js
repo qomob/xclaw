@@ -18,6 +18,8 @@ import apiRouter from './gateway/api.js';
 // 核心模块
 import { initPostgres, initRedis, closeConnections, getRedis } from './core/dependencies.js';
 import { isTimestampFresh } from './core/utils.js';
+import { instanceId } from './core/instance.js';
+import { createRedisRateLimitStore } from './core/rateLimitStore.js';
 import { handleHeartbeat } from './registry/nodeRegistry.js';
 import { runMigrations } from './core/migrations.js';
 
@@ -85,6 +87,8 @@ const server = app.listen(port, config.server.host, async () => {
 
     // 初始化跨实例 WS 桥（定向消息路由）
     await websocketService.initRedisBridge();
+    // 初始化跨实例广播桥（广播投递到所有副本的本地连接）
+    await initBroadcastBridge();
     
     // 初始化监控模块
     const heartbeatManager = new HeartbeatManager();
@@ -95,6 +99,10 @@ const server = app.listen(port, config.server.host, async () => {
     await metricsManager.init();
     
     await alertManager.init();
+    // 告警无外发通道时显式提醒：默认只写 Redis + /ws 事件流，无人值守场景会漏告警
+    if (!process.env.ALERT_WEBHOOK_URL) {
+      logger.warn('ALERT_WEBHOOK_URL is not set — alerts stay in Redis and the /ws stream only. Configure a webhook (WeCom/DingTalk/Slack/Alertmanager) for unattended production. See docs/monitoring.md.');
+    }
     
     // v1.1: 初始化事件总线和 Webhook 重试处理器
     await eventBus.init();
@@ -116,6 +124,40 @@ const server = app.listen(port, config.server.host, async () => {
 
 // Redis 连接 (通过依赖注入获取)
 const redis = getRedis();
+
+// 跨实例广播桥：每个实例订阅同一频道，只向本地连接投递；
+// 发起实例已在本地直投（instance 标记去重），避免重复下发
+async function initBroadcastBridge() {
+  try {
+    const sub = redis.duplicate();
+    sub.on('message', (channel, message) => {
+      if (channel !== 'xclaw:ws:broadcast') return;
+      try {
+        const { sender_id, content, tags, timestamp, instance } = JSON.parse(message);
+        if (instance === instanceId) return; // 本实例已直投
+        for (const [agentId, client] of wsConnections) {
+          if (agentId === sender_id) continue;
+          if (!client || client.readyState !== 1) continue;
+          if (tags && tags.length > 0) {
+            const agentNode = topologyService.getState().nodes.find(n => n.id === agentId);
+            if (!(agentNode && agentNode.tags && tags.some(tag => agentNode.tags.includes(tag)))) continue;
+          }
+          try {
+            client.send(JSON.stringify({ type: 'BROADCAST', sender_id, content, tags, timestamp }));
+          } catch (_) {
+            /* 单连接失败不影响其余投递 */
+          }
+        }
+      } catch (err) {
+        logger.warn('Broadcast bridge delivery error', { error: err.message });
+      }
+    });
+    await sub.subscribe('xclaw:ws:broadcast');
+    logger.info('Cross-instance broadcast bridge initialized', { instance: instanceId });
+  } catch (err) {
+    logger.warn('Failed to initialize broadcast bridge', { error: err.message });
+  }
+}
 
 // 将 WebSocket 服务器附加到 HTTP 服务器上
 // 注意: 主 WSS 与 RealtimePushService(/ws) 通过单一 upgrade 分发器按路径分流，
@@ -167,6 +209,11 @@ const limiter = rateLimit({
   max: config.rateLimit?.max || 200,
   standardHeaders: true,
   legacyHeaders: false,
+  // Redis 存储：多副本共享计数、重启不清零（不可用时自动降级内存并告警）
+  store: createRedisRateLimitStore({
+    prefix: 'ratelimit:global:',
+    windowMs: config.rateLimit?.windowMs || 15 * 60 * 1000
+  }),
   message: {
     success: false,
     error: '请求过于频繁，请稍后再试'
@@ -259,6 +306,14 @@ wss.on('connection', (ws, req) => {
     ws.close(4001, 'Missing agent_id');
     return;
   }
+
+  // 连接数上限：防止单机被大量 Agent 连接打爆（此前仅 /ws 实时推流有上限）
+  const WS_MAX_AGENT_CONNECTIONS = parseInt(process.env.WS_MAX_AGENT_CONNECTIONS || '5000');
+  if (wss.clients.size > WS_MAX_AGENT_CONNECTIONS) {
+    logger.warn('WebSocket connection rejected: at capacity', { clients: wss.clients.size });
+    ws.close(4029, 'Server at capacity');
+    return;
+  }
   
   logger.info('New WebSocket connection', { agentId, clientCount: wss.clients.size });
   
@@ -304,13 +359,18 @@ wss.on('connection', (ws, req) => {
     return;
   }
   
-  // 踢掉同一 agentId 的旧连接
-  const oldWs = wsConnections.get(agentId);
-  if (oldWs && oldWs !== ws) {
-    oldWs.removeAllListeners('close');
-    oldWs.close();
-    wsConnections.delete(agentId);
-  }
+  // 注意：此处不再"踢掉同 agentId 的旧连接"。
+  // 未通过 AUTH 的连接不可信，允许它踢人等于任何人凭公开的 agent_id 即可让目标下线。
+  // 抢占旧连接的动作全部移入 AUTH 验签成功之后（见下方 AUTH 分支）。
+
+  // 未完成 AUTH 的连接不进入连接池，且超时回收，避免未认证连接堆积
+  const WS_AUTH_TIMEOUT_MS = parseInt(process.env.WS_AUTH_TIMEOUT_MS || '30000');
+  const authTimeout = setTimeout(() => {
+    if (wsConnections.get(agentId) !== ws) {
+      logger.warn('WebSocket closed: AUTH timeout', { agentId });
+      try { ws.close(4001, 'AUTH timeout'); } catch (_) {}
+    }
+  }, WS_AUTH_TIMEOUT_MS);
 
   const authHandler = async (message) => {
     try {
@@ -342,6 +402,15 @@ wss.on('connection', (ws, req) => {
           return;
         }
 
+        // 验签成功后才允许抢占同一 agentId 的旧连接（新连接为合法持有者）
+        const oldWs = wsConnections.get(agentId);
+        if (oldWs && oldWs !== ws) {
+          oldWs.removeAllListeners('close');
+          try { oldWs.close(4000, 'Replaced by newer authenticated connection'); } catch (_) {}
+          wsConnections.delete(agentId);
+        }
+
+        clearTimeout(authTimeout);
         wsConnections.set(agentId, ws);
         ws.agentId = agentId;
         logger.info('WebSocket authenticated', { agentId });
@@ -396,6 +465,7 @@ wss.on('connection', (ws, req) => {
   ws.on('message', authHandler);
 
     ws.on('close', () => {
+      clearTimeout(authTimeout);
       if (wsConnections.get(agentId) === ws) {
         wsConnections.delete(agentId);
         websocketService.unregisterRoute(agentId).catch(() => {});
@@ -509,7 +579,7 @@ async function handleDirectMessage(message, authenticatedAgentId) {
   if (delivered) {
     logger.info('Message delivered', { sender_id, recipient_id });
   } else {
-    // 离线入队保持明文帧（与在线投递一致）；历史版本曾存主密钥信封，恢复时由服务端解密补投
+    // 离线入队前加密：明文帧只存在于内存，Redis 中始终是主密钥信封
     await storeOfflineMessage(recipient_id, {
       type: 'MESSAGE',
       sender_id,
@@ -583,6 +653,16 @@ async function handleBroadcastMessage(message, authenticatedAgentId) {
   
   logger.info('Broadcast sent', { sender_id, tagCount: tags ? tags.length : 0, recipients: sentCount });
 
+  // 跨实例投递：本实例已直接下发，其余实例通过 Redis 频道向各自的本地连接投递。
+  // （此前只遍历本地 wsConnections，连到其他副本的 Agent 收不到广播）
+  try {
+    await redis.publish('xclaw:ws:broadcast', JSON.stringify({
+      sender_id, content, tags, timestamp, instance: instanceId
+    }));
+  } catch (err) {
+    logger.warn('Broadcast bridge publish failed', { error: err.message, sender_id });
+  }
+
   websocketService.sendToAgent(sender_id, {
     success: true,
     message: `Broadcast sent to ${sentCount} agent(s)`,
@@ -597,10 +677,18 @@ async function handleBroadcastMessage(message, authenticatedAgentId) {
 }
 
 // 存储离线消息
+// 加密落盘：Redis（AOF/快照/备份）中只保存 ENCRYPTION_KEY 加密的信封，
+// 与 DB 消息加密策略一致；恢复时由服务端使用同一主密钥解密后投递。
 async function storeOfflineMessage(recipientId, message) {
   try {
     const streamKey = `agent_inbox:${recipientId}`;
-    await redis.xadd(streamKey, '*', 'sender_id', message.sender_id, 'payload', JSON.stringify(message), 'timestamp', message.timestamp);
+    const frame = {
+      type: 'ENCRYPTED_ENVELOPE',
+      encrypted: true,
+      payload: encryptionService.encryptMessage(message, recipientId),
+      timestamp: message.timestamp
+    };
+    await redis.xadd(streamKey, '*', 'sender_id', message.sender_id, 'payload', JSON.stringify(frame), 'timestamp', message.timestamp);
     // 设置过期时间（7天）
     await redis.expire(streamKey, 7 * 24 * 60 * 60);
   } catch (error) {

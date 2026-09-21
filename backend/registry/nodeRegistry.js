@@ -18,6 +18,8 @@ export async function registerNode(nodeData, signature, clientIp, timestamp) {
   const pgPool = getPostgres();
   const redisClient = getRedis();
 
+  let sandboxGrant = null;
+
   try {
     // 验证签名
     const dataString = timestamp !== undefined
@@ -109,9 +111,9 @@ export async function registerNode(nodeData, signature, clientIp, timestamp) {
 
       // 首次注册发放 sandbox 额度（幂等 + IP 限频），失败不阻断注册。
       // 让新 Agent 无需管理员充值即可完成首笔付费调用。
-      const sandbox = await grantSandboxCredit(nodeId, clientIp || null);
-      if (sandbox.granted) {
-        console.log(`[register] Sandbox credit granted: ${sandbox.amount} XCL → ${nodeId}`);
+      sandboxGrant = await grantSandboxCredit(nodeId, clientIp || null);
+      if (sandboxGrant.granted) {
+        console.log(`[register] Sandbox credit granted: ${sandboxGrant.amount} XCL → ${nodeId}`);
       }
     }
     
@@ -188,7 +190,11 @@ export async function registerNode(nodeData, signature, clientIp, timestamp) {
       agent_id: nodeId,
       status: 'registered',
       websocket_url: wsUrl,
-      api_key: apiKey
+      api_key: apiKey,
+      // 赠送额度透明度：granted=false 时 reason 说明原因（already_granted/ip_daily_limit/global_daily_limit/disabled）
+      sandbox_credit: sandboxGrant
+        ? { granted: sandboxGrant.granted, amount: sandboxGrant.amount || 0, reason: sandboxGrant.reason || null }
+        : { granted: false, amount: 0, reason: 'not_new_node' }
     });
   } catch (error) {
     console.error('节点注册错误:', error);

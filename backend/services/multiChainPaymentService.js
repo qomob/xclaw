@@ -392,7 +392,17 @@ export async function createWithdrawal(nodeId, { chain, to_address, amount, curr
     }
 
     // 从统一账本（billing_accounts）原子扣款
-    const { debitAccount } = await import('../billing/index.js');
+    const { debitAccount, getWithdrawableBalance } = await import('../billing/index.js');
+    // sandbox 赠送额度不可提现：仅真实入账部分可出金
+    const { withdrawable, sandbox_balance } = await getWithdrawableBalance(client, nodeId);
+    if (numAmount + fee > withdrawable) {
+      await client.query('ROLLBACK');
+      return formatResponse(
+        false,
+        null,
+        `可提现金额不足（可提现 ${withdrawable}，其中 ${sandbox_balance} 为不可提现的赠送额度）`
+      );
+    }
     const debit = await debitAccount(client, nodeId, numAmount + fee);
     if (!debit.ok) {
       await client.query('ROLLBACK');
@@ -433,6 +443,13 @@ export async function createWithdrawal(nodeId, { chain, to_address, amount, curr
         [feeTxId, nodeId, -fee, JSON.stringify({ chain, withdrawal_id: txId })]
       );
     }
+
+    // 提现本金扣款流水：此前只记手续费，导致账本余额与流水累计对不上（对账任务会报漂移）
+    await client.query(
+      `INSERT INTO transactions (id, node_id, amount, type, status, reason, metadata)
+       VALUES ($1, $2, $3, 'withdrawal', 'completed', 'withdrawal debit', $4)`,
+      [generateUUID(`withdrawal-debit:${Date.now()}`), nodeId, -numAmount, JSON.stringify({ chain, withdrawal_id: txId })]
+    );
 
     await client.query('COMMIT');
 

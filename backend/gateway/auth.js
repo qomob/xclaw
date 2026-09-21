@@ -184,9 +184,65 @@ export function verifyWithdrawalCallback(req, res, next) {
   next();
 }
 
+/**
+ * 节点身份三选一（用于 heartbeat 等按节点归属的写操作）：
+ *   1) Agent JWT / Agent API Key（x-api-key），且身份必须与路径参数一致
+ *   2) Ed25519 签名（x-agent-signature + x-agent-timestamp），签名材料与 WebSocket AUTH 一致
+ *   3) 平台 API Key / Admin Key（内部运维与冒烟脚本）
+ * 任一通过即放行；全不满足 401。
+ */
+export function requireAgentIdentity(paramName = 'agent_id') {
+  return async (req, res, next) => {
+    const targetId = req.params[paramName];
+    const authHeader = req.headers['authorization'];
+    const agentKey = req.headers['x-api-key'];
+
+    // 平台密钥（含 Admin）：内部工具通道，不绑定节点
+    if (authHeader && !authHeader.startsWith('Bearer ') && config.security.apiKey && safeEqual(authHeader, config.security.apiKey)) {
+      req.isAdmin = !!(config.security.adminApiKey && safeEqual(authHeader, config.security.adminApiKey));
+      return next();
+    }
+    if (authHeader && !authHeader.startsWith('Bearer ') && config.security.adminApiKey && safeEqual(authHeader, config.security.adminApiKey)) {
+      req.isAdmin = true;
+      return next();
+    }
+
+    // Agent 凭据：JWT 或 Agent API Key
+    if ((authHeader && authHeader.startsWith('Bearer ')) || agentKey) {
+      return authService.authMiddleware(req, res, (err) => {
+        if (err) return next(err);
+        if (!req.agentId || !targetId || req.agentId !== targetId) {
+          return res.status(403).json({ success: false, error: '无权操作该节点' });
+        }
+        next();
+      });
+    }
+
+    // Ed25519 直接签名：兼容无状态客户端（签名材料同时接受 WS AUTH 与 HTTP body 两种格式）
+    const signature = req.headers['x-agent-signature'];
+    const tsHeader = req.headers['x-agent-timestamp'];
+    if (signature && tsHeader !== undefined && isTimestampFresh(tsHeader)) {
+      const nodeResult = await getNode(targetId);
+      if (!nodeResult.success) {
+        return res.status(401).json({ success: false, error: 'Agent not found' });
+      }
+      const candidates = [
+        JSON.stringify({ agent_id: targetId, timestamp: tsHeader }),
+        signaturePayload(tsHeader, req.body || {})
+      ];
+      if (candidates.some(data => verifySignature(data, signature, nodeResult.data.public_key))) {
+        req.agentId = targetId;
+        return next();
+      }
+      return res.status(401).json({ success: false, error: 'Invalid signature' });
+    }
+
+    return res.status(401).json({ success: false, error: 'Unauthorized' });
+  };
+}
+
 // 验证 WebSocket 连接
-export async function verifyWebSocketConnection(agentId, signature, timestamp) {
-  // 重放防护：timestamp 为签名材料的一部分，超出窗口即拒绝
+export async function verifyWebSocketConnection(agentId, signature, timestamp) {  // 重放防护：timestamp 为签名材料的一部分，超出窗口即拒绝
   if (!isTimestampFresh(timestamp)) {
     return false;
   }

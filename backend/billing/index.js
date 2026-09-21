@@ -14,6 +14,8 @@ const BALANCE_CACHE_TTL = parseInt(process.env.BALANCE_CACHE_TTL || '30');
 const SANDBOX_GRANT_ENABLED = process.env.SANDBOX_GRANT_ENABLED !== 'false';
 const SANDBOX_GRANT_AMOUNT = Math.round((parseFloat(process.env.SANDBOX_GRANT_AMOUNT) || 10) * 100) / 100;
 const SANDBOX_GRANT_IP_DAILY_LIMIT = parseInt(process.env.SANDBOX_GRANT_IP_DAILY_LIMIT) || 3;
+// 全局日发放上限：即使攻击者能轮换 IP，平台每日新增赠送额度也有硬顶（控制女巫注册的经济成本）
+const SANDBOX_GRANT_GLOBAL_DAILY_LIMIT = parseInt(process.env.SANDBOX_GRANT_GLOBAL_DAILY_LIMIT) || 200;
 
 // ── 执行方保证金（迭代 2：把身份变成资产，打破"违约 + 弃号"单次博弈）──
 const STAKE_ENABLED = process.env.STAKE_ENABLED !== 'false';
@@ -73,18 +75,42 @@ export async function ensureBillingAccount(q, nodeId) {
 /**
  * 在给定连接（或连接池）上原子扣款；余额不足时返回 { ok: false }
  * 调用方需自行管理事务
+ *
+ * sandbox 额度先于真实余额被消耗：sandbox_balance 记录余额中不可提现的部分，
+ * 扣款（消费）时同步递减，保证「赠送额度不可提现」的不变量。
  */
 export async function debitAccount(q, nodeId, amount, minBalance = MIN_BALANCE) {
   await ensureBillingAccount(q, nodeId);
   const result = await q.query(
     `UPDATE billing_accounts
-        SET balance = balance - $1, updated_at = NOW()
+        SET balance = balance - $1,
+            sandbox_balance = GREATEST(0, sandbox_balance - $1),
+            updated_at = NOW()
       WHERE node_id = $2 AND balance - $1 >= $3
       RETURNING balance`,
     [amount, nodeId, minBalance]
   );
   if (result.rows.length === 0) return { ok: false };
   return { ok: true, balance: parseFloat(result.rows[0].balance) };
+}
+
+/**
+ * 可提现余额：真实入账部分（余额 - 未消耗的 sandbox 赠送额度）。
+ * 托管/保证金中的资金本就不可提现，不计入。
+ */
+export async function getWithdrawableBalance(q, nodeId) {
+  await ensureBillingAccount(q, nodeId);
+  const res = await q.query(
+    'SELECT balance, sandbox_balance FROM billing_accounts WHERE node_id = $1',
+    [nodeId]
+  );
+  const balance = parseFloat(res.rows[0]?.balance) || 0;
+  const sandbox = parseFloat(res.rows[0]?.sandbox_balance) || 0;
+  return {
+    balance,
+    sandbox_balance: sandbox,
+    withdrawable: Math.max(0, Math.round((balance - sandbox) * 100) / 100)
+  };
 }
 
 /**
@@ -202,7 +228,9 @@ export async function releaseEscrowInTx(client, taskId, workerId) {
 
   await client.query(
     `UPDATE billing_accounts
-        SET escrow_balance = escrow_balance - $1, updated_at = NOW()
+        SET escrow_balance = escrow_balance - $1,
+            sandbox_balance = GREATEST(0, sandbox_balance - $1),
+            updated_at = NOW()
       WHERE node_id = $2`,
     [escrow, task.caller_id]
   );
@@ -303,7 +331,29 @@ export async function grantSandboxCredit(nodeId, ip = null) {
       }
     }
 
+    const globalRecent = await client.query(
+      `SELECT COUNT(*)::int AS n
+         FROM transactions
+        WHERE type = 'sandbox_grant'
+          AND status = 'completed'
+          AND created_at > NOW() - INTERVAL '24 hours'`
+    );
+    if (globalRecent.rows[0].n >= SANDBOX_GRANT_GLOBAL_DAILY_LIMIT) {
+      await client.query('ROLLBACK');
+      logger.warn('Sandbox grant blocked by global daily limit', {
+        nodeId, limit: SANDBOX_GRANT_GLOBAL_DAILY_LIMIT
+      });
+      return { granted: false, reason: 'global_daily_limit' };
+    }
+
     const balance = await creditAccount(client, nodeId, SANDBOX_GRANT_AMOUNT);
+    // 同步计入不可提现额度（sandbox_balance），仅在真实消费时递减
+    await client.query(
+      `UPDATE billing_accounts
+          SET sandbox_balance = sandbox_balance + $1, updated_at = NOW()
+        WHERE node_id = $2`,
+      [SANDBOX_GRANT_AMOUNT, nodeId]
+    );
     await client.query(
       `INSERT INTO transactions
         (id, node_id, amount, type, status, idempotency_key, reason, metadata)
@@ -427,11 +477,21 @@ export async function slashStakeInTx(client, taskId, workerId, callerId) {
   const compensation = Math.round(stake * STAKE_SLASH_COMPENSATION_RATE * 100) / 100;
   if (compensation > 0 && callerId) {
     await creditAccount(client, callerId, compensation);
+    // 补偿入账流水：与账本余额变动一一对应，保证对账可核
+    await client.query(
+      `INSERT INTO transactions
+        (id, task_id, node_id, amount, type, status, reason, metadata)
+       VALUES ($1, $2, $3, $4, 'stake_compensation', 'completed', $5, $6)`,
+      [crypto.randomUUID(), taskId, callerId, compensation, `stake_compensation:${taskId}`,
+        JSON.stringify({ from_worker: workerId })]
+    );
   }
 
   await client.query(
     `UPDATE billing_accounts
-        SET stake_balance = stake_balance - $1, updated_at = NOW()
+        SET stake_balance = stake_balance - $1,
+            sandbox_balance = GREATEST(0, sandbox_balance - $1),
+            updated_at = NOW()
       WHERE node_id = $2`,
     [stake, workerId]
   );
@@ -476,6 +536,17 @@ export async function chargeTask(taskId, amount = TASK_BASE_PRICE, audit = {}) {
   const validation = validateAmount(amount);
   if (!validation.valid) {
     return formatResponse(false, null, validation.error);
+  }
+  // 上限护栏：调用方可指定本任务可计费的最大金额（任务约定报酬/托管额），
+  // 防止执行方在按任务计费的接口上超额扣款
+  if (audit.max_amount != null) {
+    const cap = Math.round(Number(audit.max_amount) * 100) / 100;
+    if (!Number.isFinite(cap) || cap <= 0) {
+      return formatResponse(false, null, '任务约定金额无效，拒绝计费');
+    }
+    if (validation.amount > cap) {
+      return formatResponse(false, null, `计费金额不得超过任务约定金额 ${cap}`);
+    }
   }
 
   const idempotencyKey = `task_charge:${taskId}`;
@@ -610,11 +681,30 @@ export async function rewardNode(nodeId, amount, audit = {}) {
     return formatResponse(false, null, validation.error);
   }
 
+  const idempotencyKey = audit.idempotency_key || null;
   const pgPool = getPostgres();
   const client = await pgPool.connect();
 
   try {
     await client.query('BEGIN');
+
+    // 幂等：同一幂等键（如 task_reward:<taskId>）只发放一次。
+    // 唯一约束在 DB 层兜底并发（23505 分支），此处先查一次以走常规路径。
+    if (idempotencyKey) {
+      const existing = await client.query(
+        'SELECT id FROM transactions WHERE idempotency_key = $1',
+        [idempotencyKey]
+      );
+      if (existing.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return formatResponse(true, {
+          transaction_id: existing.rows[0].id,
+          amount: validation.amount,
+          status: 'completed',
+          duplicate: true
+        });
+      }
+    }
 
     const nodeExists = await client.query(
       'SELECT 1 FROM nodes WHERE node_id = $1',
@@ -628,9 +718,9 @@ export async function rewardNode(nodeId, amount, audit = {}) {
     const transactionId = crypto.randomUUID();
     await client.query(
       `INSERT INTO transactions
-        (id, node_id, amount, type, status, operator_id, reason, ip_address, metadata)
-       VALUES ($1, $2, $3, 'node_reward', 'completed', $4, $5, $6, $7)`,
-      [transactionId, nodeId, validation.amount, audit.operator_id || null, audit.reason || 'task reward', audit.ip_address || null, audit.metadata || '{}']
+        (id, node_id, amount, type, status, idempotency_key, operator_id, reason, ip_address, metadata)
+       VALUES ($1, $2, $3, 'node_reward', 'completed', $4, $5, $6, $7, $8)`,
+      [transactionId, nodeId, validation.amount, idempotencyKey, audit.operator_id || null, audit.reason || 'task reward', audit.ip_address || null, audit.metadata || '{}']
     );
 
     const newBalance = await creditAccount(client, nodeId, validation.amount);
@@ -647,6 +737,10 @@ export async function rewardNode(nodeId, amount, audit = {}) {
     return formatResponse(true, { transaction_id: transactionId, amount: validation.amount, status: 'completed', new_balance: newBalance });
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch (_) {}
+    if (error.code === '23505' && idempotencyKey) {
+      // 并发下唯一约束兜底：同幂等键的奖励已发放，按成功幂等返回
+      return formatResponse(true, { node_id: nodeId, status: 'completed', duplicate: true });
+    }
     logger.error('Node reward failed', { error: error.message, nodeId });
     return formatResponse(false, null, '节点奖励失败');
   } finally {
@@ -727,13 +821,14 @@ export async function getNodeBalance(nodeId) {
       return formatResponse(false, null, '节点不存在');
     }
     const dbResult = await pgPool.query(
-      'SELECT balance, escrow_balance, stake_balance FROM billing_accounts WHERE node_id = $1',
+      'SELECT balance, escrow_balance, stake_balance, sandbox_balance FROM billing_accounts WHERE node_id = $1',
       [nodeId]
     );
 
     const balance = parseFloat(dbResult.rows[0].balance) || 0;
     const escrowBalance = parseFloat(dbResult.rows[0].escrow_balance) || 0;
     const stakeBalance = parseFloat(dbResult.rows[0].stake_balance) || 0;
+    const sandboxBalance = parseFloat(dbResult.rows[0].sandbox_balance) || 0;
     // 刷新缓存，保持读取一致
     const redisClient = getRedis();
     await redisClient.set(`node:${nodeId}:balance`, balance.toString(), 'EX', BALANCE_CACHE_TTL).catch(() => {});
@@ -743,6 +838,9 @@ export async function getNodeBalance(nodeId) {
       balance,
       escrow_balance: escrowBalance,
       stake_balance: stakeBalance,
+      sandbox_balance: sandboxBalance,
+      // 可提现 = 余额 - 未消耗的赠送额度（托管/保证金中的资金本就不可提现，不计入）
+      withdrawable: Math.max(0, Math.round((balance - sandboxBalance) * 100) / 100),
       total_balance: Math.round((balance + escrowBalance + stakeBalance) * 100) / 100,
       currency: process.env.CURRENCY || 'XCL'
     });

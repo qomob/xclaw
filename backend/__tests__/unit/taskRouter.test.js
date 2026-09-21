@@ -1,6 +1,9 @@
 import { jest, describe, test, expect, beforeEach } from '@jest/globals';
 
 const mockPoolQuery = jest.fn();
+const mockClientQuery = jest.fn();
+const mockClientRelease = jest.fn();
+const mockClient = { query: mockClientQuery, release: mockClientRelease };
 const mockRedisGet = jest.fn().mockResolvedValue(null);
 const mockRedisSet = jest.fn().mockResolvedValue('OK');
 const mockRedisSmembers = jest.fn().mockResolvedValue([]);
@@ -17,7 +20,10 @@ const mockRewardNode = jest.fn().mockResolvedValue({ success: true });
 const mockTemporalClient = { available: false, startTaskWorkflow: mockStartTaskWorkflow };
 
 jest.unstable_mockModule('../../core/dependencies.js', () => ({
-  getPostgres: jest.fn(() => ({ query: mockPoolQuery })),
+  getPostgres: jest.fn(() => ({
+    query: mockPoolQuery,
+    connect: jest.fn(async () => mockClient),
+  })),
   getRedis: jest.fn(() => ({
     get: mockRedisGet,
     set: mockRedisSet,
@@ -57,9 +63,21 @@ const {
   getTaskStatus, updateTaskStatus, getNodeTasks, completeTask,
 } = await import('../../router/taskRouter.js');
 
+// 事务内查询 mock：按 SQL 特征返回（BEGIN/COMMIT/UPDATE 返回空结果）
+function primeClientQuery(taskRow) {
+  mockClientQuery.mockImplementation(async (sql) => {
+    if (/SELECT status, escrow_status FROM tasks/.test(sql)) {
+      return { rows: taskRow ? [taskRow] : [] };
+    }
+    return {};
+  });
+}
+
 describe('TaskRouter Module Tests', () => {
   beforeEach(() => {
     mockPoolQuery.mockReset();
+    mockClientQuery.mockReset();
+    mockClientRelease.mockReset();
     mockRedisGet.mockReset().mockResolvedValue(null);
     mockRedisSet.mockReset().mockResolvedValue('OK');
     mockRedisSmembers.mockReset().mockResolvedValue([]);
@@ -256,20 +274,62 @@ describe('TaskRouter Module Tests', () => {
   });
 
   describe('updateTaskStatus', () => {
-    test('should update status successfully', async () => {
-      mockPoolQuery.mockResolvedValueOnce({});
+    test('should update status successfully within allowed transition', async () => {
+      primeClientQuery({ status: 'pending', escrow_status: 'none' });
 
       const result = await updateTaskStatus('task-1', 'running');
       expect(result.success).toBe(true);
       expect(result.data.status).toBe('running');
-      expect(mockPoolQuery).toHaveBeenCalledWith(
+      expect(mockClientQuery).toHaveBeenCalledWith(
         expect.stringContaining('UPDATE tasks SET status'),
         ['running', 'task-1']
       );
+      expect(mockClientQuery).toHaveBeenCalledWith('COMMIT');
+    });
+
+    test('should reject backwards transition from submitted to pending', async () => {
+      primeClientQuery({ status: 'submitted', escrow_status: 'none' });
+
+      const result = await updateTaskStatus('task-1', 'pending');
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('不允许的状态转换');
+      expect(mockClientQuery).toHaveBeenCalledWith('ROLLBACK');
+    });
+
+    test('should reject transition out of terminal state', async () => {
+      primeClientQuery({ status: 'completed', escrow_status: 'none' });
+
+      const result = await updateTaskStatus('task-1', 'running');
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('不允许的状态转换');
+    });
+
+    test('should reject status change on escrow-held task', async () => {
+      primeClientQuery({ status: 'submitted', escrow_status: 'held' });
+
+      const result = await updateTaskStatus('task-1', 'cancelled');
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('托管');
+    });
+
+    test('should be idempotent when status unchanged', async () => {
+      primeClientQuery({ status: 'running', escrow_status: 'none' });
+
+      const result = await updateTaskStatus('task-1', 'running');
+      expect(result.success).toBe(true);
+      expect(result.data.unchanged).toBe(true);
+    });
+
+    test('should return error when task not found', async () => {
+      primeClientQuery(null);
+
+      const result = await updateTaskStatus('task-1', 'running');
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('任务不存在');
     });
 
     test('should handle database error', async () => {
-      mockPoolQuery.mockRejectedValueOnce(new Error('DB error'));
+      mockClientQuery.mockRejectedValue(new Error('DB error'));
 
       const result = await updateTaskStatus('task-1', 'running');
       expect(result.success).toBe(false);
@@ -311,7 +371,7 @@ describe('TaskRouter Module Tests', () => {
     test('should complete task successfully with billing', async () => {
       mockPoolQuery
         .mockResolvedValueOnce({ rows: [{ id: 'task-1', status: 'running', node_id: 'node-1', reward_amount: 0.05 }] })
-        .mockResolvedValueOnce({});
+        .mockResolvedValueOnce({ rows: [{ status: 'completed' }] });
 
       const result = await completeTask('task-1', { output: 'done' });
       expect(result.success).toBe(true);
@@ -321,10 +381,54 @@ describe('TaskRouter Module Tests', () => {
       expect(mockRewardNode).toHaveBeenCalledWith('node-1', 0.05, expect.any(Object));
     });
 
+    test('should pass idempotency key and amount cap to billing', async () => {
+      mockPoolQuery
+        .mockResolvedValueOnce({ rows: [{ id: 'task-1', status: 'running', node_id: 'node-1', reward_amount: 0.05 }] })
+        .mockResolvedValueOnce({ rows: [{ status: 'completed' }] });
+
+      await completeTask('task-1', { output: 'done' });
+
+      expect(mockChargeTask).toHaveBeenCalledWith(
+        'task-1',
+        0.05,
+        expect.objectContaining({ max_amount: 0.05 })
+      );
+      expect(mockRewardNode).toHaveBeenCalledWith(
+        'node-1',
+        0.05,
+        expect.objectContaining({ idempotency_key: 'task_reward:task-1' })
+      );
+    });
+
+    test('should not double-pay when task already in terminal state', async () => {
+      mockPoolQuery
+        .mockResolvedValueOnce({ rows: [{ id: 'task-1', status: 'completed', node_id: 'node-1', reward_amount: 0.05 }] })
+        .mockResolvedValueOnce({ rows: [] });
+
+      const result = await completeTask('task-1', { output: 'done' });
+      expect(result.success).toBe(true);
+      expect(result.data.duplicate).toBe(true);
+      expect(result.data.status).toBe('completed');
+      expect(mockChargeTask).not.toHaveBeenCalled();
+      expect(mockRewardNode).not.toHaveBeenCalled();
+    });
+
+    test('should reject generic completion of escrow-held task', async () => {
+      mockPoolQuery.mockResolvedValueOnce({
+        rows: [{ id: 'task-1', status: 'submitted', node_id: 'node-1', caller_id: 'caller-1', escrow_status: 'held' }]
+      });
+
+      const result = await completeTask('task-1', { output: 'done' });
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('托管');
+      expect(mockChargeTask).not.toHaveBeenCalled();
+      expect(mockRewardNode).not.toHaveBeenCalled();
+    });
+
     test('should fail task when error provided', async () => {
       mockPoolQuery
         .mockResolvedValueOnce({ rows: [{ id: 'task-1', status: 'running', node_id: 'node-1' }] })
-        .mockResolvedValueOnce({});
+        .mockResolvedValueOnce({ rows: [{ status: 'failed' }] });
 
       const result = await completeTask('task-1', null, 'Something went wrong');
       expect(result.success).toBe(true);
@@ -344,7 +448,7 @@ describe('TaskRouter Module Tests', () => {
     test('should skip billing when task has no node_id', async () => {
       mockPoolQuery
         .mockResolvedValueOnce({ rows: [{ id: 'task-1', status: 'running', node_id: null }] })
-        .mockResolvedValueOnce({});
+        .mockResolvedValueOnce({ rows: [{ status: 'completed' }] });
 
       const result = await completeTask('task-1', { output: 'done' });
       expect(result.success).toBe(true);
@@ -356,7 +460,7 @@ describe('TaskRouter Module Tests', () => {
     test('should handle billing failure gracefully', async () => {
       mockPoolQuery
         .mockResolvedValueOnce({ rows: [{ id: 'task-1', status: 'running', node_id: 'node-1' }] })
-        .mockResolvedValueOnce({});
+        .mockResolvedValueOnce({ rows: [{ status: 'completed' }] });
       mockChargeTask.mockRejectedValueOnce(new Error('Billing down'));
 
       const result = await completeTask('task-1', { output: 'done' });
@@ -367,7 +471,7 @@ describe('TaskRouter Module Tests', () => {
     test('should use TASK_BASE_PRICE when reward_amount not set', async () => {
       mockPoolQuery
         .mockResolvedValueOnce({ rows: [{ id: 'task-1', status: 'running', node_id: 'node-1' }] })
-        .mockResolvedValueOnce({});
+        .mockResolvedValueOnce({ rows: [{ status: 'completed' }] });
 
       const result = await completeTask('task-1', { output: 'done' });
       expect(result.success).toBe(true);

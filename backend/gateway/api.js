@@ -5,13 +5,14 @@ import config from '../core/config.js';
 import { registerNode, getNode, discoverNodes, handleHeartbeat, getOnlineNodes } from '../registry/nodeRegistry.js';
 import { registerSkill, getSkill, searchSkills, getNodeSkills, getSkillCategories } from '../registry/skillRegistry.js';
 import { routeTask, getTaskStatus, completeTask, updateTaskStatus, createTask, listTasks, getTaskLogs } from '../router/taskRouter.js';
-import { formatResponse, validateParams } from '../core/utils.js';
+import { formatResponse, validateParams, resolveClientIp } from '../core/utils.js';
 import { getRedis, checkPostgresHealth, checkRedisHealth, getPostgres } from '../core/dependencies.js';
+import { createRedisRateLimitStore } from '../core/rateLimitStore.js';
 import topologyService from '../services/topologyService.js';
 import authService from '../services/authService.js';
 import websocketService from '../services/websocketService.js';
 import crossNetworkService from '../services/crossChainService.js';
-import { chargeTask, chargeSkill, getTransactions, getNodeBalance, deductFromBalance, getBillingStats } from '../billing/index.js';
+import { chargeTask, chargeSkill, getTransactions, getNodeBalance, deductFromBalance, getBillingStats, invalidateBalanceCache } from '../billing/index.js';
 import {
   registerWallet, getWallets, setPrimaryWallet, removeWallet,
   createDeposit, createWithdrawal,
@@ -42,7 +43,7 @@ import {
   listDisputes, resolveDispute, processVerificationDeadlines
 } from '../services/taskMarketService.js';
 import { getGrowthOverview } from '../services/growthAnalyticsService.js';
-import { verifyApiKey, verifyApiKeyOrAgent, requireAdmin, requireAgentId, requireOwnNode, requireFederationKey } from './auth.js';
+import { verifyApiKey, verifyApiKeyOrAgent, requireAdmin, requireAgentId, requireOwnNode, requireFederationKey, requireAgentIdentity } from './auth.js';
 import { verifyWithdrawalCallback } from './auth.js';
 import { processPendingWithdrawals, handleWithdrawalCallback } from '../services/withdrawalExecutor.js';
 import { searchAgentsByIntent } from '../services/searchEngine.js';
@@ -53,6 +54,7 @@ import {
   listDeadDeliveries, retryDeliveryAdmin
 } from '../services/webhookService.js';
 import eventBus from '../services/eventBus.js';
+import logger from '../services/loggerService.js';
 
 const router = express.Router();
 const requireAuth = authService.authMiddleware.bind(authService);
@@ -176,7 +178,9 @@ router.post('/v1/agents/register', async (req, res) => {
   }
 
   const timestamp = timestampHeader !== undefined ? timestampHeader : undefined;
-  const result = await registerNode(body, signature, req.ip, timestamp);
+  // 注册 IP 用于 sandbox 额度风控：必须用可信来源解析，
+  // 直连公网时忽略可伪造的 X-Forwarded-For（见 core/utils.js resolveClientIp）
+  const result = await registerNode(body, signature, resolveClientIp(req), timestamp);
   if (result.success) {
     const nodeId = result.data.agent_id;
     const node = topologyService.getNode(nodeId);
@@ -230,11 +234,12 @@ router.get('/v1/agents/:agent_id', validateUUIDParam("agent_id"), async (req, re
   }
 });
 
-// 节点心跳
-router.post('/v1/agents/:agent_id/heartbeat', validateUUIDParam("agent_id"), async (req, res) => {
+// 节点心跳（需证明节点身份：Agent 凭据/Ed25519 签名/平台密钥三选一）——
+// 无鉴权心跳可被任意人伪造"在线"状态并改写节点地理坐标
+router.post('/v1/agents/:agent_id/heartbeat', requireAgentIdentity('agent_id'), validateUUIDParam("agent_id"), async (req, res) => {
   const { agent_id } = req.params;
   
-  const result = await handleHeartbeat(agent_id, req.ip);
+  const result = await handleHeartbeat(agent_id, resolveClientIp(req));
   if (result.success) {
     res.status(200).json(result);
   } else {
@@ -373,6 +378,11 @@ const skillLimiter = rateLimit({
   max: config.rateLimit?.skill?.max || 30,
   standardHeaders: true,
   legacyHeaders: false,
+  // Redis 存储：跨副本共享的技能调用限流
+  store: createRedisRateLimitStore({
+    prefix: 'ratelimit:skill:',
+    windowMs: config.rateLimit?.skill?.windowMs || 15 * 60 * 1000
+  }),
   validate: { ip: false, keyGeneratorIpFallback: false },
   keyGenerator: (req) => {
     const skillId = req.body?.skill_id || 'unknown';
@@ -485,14 +495,39 @@ router.post('/v1/billing/task/:task_id', requireAuth, validateUUIDParam("task_id
     if (!amount) return res.status(400).json({ error: 'amount required' });
 
     // 只有该任务的执行方（node_id）可向调用方计费，防止任意 agent 任意扣款
-    const taskRes = await getPostgres().query('SELECT node_id, caller_id FROM tasks WHERE id = $1', [task_id]);
+    const taskRes = await getPostgres().query(
+      'SELECT node_id, caller_id, reward_amount, escrow_amount, escrow_status, status FROM tasks WHERE id = $1',
+      [task_id]
+    );
     const task = taskRes.rows[0];
     if (!task) return res.status(404).json({ error: '任务不存在' });
     if (task.node_id !== req.agentId) {
       return res.status(403).json({ error: '仅任务执行方可对该任务计费' });
     }
 
-    const result = await chargeTask(task_id, amount, buildAudit(req));
+    // 计费封顶：不得超过任务约定报酬（reward_amount）或托管额（escrow_amount），
+    // 否则执行方可用一笔小额任务清空调用方全部余额
+    if (task.escrow_status === 'held') {
+      return res.status(400).json({ error: '托管任务通过托管结算付款，不允许单独计费' });
+    }
+    if (['completed', 'failed', 'cancelled', 'disputed'].includes(task.status)) {
+      return res.status(400).json({ error: '任务已结束，无法计费' });
+    }
+    const reward = parseFloat(task.reward_amount) || 0;
+    const escrow = parseFloat(task.escrow_amount) || 0;
+    // 通用任务（未显式约定报酬/托管）的默认结算价与 completeTask 的计费口径一致
+    const defaultPrice = parseFloat(process.env.TASK_BASE_PRICE || '0.01');
+    const ceiling = Math.round(
+      Math.max(reward, escrow, reward > 0 || escrow > 0 ? 0 : defaultPrice) * 100
+    ) / 100;
+    if (ceiling <= 0) {
+      return res.status(400).json({ error: '任务未约定可结算金额，拒绝计费' });
+    }
+    if (Number(amount) > ceiling) {
+      return res.status(400).json({ error: `计费金额不得超过任务约定金额 ${ceiling}` });
+    }
+
+    const result = await chargeTask(task_id, amount, { ...buildAudit(req), max_amount: ceiling });
     res.status(result.success ? 200 : 400).json(result);
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });
@@ -540,6 +575,14 @@ router.post('/v1/billing/node/:node_id/withdraw', requireAuth, requireAgentId("n
     if (!amount) return res.status(400).json({ error: 'amount required' });
     const audit = buildAudit(req);
     if (reason) audit.reason = reason;
+    // 只允许扣减可提现部分（余额 - 未消耗 sandbox 赠送额度）
+    const { getWithdrawableBalance } = await import('../billing/index.js');
+    const { withdrawable, sandbox_balance } = await getWithdrawableBalance(getPostgres(), node_id);
+    if (Number(amount) > withdrawable) {
+      return res.status(400).json({
+        error: `可提现金额不足（可提现 ${withdrawable}，其中 ${sandbox_balance} 为不可提现的赠送额度）`
+      });
+    }
     const result = await deductFromBalance(node_id, amount, audit);
     res.status(result.success ? 200 : 400).json(result);
   } catch (error) {
@@ -547,11 +590,14 @@ router.post('/v1/billing/node/:node_id/withdraw', requireAuth, requireAgentId("n
   }
 });
 
+// 交易流水：只能查询自己的账户（此前任意已认证 Agent 可通过 node_id 参数读他人流水）
 router.get('/v1/billing/transactions', requireAuth, async (req, res) => {
   try {
     const { node_id, type, from_date, to_date, limit, offset } = req.query;
-    const filters = {};
-    if (node_id) filters.node_id = node_id;
+    if (node_id && node_id !== req.agentId) {
+      return res.status(403).json({ success: false, error: '无权查询其他节点的交易记录' });
+    }
+    const filters = { node_id: req.agentId };
     if (type) filters.type = type;
     if (from_date) filters.from_date = from_date;
     if (to_date) filters.to_date = to_date;
@@ -1023,11 +1069,12 @@ router.get('/v1/tasks', async (req, res) => {
 
 router.post('/v1/tasks', requireAuth, async (req, res) => {
   try {
-    const { title, description, type, target_agent_id, priority, tags, payload } = req.body;
+    const { title, description, type, target_agent_id, priority, tags, payload, reward_amount } = req.body;
     const taskData = {
       type: type || title || 'general',
       payload: payload || { title, description, priority, tags },
       node_id: target_agent_id || null,
+      reward_amount,
       // 记录创建者：completeTask/updateTaskStatus 的归属校验依赖 caller_id
       caller_id: req.agentId || null
     };
@@ -1125,10 +1172,13 @@ router.get('/v1/agents/:agent_id/stats', requireAuth, requireAgentId("agent_id")
   }
 });
 
-// 充值仅限管理员（无真实支付渠道时禁止公开造币）
+// 充值仅限管理员（无真实支付渠道时禁止公开造币）。
+// 交易记录与余额入账在同一事务内完成，支持 idempotency_key 防重复入账
 router.post('/v1/billing/topup', verifyApiKey, requireAdmin, async (req, res) => {
+  const pgPool = getPostgres();
+  const client = await pgPool.connect();
   try {
-    const { node_id, amount, method } = req.body;
+    const { node_id, amount, method, idempotency_key } = req.body;
     if (!node_id) {
       return res.status(400).json({ error: 'node_id is required' });
     }
@@ -1139,24 +1189,46 @@ router.post('/v1/billing/topup', verifyApiKey, requireAdmin, async (req, res) =>
       return res.status(400).json({ error: 'amount exceeds maximum' });
     }
     const agentId = node_id;
-    const { executeQuery } = await import('../services/databaseService.js');
-    // 创建充值交易记录
-    const { rows } = await executeQuery(
-      `INSERT INTO transactions (node_id, amount, type, status, reason, metadata)
-       VALUES ($1, $2, 'topup', 'completed', $3, $4)
+    const roundedAmount = Math.round(Number(amount) * 100) / 100;
+    const idemKey = idempotency_key ? `topup:${node_id}:${idempotency_key}` : null;
+
+    await client.query('BEGIN');
+
+    if (idemKey) {
+      const existing = await client.query(
+        'SELECT * FROM transactions WHERE idempotency_key = $1',
+        [idemKey]
+      );
+      if (existing.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return res.json({ success: true, data: existing.rows[0], duplicate: true });
+      }
+    }
+
+    const { rows } = await client.query(
+      `INSERT INTO transactions (node_id, amount, type, status, idempotency_key, reason, metadata)
+       VALUES ($1, $2, 'topup', 'completed', $3, $4, $5)
        RETURNING *`,
-      [agentId, amount, `Top-up via ${method || 'unknown'}`, JSON.stringify({ method, source: 'api' })]
+      [agentId, roundedAmount, idemKey, `Top-up via ${method || 'unknown'}`, JSON.stringify({ method, source: 'api', operator_id: req.agentId || null })]
     );
-    // 更新或创建账户余额
-    await executeQuery(
+    await client.query(
       `INSERT INTO billing_accounts (node_id, balance)
        VALUES ($1, $2)
        ON CONFLICT (node_id) DO UPDATE SET balance = billing_accounts.balance + $2, updated_at = NOW()`,
-      [agentId, amount]
+      [agentId, roundedAmount]
     );
+
+    await client.query('COMMIT');
+    await invalidateBalanceCache(agentId);
     res.json({ success: true, data: rows[0] });
   } catch (error) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    if (error.code === '23505') {
+      return res.status(409).json({ success: false, error: '重复的充值请求（idempotency_key 冲突）' });
+    }
     res.status(500).json({ success: false, error: 'Internal server error' });
+  } finally {
+    client.release();
   }
 });
 
@@ -1378,8 +1450,8 @@ router.get('/v1/agents/:agent_id/tasks', validateUUIDParam("agent_id"), async (r
   } catch (error) { res.status(500).json({ success: false, error: error.message }); }
 });
 
-// Agent billing summary
-router.get('/v1/agents/:agent_id/billing', validateUUIDParam("agent_id"), async (req, res) => {
+// Agent billing summary（仅账户本人可读：余额与流水属于敏感财务数据）
+router.get('/v1/agents/:agent_id/billing', requireAuth, requireAgentId("agent_id"), validateUUIDParam("agent_id"), async (req, res) => {
   try {
     const { agent_id } = req.params;
     const balance = await executeQuery(
@@ -2396,6 +2468,17 @@ router.post('/v1/admin/task-market/verification/process', verifyApiKey, requireA
   try {
     const results = await processVerificationDeadlines(req.query.limit);
     res.json({ success: true, data: { processed: results.length, results } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 账本对账：托管/保证金不变量、负余额、卡死资金、余额与流水漂移（只读，不自动修正）
+router.get('/v1/admin/reconciliation', verifyApiKey, requireAdmin, async (req, res) => {
+  try {
+    const { runReconciliation } = await import('../services/reconciliationService.js');
+    const report = await runReconciliation({ sampleLimit: parseInt(req.query.sample_limit) || 20 });
+    res.status(report.ok ? 200 : 409).json({ success: true, data: report });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

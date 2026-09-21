@@ -19,7 +19,7 @@ jest.unstable_mockModule('../../core/dependencies.js', () => ({
   })),
 }));
 
-const { chargeTask, chargeSkill, rewardNode, getTransactions, getNodeBalance, deductFromBalance } =
+const { chargeTask, chargeSkill, rewardNode, getTransactions, getNodeBalance, deductFromBalance, getWithdrawableBalance } =
   await import('../../billing/index.js');
 
 describe('Billing Module Tests', () => {
@@ -105,6 +105,49 @@ describe('Billing Module Tests', () => {
       expect(result.error).toContain('不能超过');
     });
 
+    test('should reject amount exceeding the task-provided cap', async () => {
+      const result = await chargeTask('task-capped', 50, { max_amount: 5 });
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('不得超过任务约定金额');
+    });
+
+    test('should allow amount equal to the task-provided cap', async () => {
+      mockClientQuery
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({});
+
+      const result = await chargeTask('task-capped-ok', 5, { max_amount: 5 });
+      expect(result.success).toBe(true);
+      expect(result.data.amount).toBe(5);
+    });
+
+    test('should reject invalid task-provided cap', async () => {
+      const result = await chargeTask('task-bad-cap', 1, { max_amount: 0 });
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('任务约定金额无效');
+    });
+
+    test('should decrement sandbox quota on debit', async () => {
+      mockClientQuery
+        .mockResolvedValueOnce({}) // BEGIN
+        .mockResolvedValueOnce({ rows: [] }) // idempotency lookup miss
+        .mockResolvedValueOnce({ rows: [{ caller_id: 'caller-1' }] }) // task caller
+        .mockResolvedValueOnce({}) // ensureBillingAccount
+        .mockResolvedValueOnce({ rows: [{ balance: '9.00' }] }) // debit
+        .mockResolvedValueOnce({ rows: [] }) // INSERT transactions
+        .mockResolvedValueOnce({}); // COMMIT
+
+      const result = await chargeTask('task-sandbox', 1);
+      expect(result.success).toBe(true);
+
+      const debitSql = mockClientQuery.mock.calls
+        .map(([sql]) => sql)
+        .find(sql => typeof sql === 'string' && sql.includes('balance = balance - $1'));
+      expect(debitSql).toContain('sandbox_balance');
+    });
+
     test('should round amount to 2 decimal places', async () => {
       mockClientQuery
         .mockResolvedValueOnce({})
@@ -133,6 +176,37 @@ describe('Billing Module Tests', () => {
       mockClientQuery.mockRejectedValueOnce(new Error('fail'));
       await chargeTask('task-release');
       expect(mockRelease).toHaveBeenCalled();
+    });
+  });
+
+  describe('getWithdrawableBalance', () => {
+    test('should exclude unconsumed sandbox credit from withdrawable amount', async () => {
+      mockPoolQuery
+        .mockResolvedValueOnce({}) // ensureBillingAccount
+        .mockResolvedValueOnce({ rows: [{ balance: '10.00', sandbox_balance: '10.00' }] });
+
+      const result = await getWithdrawableBalance({ query: mockPoolQuery }, 'node-1');
+      expect(result.balance).toBe(10);
+      expect(result.sandbox_balance).toBe(10);
+      expect(result.withdrawable).toBe(0);
+    });
+
+    test('should count real deposits as withdrawable', async () => {
+      mockPoolQuery
+        .mockResolvedValueOnce({}) // ensureBillingAccount
+        .mockResolvedValueOnce({ rows: [{ balance: '30.00', sandbox_balance: '10.00' }] });
+
+      const result = await getWithdrawableBalance({ query: mockPoolQuery }, 'node-2');
+      expect(result.withdrawable).toBe(20);
+    });
+
+    test('should never return negative withdrawable', async () => {
+      mockPoolQuery
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({ rows: [{ balance: '1.00', sandbox_balance: '10.00' }] });
+
+      const result = await getWithdrawableBalance({ query: mockPoolQuery }, 'node-3');
+      expect(result.withdrawable).toBe(0);
     });
   });
 
@@ -233,6 +307,53 @@ describe('Billing Module Tests', () => {
 
       await rewardNode('node-cache', 1.0);
       expect(mockRedisDel).toHaveBeenCalledWith('node:node-cache:balance');
+    });
+
+    test('should be idempotent when idempotency key already used', async () => {
+      mockClientQuery
+        .mockResolvedValueOnce({}) // BEGIN
+        .mockResolvedValueOnce({ rows: [{ id: 'tx-existing' }] }) // idempotency lookup hit
+        .mockResolvedValueOnce({}); // ROLLBACK
+
+      const result = await rewardNode('node-1', 0.5, { idempotency_key: 'task_reward:task-1' });
+      expect(result.success).toBe(true);
+      expect(result.data.duplicate).toBe(true);
+      expect(result.data.transaction_id).toBe('tx-existing');
+      // 不得再次入账：没有 UPDATE billing_accounts
+      const credited = mockClientQuery.mock.calls.some(
+        ([sql]) => typeof sql === 'string' && sql.includes('balance = balance + $1')
+      );
+      expect(credited).toBe(false);
+    });
+
+    test('should persist idempotency key on reward insert', async () => {
+      mockClientQuery
+        .mockResolvedValueOnce({}) // BEGIN
+        .mockResolvedValueOnce({ rows: [] }) // idempotency lookup miss
+        .mockResolvedValueOnce({ rows: [{ exists: 1 }] }) // node exists
+        .mockResolvedValueOnce({ rows: [] }) // INSERT transactions
+        .mockResolvedValueOnce({}) // ensureBillingAccount
+        .mockResolvedValueOnce({ rows: [{ balance: '10' }] }) // credit balance
+        .mockResolvedValueOnce({}); // COMMIT
+
+      const result = await rewardNode('node-1', 0.5, { idempotency_key: 'task_reward:task-1' });
+      expect(result.success).toBe(true);
+      const insert = mockClientQuery.mock.calls.find(
+        ([sql]) => typeof sql === 'string' && sql.includes('INSERT INTO transactions')
+      );
+      expect(insert[1]).toContain('task_reward:task-1');
+    });
+
+    test('should treat concurrent duplicate (23505) as idempotent success', async () => {
+      mockClientQuery
+        .mockResolvedValueOnce({}) // BEGIN
+        .mockResolvedValueOnce({ rows: [] }) // idempotency lookup miss
+        .mockResolvedValueOnce({ rows: [{ exists: 1 }] }) // node exists
+        .mockRejectedValueOnce({ code: '23505' }); // INSERT 唯一约束冲突
+
+      const result = await rewardNode('node-1', 0.5, { idempotency_key: 'task_reward:task-1' });
+      expect(result.success).toBe(true);
+      expect(result.data.duplicate).toBe(true);
     });
   });
 

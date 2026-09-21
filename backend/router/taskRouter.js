@@ -14,6 +14,25 @@ const MAX_TASKS_PER_NODE = parseInt(process.env.MAX_TASKS_PER_NODE || '10');
 const TASK_TIMEOUT_MS = parseInt(process.env.TASK_TIMEOUT_MS || '300000');
 const TASK_MAX_RETRIES = parseInt(process.env.TASK_MAX_RETRIES || '2');
 
+// 通用任务状态机：终态不可逆，禁止逆向流转。
+// 托管/任务市场任务（escrow_status='held'）的状态只能由 taskMarketService 驱动，
+// 通用接口一旦放行即可"提交后再改回 pending 取消退款"或"重复完成重复领奖"。
+export const TASK_STATUS_TRANSITIONS = {
+  pending:   ['open', 'assigned', 'running', 'completed', 'failed', 'cancelled'],
+  open:      ['assigned', 'running', 'cancelled', 'failed'],
+  assigned:  ['running', 'submitted', 'completed', 'failed', 'cancelled'],
+  running:   ['submitted', 'completed', 'failed', 'cancelled'],
+  submitted: ['completed', 'failed'],
+  completed: [],
+  failed:    [],
+  cancelled: [],
+  disputed:  []
+};
+
+export function isTerminalTaskStatus(status) {
+  return ['completed', 'failed', 'cancelled', 'disputed'].includes(status);
+}
+
 function withTimeout(promise, ms, message) {
   let timer;
   return Promise.race([
@@ -145,9 +164,20 @@ export async function createTask(taskData) {
   const pgPool = getPostgres();
   try {
     const id = taskData.id || crypto.randomUUID();
+    // 可选约定报酬：执行方按 /v1/billing/task/:id 计费时的封顶依据；
+    // 未提供时由 completeTask/计费接口回退到 TASK_BASE_PRICE
+    let rewardAmount = null;
+    if (taskData.reward_amount !== undefined && taskData.reward_amount !== null && taskData.reward_amount !== '') {
+      const parsed = Number(taskData.reward_amount);
+      const maxSingle = parseFloat(process.env.MAX_SINGLE_AMOUNT || '1000000');
+      if (!Number.isFinite(parsed) || parsed <= 0 || parsed > maxSingle) {
+        return { success: false, error: `reward_amount 必须为 0 到 ${maxSingle} 之间的正数` };
+      }
+      rewardAmount = Math.round(parsed * 100) / 100;
+    }
     const { rows } = await pgPool.query(
-      `INSERT INTO tasks (id, type, payload, status, node_id, skill_id, caller_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO tasks (id, type, payload, status, node_id, skill_id, caller_id, reward_amount)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
       [
         id,
@@ -156,7 +186,8 @@ export async function createTask(taskData) {
         'pending',
         taskData.node_id || null,
         taskData.skill_id || null,
-        taskData.caller_id || null
+        taskData.caller_id || null,
+        rewardAmount
       ]
     );
     eventBus.emit('task.created', { task_id: id, skill_id: taskData.skill_id || null, node_id: taskData.node_id || null, caller_id: taskData.caller_id || null }, { sourceId: taskData.caller_id || taskData.node_id || null });
@@ -343,17 +374,49 @@ export async function getTaskStatus(taskId) {
 
 export async function updateTaskStatus(taskId, status, result = null) {
   const pgPool = getPostgres();
+  const client = await pgPool.connect();
 
   try {
-    await pgPool.query(
+    await client.query('BEGIN');
+
+    const taskRes = await client.query(
+      'SELECT status, escrow_status FROM tasks WHERE id = $1 FOR UPDATE',
+      [taskId]
+    );
+    if (taskRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return formatResponse(false, null, '任务不存在');
+    }
+
+    const task = taskRes.rows[0];
+    if (task.escrow_status === 'held') {
+      await client.query('ROLLBACK');
+      return formatResponse(false, null, '该任务处于托管流程，状态由任务市场接口驱动');
+    }
+    if (task.status === status) {
+      await client.query('ROLLBACK');
+      return formatResponse(true, { status, result, unchanged: true });
+    }
+    const allowed = TASK_STATUS_TRANSITIONS[task.status] || [];
+    if (!allowed.includes(status)) {
+      await client.query('ROLLBACK');
+      return formatResponse(false, null, `不允许的状态转换: ${task.status} → ${status}`);
+    }
+
+    await client.query(
       'UPDATE tasks SET status = $1, updated_at = NOW() WHERE id = $2',
       [status, taskId]
     );
 
+    await client.query('COMMIT');
+    logger.info('Task status updated', { taskId, from: task.status, to: status });
     return formatResponse(true, { status, result });
   } catch (error) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
     logger.error('Failed to update task status', { error: error.message, taskId, status });
     return formatResponse(false, null, '更新任务状态失败');
+  } finally {
+    client.release();
   }
 }
 
@@ -404,11 +467,26 @@ export async function completeTask(taskId, result, error = null, options = {}) {
       }
     }
 
+    // 托管/市场任务必须走任务市场接口：通用完成路径会另行扣款+发奖，
+    // 与 escrow 释放叠加即构成双重支付
+    if (task.escrow_status === 'held') {
+      return formatResponse(false, null, '该任务处于托管流程，请使用任务市场接口提交结果');
+    }
+
     const status = error ? 'failed' : 'completed';
-    await pgPool.query(
-      'UPDATE tasks SET status = $1, updated_at = NOW() WHERE id = $2',
+    // 原子状态转换：仅允许从非终态进入终态。重复调用不会再次扣款/发奖（幂等）
+    const updated = await pgPool.query(
+      `UPDATE tasks SET status = $1, updated_at = NOW()
+        WHERE id = $2 AND status NOT IN ('completed', 'failed', 'cancelled', 'disputed')
+        RETURNING status`,
       [status, taskId]
     );
+    if (updated.rows.length === 0) {
+      logger.info('Task already in terminal state, duplicate completion ignored', {
+        taskId, currentStatus: task.status
+      });
+      return formatResponse(true, { status: task.status, result, duplicate: true });
+    }
 
     await redisClient.publish(`task:${taskId}:result`, JSON.stringify({
       success: !error,
@@ -417,10 +495,19 @@ export async function completeTask(taskId, result, error = null, options = {}) {
     }));
 
     if (status === 'completed' && task.node_id) {
-      const rewardAmount = task.reward_amount || TASK_BASE_PRICE;
-      const audit = { operator_id: task.node_id, reason: `task_complete:${taskId}` };
+      const rewardAmount = parseFloat(task.reward_amount) || TASK_BASE_PRICE;
+      const audit = {
+        operator_id: task.node_id,
+        reason: `task_complete:${taskId}`,
+        // 奖励幂等键：即便上游状态守卫被绕过，同一任务的奖励也只可能发放一次
+        idempotency_key: `task_reward:${taskId}`
+      };
       // 先真实扣减调用方余额，扣费成功才发放奖励，防止凭空造币
-      const chargeResult = await chargeTask(taskId, rewardAmount, audit).catch((billingError) => {
+      const chargeResult = await chargeTask(taskId, rewardAmount, {
+        ...audit,
+        // 计费同样受任务约定金额封顶，防止执行方在通用完成路径超额扣款
+        max_amount: rewardAmount
+      }).catch((billingError) => {
         logger.error('Auto chargeTask failed', { error: billingError.message, taskId });
         return formatResponse(false, null, '任务计费失败');
       });

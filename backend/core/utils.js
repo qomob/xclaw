@@ -129,6 +129,38 @@ export function signaturePayload(timestamp, body) {
   return `${timestamp}:${bodyString}`;
 }
 
+/**
+ * 解析可信客户端 IP（用于限频/风控，如 sandbox 额度发放）。
+ *
+ * `app.set('trust proxy', 1)` 只在请求确实来自可信代理时才可信：
+ * 若后端端口可被直连，攻击者可自带 X-Forwarded-For 伪造来源 IP。
+ * 规则：直连来源是公网地址 → 直接采信 socket 地址，忽略 XFF；
+ *       直连来源是内网/回环（反代场景）→ 采信 XFF 最右侧一跳（由最近的可信代理写入）。
+ */
+export function resolveClientIp(req) {
+  const remote = req.socket?.remoteAddress || '';
+  if (isPrivateAddress(remote)) {
+    const xff = String(req.headers['x-forwarded-for'] || '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+    if (xff.length > 0) return xff[xff.length - 1];
+  }
+  return remote;
+}
+
+function isPrivateAddress(addr) {
+  if (!addr) return false;
+  const ip = addr.replace(/^::ffff:/, '');
+  if (ip === '::1' || ip.startsWith('127.') || ip.startsWith('10.') || ip.startsWith('192.168.')) return true;
+  if (ip.startsWith('169.254.')) return true;
+  const m = ip.match(/^172\.(\d{1,3})\./);
+  if (m && Number(m[1]) >= 16 && Number(m[1]) <= 31) return true;
+  // fc00::/7 唯一本地地址
+  if (/^f[cd][0-9a-f]{2}:/i.test(ip)) return true;
+  return false;
+}
+
 // 计算两个坐标之间的距离（Haversine 公式）
 export function calculateDistance(lat1, lon1, lat2, lon2) {
   const R = 6371; // 地球半径（公里）
