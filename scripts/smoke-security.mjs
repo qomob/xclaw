@@ -323,6 +323,35 @@ async function testReconciliation() {
   check('对账接口需要管理员凭据', noAuth.status === 401 || noAuth.status === 403, `status=${noAuth.status}`);
 }
 
+// ── 8b. 广播投递（跨实例桥接频道隔离） ──────────────────────
+async function testBroadcastDelivery(a, b) {
+  console.log('\n[8b] Agent 广播投递');
+  const received = [];
+  const wsA = await openAgentSocket(a.agentId);
+  const wsB = await openAgentSocket(b.agentId);
+  const authedA = await authSocket(wsA, a, a.keys);
+  const authedB = await authSocket(wsB, b, b.keys);
+  check('收发双方均认证成功', authedA && authedB);
+
+  wsB.on('message', (raw) => {
+    try {
+      const m = JSON.parse(raw.toString());
+      if (m.type === 'BROADCAST') received.push(m);
+    } catch { /* ignore */ }
+  });
+
+  const content = `smoke-broadcast-${Date.now()}`;
+  wsA.send(JSON.stringify({ type: 'BROADCAST', sender_id: a.agentId, content }));
+  await new Promise(r => setTimeout(r, 1500));
+
+  const hit = received.filter(m => m.content === content && m.sender_id === a.agentId);
+  check('广播送达其他 Agent（内容与发送者一致）', hit.length === 1,
+    `收到 ${hit.length} 帧: ${JSON.stringify(received).slice(0, 200)}`);
+
+  wsA.close();
+  wsB.close();
+}
+
 async function main() {
   console.log(`XClaw 安全回归冒烟 → ${BASE}`);
   const a = await createAgent(`smoke-a-${Date.now()}`);
@@ -335,6 +364,7 @@ async function main() {
   await testTaskMoneyPath(a, b);
   await testSandboxNotWithdrawable(b);
   await testWsKick(a);
+  await testBroadcastDelivery(a, b);
   await testReconciliation();
 
   console.log(`\n结果: ${pass} 通过, ${fail} 失败`);

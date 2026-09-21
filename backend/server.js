@@ -125,15 +125,23 @@ const server = app.listen(port, config.server.host, async () => {
 // Redis 连接 (通过依赖注入获取)
 const redis = getRedis();
 
-// 跨实例广播桥：每个实例订阅同一频道，只向本地连接投递；
-// 发起实例已在本地直投（instance 标记去重），避免重复下发
+// 跨实例广播桥（Agent WSS 专用）：每个实例订阅同一频道，只向本地连接投递；
+// 发起实例已在本地直投（instance 标记去重），避免重复下发。
+// 频道名独立于 realtimePushService 的 xclaw:ws:broadcast（/ws 实时推流），
+// 两者若共用频道会互相投递异构消息（对方广播会被误投成空 BROADCAST 帧）。
+const AGENT_BROADCAST_CHANNEL = 'xclaw:ws:agent-broadcast';
+const AGENT_BROADCAST_KIND = 'agent-broadcast';
+
 async function initBroadcastBridge() {
   try {
     const sub = redis.duplicate();
     sub.on('message', (channel, message) => {
-      if (channel !== 'xclaw:ws:broadcast') return;
+      if (channel !== AGENT_BROADCAST_CHANNEL) return;
       try {
-        const { sender_id, content, tags, timestamp, instance } = JSON.parse(message);
+        const parsed = JSON.parse(message);
+        // 类型标记校验：非本桥消息（如误发到同频道）一律忽略
+        if (parsed?.kind !== AGENT_BROADCAST_KIND) return;
+        const { sender_id, content, tags, timestamp, instance } = parsed;
         if (instance === instanceId) return; // 本实例已直投
         for (const [agentId, client] of wsConnections) {
           if (agentId === sender_id) continue;
@@ -152,7 +160,7 @@ async function initBroadcastBridge() {
         logger.warn('Broadcast bridge delivery error', { error: err.message });
       }
     });
-    await sub.subscribe('xclaw:ws:broadcast');
+    await sub.subscribe(AGENT_BROADCAST_CHANNEL);
     logger.info('Cross-instance broadcast bridge initialized', { instance: instanceId });
   } catch (err) {
     logger.warn('Failed to initialize broadcast bridge', { error: err.message });
@@ -656,7 +664,8 @@ async function handleBroadcastMessage(message, authenticatedAgentId) {
   // 跨实例投递：本实例已直接下发，其余实例通过 Redis 频道向各自的本地连接投递。
   // （此前只遍历本地 wsConnections，连到其他副本的 Agent 收不到广播）
   try {
-    await redis.publish('xclaw:ws:broadcast', JSON.stringify({
+    await redis.publish(AGENT_BROADCAST_CHANNEL, JSON.stringify({
+      kind: AGENT_BROADCAST_KIND,
       sender_id, content, tags, timestamp, instance: instanceId
     }));
   } catch (err) {
