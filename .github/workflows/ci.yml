@@ -49,6 +49,8 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - name: Install
         run: cd backend && npm ci
+      - name: Lint (backend)
+        run: cd backend && npm run lint
       - name: Unit tests
         run: cd backend && npm run test:unit -- --runInBand --no-watchman
       - name: Start server for integration tests
@@ -82,6 +84,8 @@ jobs:
         run: cd frontend && npm ci
       - name: Lint
         run: cd frontend && npm run lint
+      - name: Unit tests
+        run: cd frontend && npm test
       - name: Build
         run: cd frontend && npm run build
       # 前端审计走过滤脚本：豁免已评估接受的 deck.gl/image-size DoS 通告（见脚本头部说明），

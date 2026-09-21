@@ -201,7 +201,9 @@ class CrossNetworkService {
         }
 
         const result = await response.json();
-        if (!result.success) throw new result.error || new Error('Remote rejected message');
+        if (!result.success) {
+          throw new Error(typeof result.error === 'string' ? result.error : 'Remote rejected message');
+        }
         return;
       } catch (error) {
         lastError = error;

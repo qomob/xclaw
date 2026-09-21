@@ -107,10 +107,30 @@ export class AlertManager {
     }
 
     for (const alert of fired) {
-      const last = this.cooldowns.get(alert.rule) || 0;
-      if (now - last < this.cooldownMs) continue;
-      this.cooldowns.set(alert.rule, now);
+      // 冷却窗口跨实例生效：用 Redis SET NX EX 原子占位，
+      // 多副本部署时同一规则只有一个实例会外发（此前是进程内 Map，N 副本 = N 条重复告警）
+      if (!(await this._tryAcquireCooldown(alert.rule, now))) continue;
       await this._dispatch(alert);
+    }
+  }
+
+  async _tryAcquireCooldown(rule, now) {
+    const ttlSeconds = Math.max(1, Math.ceil(this.cooldownMs / 1000));
+    try {
+      const redis = getRedis();
+      const ok = await redis.set(`alerts:cooldown:${rule}`, String(now), 'EX', ttlSeconds, 'NX');
+      if (ok === 'OK') {
+        this.cooldowns.set(rule, now); // 本地镜像，便于观测
+        return true;
+      }
+      return false;
+    } catch (err) {
+      // Redis 不可用时退回进程内冷却（宁可重复告警，不可告警风暴）
+      logger.warn('[Alerts] Cooldown Redis unavailable, using in-process cooldown', { error: err.message });
+      const last = this.cooldowns.get(rule) || 0;
+      if (now - last < this.cooldownMs) return false;
+      this.cooldowns.set(rule, now);
+      return true;
     }
   }
 

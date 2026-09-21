@@ -21,6 +21,12 @@ const router = Router();
  * 如果是开发者级 API Key（sandbox_api_key 或 developer_api_keys），设置 req.developerId
  */
 router.use(async (req, res, next) => {
+  // 仅约束本模块路由：该 router 挂在根路径且位于全部路由之后，
+  // 不做前缀判断会把"路径拼错/不存在的接口"也变成 401，掩盖真实的 404
+  if (!req.path.startsWith('/v1/developer')) {
+    return next();
+  }
+
   const authHeader = req.headers['authorization'];
   const systemApiKey = config.security.apiKey;
 

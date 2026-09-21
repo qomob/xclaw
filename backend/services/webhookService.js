@@ -474,16 +474,38 @@ async function processRetryQueue() {
   let result;
   try {
     const pool = getPostgres();
-    result = await pool.query(
-      `SELECT wd.id as delivery_id, wd.payload, wd.attempts,
-              w.id as webhook_id, w.url, w.secret
-       FROM webhook_deliveries wd
-       JOIN webhooks w ON wd.webhook_id = w.id
-       WHERE wd.status = 'retrying'
-         AND wd.next_retry_at <= NOW()
-         AND w.active = true
-       LIMIT 20`
-    );
+    // 原子领取：FOR UPDATE SKIP LOCKED + 状态改回 pending 在同一事务内完成，
+    // 多副本部署时同一投递只会被一个实例领走（此前各副本会重复投递同一 webhook）
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const claimed = await client.query(
+        `SELECT wd.id as delivery_id, wd.payload, wd.attempts,
+                w.id as webhook_id, w.url, w.secret
+         FROM webhook_deliveries wd
+         JOIN webhooks w ON wd.webhook_id = w.id
+         WHERE wd.status = 'retrying'
+           AND wd.next_retry_at <= NOW()
+           AND w.active = true
+         ORDER BY wd.next_retry_at ASC
+         LIMIT 20
+         FOR UPDATE OF wd SKIP LOCKED`
+      );
+      if (claimed.rows.length > 0) {
+        await client.query(
+          `UPDATE webhook_deliveries SET status = 'pending', updated_at = NOW()
+            WHERE id = ANY($1::uuid[])`,
+          [claimed.rows.map(r => r.delivery_id)]
+        );
+      }
+      await client.query('COMMIT');
+      result = claimed;
+    } catch (err) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      throw err;
+    } finally {
+      client.release();
+    }
   } catch (err) {
     logger.warn('[WebhookService] processRetryQueue query failed', { error: err.message });
     return;
@@ -491,16 +513,10 @@ async function processRetryQueue() {
 
   if (!result || !result.rows || result.rows.length === 0) return;
 
-  const pool = getPostgres();
   for (const row of result.rows) {
     const payload = typeof row.payload === 'string'
       ? JSON.parse(row.payload)
       : row.payload;
-
-    await pool.query(
-      `UPDATE webhook_deliveries SET status = 'pending', updated_at = NOW() WHERE id = $1`,
-      [row.delivery_id]
-    );
 
     setImmediate(() => deliverWebhook(
       row.delivery_id,

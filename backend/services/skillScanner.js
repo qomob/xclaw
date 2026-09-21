@@ -7,6 +7,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { runInStrongSandbox, isDockerAvailable } from './codeSandbox.js';
+import logger from './loggerService.js';
 
 const RULES = [
   { id: 'INJ_SHELL', severity: 'critical', type: 'code_injection',

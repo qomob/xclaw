@@ -1,3 +1,10 @@
+-- XClaw 数据库基线 Schema
+--
+-- ⚠️ 权威来源是 backend/migrations/*.sql：容器启动时按序执行全部迁移，
+-- 本文件只提供「全新部署的首个基线」。文件末尾的「迁移增量」区块列出
+-- 后续迁移新增的表/列，保证该文件与线上真实结构一致（便于人工查阅）。
+-- 变更结构时请新增迁移文件，并同步更新本文件的对应区块。
+
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
@@ -381,3 +388,84 @@ CREATE TABLE IF NOT EXISTS reputation_snapshots (
     total_events INTEGER DEFAULT 0,
     last_computed_at TIMESTAMP DEFAULT NOW()
 );
+
+-- ============================================================
+-- 迁移增量（backend/migrations 追加的表与列，随迁移演进）
+-- ============================================================
+
+-- 002: 事件日志 metadata / 任务市场统计
+ALTER TABLE event_log ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}';
+
+CREATE TABLE IF NOT EXISTS task_market_stats (
+  id SERIAL PRIMARY KEY,
+  total_tasks INTEGER DEFAULT 0,
+  open_tasks INTEGER DEFAULT 0,
+  assigned_tasks INTEGER DEFAULT 0,
+  completed_tasks INTEGER DEFAULT 0,
+  cancelled_tasks INTEGER DEFAULT 0,
+  active_bids INTEGER DEFAULT 0,
+  total_budget_min NUMERIC(16, 2) DEFAULT 0,
+  total_budget_max NUMERIC(16, 2) DEFAULT 0,
+  avg_budget_min NUMERIC(16, 2) DEFAULT 0,
+  avg_budget_max NUMERIC(16, 2) DEFAULT 0,
+  unique_caller_count INTEGER DEFAULT 0,
+  unique_worker_count INTEGER DEFAULT 0,
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 003: 指标快照
+CREATE TABLE IF NOT EXISTS metrics_snapshots (
+  id BIGSERIAL PRIMARY KEY,
+  online_nodes INTEGER DEFAULT 0,
+  total_nodes INTEGER DEFAULT 0,
+  task_total INTEGER DEFAULT 0,
+  task_completed INTEGER DEFAULT 0,
+  task_failed INTEGER DEFAULT 0,
+  success_rate DOUBLE PRECISION DEFAULT 0,
+  ws_connections INTEGER DEFAULT 0,
+  memory_rss BIGINT DEFAULT 0,
+  cpu_usage DOUBLE PRECISION DEFAULT 0,
+  error_rate DOUBLE PRECISION DEFAULT 0,
+  db_connections INTEGER DEFAULT 0,
+  avg_latency DOUBLE PRECISION DEFAULT 0,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_metrics_snapshots_created ON metrics_snapshots(created_at DESC);
+
+-- 004: 任务托管与验收
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS escrow_amount DECIMAL(16, 2) DEFAULT 0;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS escrow_status VARCHAR(20) DEFAULT 'none';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMP;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS verification_deadline TIMESTAMP;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS verification_status VARCHAR(20) DEFAULT 'none';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS result_evidence JSONB;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS dispute_reason TEXT;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS resolution VARCHAR(20);
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMP;
+
+CREATE TABLE IF NOT EXISTS task_disputes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  opened_by UUID,
+  reason TEXT NOT NULL,
+  evidence JSONB DEFAULT '{}',
+  status VARCHAR(20) DEFAULT 'open',
+  resolution VARCHAR(30),
+  resolved_by UUID,
+  resolved_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_disputes_status ON task_disputes(status);
+CREATE INDEX IF NOT EXISTS idx_task_disputes_task ON task_disputes(task_id);
+
+-- 010: 执行方保证金
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS stake_amount DECIMAL(16, 2) DEFAULT 0;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS stake_status VARCHAR(20) DEFAULT 'none';
+ALTER TABLE billing_accounts ADD COLUMN IF NOT EXISTS escrow_balance DECIMAL(16, 2) NOT NULL DEFAULT 0;
+ALTER TABLE billing_accounts ADD COLUMN IF NOT EXISTS stake_balance DECIMAL(16, 2) NOT NULL DEFAULT 0;
+
+-- 011: sandbox 赠送额度（不可提现部分）
+ALTER TABLE billing_accounts ADD COLUMN IF NOT EXISTS sandbox_balance DECIMAL(16, 2) NOT NULL DEFAULT 0;

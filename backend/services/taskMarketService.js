@@ -28,13 +28,13 @@ export async function computeMatchScore(agent, task) {
   
   // 1) 技能匹配 (0-40 分)
   let skillScore = 0;
+  const agentSkills = agent.skills || [];
   if (task.required_skills && task.required_skills.length > 0) {
-    const agentSkills = agent.skills || [];
     const matchedSkills = task.required_skills.filter(s => agentSkills.includes(s));
     skillScore = (matchedSkills.length / task.required_skills.length) * 40;
     breakdown.skills = { matched: matchedSkills.length, total: task.required_skills.length, score: skillScore };
   } else {
-    skillScore = task.skill_id && agentSkills?.includes(task.skill_id) ? 40 : 20;
+    skillScore = task.skill_id && agentSkills.includes(task.skill_id) ? 40 : 20;
     breakdown.skills = { score: skillScore };
   }
   
