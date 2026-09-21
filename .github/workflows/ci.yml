@@ -67,6 +67,9 @@ jobs:
           echo "server failed to become healthy"; exit 1
       - name: Integration tests
         run: cd backend && npm run test:integration -- --runInBand --no-watchman
+      # SDK 有独立依赖（ws）：CI 此前只装 backend 依赖，sdk/index.js 解析不到 ws
+      - name: Install SDK deps
+        run: cd sdk && npm ci
       - name: SDK integration tests (live server)
         run: cd backend && XCLAW_BASE_URL=http://localhost:8081 node ../sdk/test-integration.mjs
       - name: Dependency audit (fail on high+)
