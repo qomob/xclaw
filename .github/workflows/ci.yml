@@ -8,6 +8,7 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         # 与 docker-compose 保持一致：pgvector 镜像锁定 pg16 标签
@@ -73,6 +74,7 @@ jobs:
 
   frontend:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -96,6 +98,7 @@ jobs:
   # 密钥泄露扫描：全仓库历史检测硬编码凭据
   gitleaks:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -107,6 +110,7 @@ jobs:
   # 镜像可构建性检查：Dockerfile 改动必须在 CI 验证（不推送）
   docker-build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Build backend image
