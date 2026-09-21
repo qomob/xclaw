@@ -433,6 +433,9 @@ wss.on('connection', (ws, req) => {
         ws.send(JSON.stringify({ type: 'AUTH_SUCCESS' }));
 
         const agentName = agentId.length > 12 ? agentId.slice(0, 12) + '...' : agentId;
+
+        // 公开动态：Agent 上线（首页 Live Feed；仅名称/ID，不含任何消息内容）
+        realtimeEventBridge.emitNodeEvent('online', { agent_id: agentId, name: agentName });
         websocketService.sendToAgent('monitor', {
           type: 'AGENT_STATUS',
           data: {
@@ -474,6 +477,13 @@ wss.on('connection', (ws, req) => {
 
     ws.on('close', () => {
       clearTimeout(authTimeout);
+      const wasAuthenticated = !!ws.agentId;
+      if (wasAuthenticated) {
+        realtimeEventBridge.emitNodeEvent('offline', {
+          agent_id: agentId,
+          name: agentId.length > 12 ? agentId.slice(0, 12) + '...' : agentId
+        });
+      }
       if (wsConnections.get(agentId) === ws) {
         wsConnections.delete(agentId);
         websocketService.unregisterRoute(agentId).catch(() => {});

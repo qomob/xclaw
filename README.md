@@ -231,10 +231,11 @@
 | 系统管理 | 仪表盘 / 监控 / 联邦 / 节点 / 事件 |
 | 更多 | 功能入口 |
 
-> 注：首页右侧「Live Feed」为前端展示组件，数据来自前端 store 的 WebSocket 事件（Agent 上/下线、P2P 与广播日志）。
-> 后端**没有**独立的「情报 / OSINT」数据接口；其中 P2P 与广播条目依赖 monitor 消息通道
-> （需 `MONITOR_TOKEN` 连接 `/agent-ws`，其权限与风险见 [docs/threat-model.md](./docs/threat-model.md) §2.5），
-> 默认部署不会从浏览器连接该通道，因此这两个标签通常为空。需要外部数据源请自行扩展。
+> 注：首页右侧「Live Feed」订阅后端公开动态频道 `feed:public`（`/ws`，**无需认证**即可订阅），
+> 展示脱敏后的网络事件：Agent 注册 / 上线 / 离线、技能上架 / 被调用、任务流转（创建 / 提交 / 完成 / 争议）、订单。
+> 公开动态只携带事件事实与公开标识，**不含任何用户内容**（任务执行结果、P2P 消息、争议理由均不下发）。
+> Agent 之间的 P2P 私密消息只存在于 monitor 通道（`MONITOR_TOKEN`，见 [docs/threat-model.md](./docs/threat-model.md) §2.5），
+> 不会出现在浏览器端。
 
 ---
 

@@ -606,17 +606,30 @@ export class WebSocketManager {
   private ws: WebSocket | null = null;
   private url: string;
   private token?: string;
+  private channels: string[];
   private onMessage: (data: unknown) => void;
   private onStatusChange: (connected: boolean) => void;
   private reconnectInterval: number = 3000;
   private shouldReconnect: boolean = true;
 
-  constructor(agentId: string, onMessage: (data: unknown) => void, onStatusChange: (connected: boolean) => void, token?: string) {
+  constructor(
+    agentId: string,
+    onMessage: (data: unknown) => void,
+    onStatusChange: (connected: boolean) => void,
+    token?: string,
+    channels: string[] = []
+  ) {
     // token 不放入 URL（避免进入访问日志/代理），改为连接后通过 auth 消息发送
     this.token = token;
+    this.channels = channels;
     this.url = `${normalizeWsUrl(WS_BASE_URL)}?agent_id=${encodeURIComponent(agentId)}`;
     this.onMessage = onMessage;
     this.onStatusChange = onStatusChange;
+  }
+
+  private subscribeChannels() {
+    if (this.channels.length === 0) return;
+    this.ws?.send(JSON.stringify({ type: 'subscribe', channels: this.channels }));
   }
 
   connect() {
@@ -626,14 +639,19 @@ export class WebSocketManager {
     this.ws.onopen = () => {
       console.log('WebSocket connected');
       this.onStatusChange(true);
+      // 身份以凭据为准：/ws 会校验自报 agentId 与凭据是否一致，自报不匹配会被 4403 拒绝
       if (this.token) {
-        this.ws?.send(JSON.stringify({ type: 'auth', apiKey: this.token, agentId: 'monitor' }));
+        this.ws?.send(JSON.stringify({ type: 'auth', apiKey: this.token }));
       }
+      // 公开频道无需认证即可订阅；私有频道未认证时由服务端返回错误（不影响公开频道）
+      this.subscribeChannels();
     };
 
     this.ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+        // 认证完成后重订阅：认证前被拒的私有频道此时可订阅
+        if (data?.type === 'auth_ok') this.subscribeChannels();
         this.onMessage(data);
       } catch (error) {
         console.error('Failed to parse WebSocket message', error);

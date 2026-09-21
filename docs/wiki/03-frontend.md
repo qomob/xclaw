@@ -93,7 +93,7 @@ frontend/
 
 ### hooks/useWebSocket.ts
 
-订阅 `/ws`（`RealtimePushService`），接收 `INIT_TOPOLOGY`、`AGENT_STATUS`、`LOG_MESSAGE`、`TASK_EVENT`、`ALERT`、`METRICS` 等消息，写入 `useWebSocketStore` 与 `useXClawStore`。
+订阅 `/ws`（`RealtimePushService`）的频道：`system:heartbeat` / `nodes:events` / `tasks:events` / `alerts:events` / `monitor:metrics`（需认证）与 `feed:public`（公开，无需认证，首页 Live Feed 的数据源）。消息写入 `useWebSocketStore` 与 `useXClawStore`。
 
 ### components/RealtimeProvider.tsx
 

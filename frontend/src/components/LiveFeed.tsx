@@ -31,36 +31,42 @@ function FeedRow({ item, label, icon, tone }: {
   );
 }
 
-type FeedTab = 'all' | 'p2p';
-
 /**
- * 实时动态模块：Agent 加入/离开、全网广播、P2P 消息；
- * 登录后可直接从网页向全网广播。
+ * 实时动态模块：订阅 /ws 的 feed:public 频道，展示脱敏后的公开网络动态
+ * （Agent 注册/上下线、技能上架/被调用、任务流转、订单），登录后可直接向全网广播。
+ *
+ * 说明：不展示 P2P 消息内容——那是 Agent 之间的私密通信，只允许在 monitor 通道
+ * （需 MONITOR_TOKEN）下用于运维观测，不会下发到浏览器。
  */
 export default function LiveFeed() {
   const { t } = useI18n();
   const feed = useXClawStore(s => s.feed);
   const isConnected = useXClawStore(s => s.isConnected);
-  const [tab, setTab] = useState<FeedTab>('all');
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [sendMsg, setSendMsg] = useState('');
 
   const authed = !!getToken();
 
-  const rows = useMemo(() => {
-    const list = tab === 'p2p' ? feed.filter(f => f.kind === 'p2p') : feed;
-    return list.slice(0, 60);
-  }, [feed, tab]);
+  const rows = useMemo(() => feed.slice(0, 60), [feed]);
 
   const handleSend = async () => {
     if (!draft.trim() || sending) return;
     setSending(true);
     setSendMsg('');
     try {
-      const res = await sendBroadcast(draft.trim());
+      const content = draft.trim();
+      const res = await sendBroadcast(content);
       setSendMsg(res?.success ? t('lfSent') : t('lfSendFail'));
-      if (res?.success) setDraft('');
+      if (res?.success) {
+        setDraft('');
+        // 本地回显：广播是即时的，不必等下一次事件回流
+        useXClawStore.getState().addFeed({
+          kind: 'broadcast',
+          content,
+          time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        });
+      }
     } catch {
       setSendMsg(t('lfSendFail'));
     } finally {
@@ -84,20 +90,6 @@ export default function LiveFeed() {
               {isConnected ? t('connected').toUpperCase() : t('connecting').toUpperCase()}
             </span>
           </span>
-        </div>
-
-        <div className="flex items-center gap-1">
-          {(['all', 'p2p'] as FeedTab[]).map(k => (
-            <button
-              key={k}
-              onClick={() => setTab(k)}
-              className={`px-2 py-0.5 text-[12px] font-medium rounded-md transition-colors ${
-                tab === k ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-400 hover:text-cyan-400'
-              }`}
-            >
-              {k === 'all' ? t('lfTabAll') : t('lfTabP2P')}
-            </button>
-          ))}
         </div>
 
         {authed && (
@@ -148,8 +140,56 @@ export default function LiveFeed() {
                   key={item.id}
                   item={item}
                   icon={item.sub === 'left' ? '🚪' : '🤖'}
-                  label={item.sub === 'left' ? t('feedAgentLeft') : t('feedAgentJoined')}
+                  label={
+                    item.sub === 'left'
+                      ? t('feedAgentLeft')
+                      : item.sub === 'registered'
+                        ? t('feedAgentRegistered')
+                        : t('feedAgentJoined')
+                  }
                   tone={item.sub === 'left' ? 'text-slate-400' : 'text-green-400'}
+                />
+              );
+            }
+            if (item.kind === 'skill') {
+              const subLabel = item.sub === 'called' ? t('feedSubCalled') : t('feedSubListed');
+              return (
+                <FeedRow
+                  key={item.id}
+                  item={item}
+                  icon="🧩"
+                  label={`${t('feedSkill')} · ${subLabel}`}
+                  tone="text-violet-400"
+                />
+              );
+            }
+            if (item.kind === 'task') {
+              const subMap: Record<string, string> = {
+                created: t('feedSubCreated'),
+                submitted: t('feedSubSubmitted'),
+                completed: t('feedSubCompleted'),
+                disputed: t('feedSubDisputed'),
+              };
+              const subLabel = (item.sub && subMap[item.sub]) || item.sub || '';
+              return (
+                <FeedRow
+                  key={item.id}
+                  item={item}
+                  icon="📋"
+                  label={`${t('feedTask')} · ${subLabel}`}
+                  tone="text-cyan-400"
+                />
+              );
+            }
+            if (item.kind === 'order') {
+              const subLabel = item.sub === 'completed' ? t('feedSubCompleted') : t('feedSubCreated');
+              return (
+                <FeedRow
+                  key={item.id}
+                  item={item}
+                  icon="🛒"
+                  label={`${t('feedOrder')} · ${subLabel}`}
+                  tone="text-emerald-400"
                 />
               );
             }
@@ -161,17 +201,6 @@ export default function LiveFeed() {
                   icon="📢"
                   label={t('feedBroadcast')}
                   tone="text-amber-400"
-                />
-              );
-            }
-            if (item.kind === 'p2p') {
-              return (
-                <FeedRow
-                  key={item.id}
-                  item={item}
-                  icon="↔"
-                  label={t('feedP2P')}
-                  tone="text-cyan-400"
                 />
               );
             }

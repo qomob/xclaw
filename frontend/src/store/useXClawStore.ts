@@ -20,10 +20,11 @@ export interface Alert {
 // 实时动态流条目（新 Agent 加入/离开、全网广播、P2P 消息）
 export interface FeedItem {
   id: string;
-  kind: 'agent' | 'broadcast' | 'p2p' | 'system';
-  /** agent: 名称；broadcast/p2p: 发送方短 ID */
+  /** agent/skill/task/order 为公开动态（/ws feed:public）；broadcast 为登录用户广播回显 */
+  kind: 'agent' | 'broadcast' | 'p2p' | 'system' | 'skill' | 'task' | 'order';
+  /** agent: 名称 / skill: 技能名 / task·order: 参与方短 ID */
   who?: string;
-  /** agent: joined | left */
+  /** agent: registered|joined|left；skill: listed|called；task: created|submitted|completed|disputed；order: created|completed */
   sub?: string;
   content?: string;
   time: string;
@@ -352,6 +353,28 @@ export const useXClawStore = create<XClawState>((set, get) => {
               const { type, data, logType } = msg;
 
               switch (type) {
+                // 公开网络动态（/ws feed:public 频道，后端脱敏后推送）
+                case 'feed:public': {
+                  const ev = data as {
+                    kind?: 'agent' | 'skill' | 'task' | 'order';
+                    sub?: string;
+                    who?: string | null;
+                    content?: string | null;
+                  };
+                  if (!ev?.kind) break;
+                  const t = new Date().toLocaleTimeString('en-US', {
+                    hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'
+                  });
+                  get().addFeed({
+                    kind: ev.kind,
+                    sub: ev.sub,
+                    who: ev.who || undefined,
+                    content: ev.content || undefined,
+                    time: t,
+                  });
+                  break;
+                }
+
                 case 'INIT_TOPOLOGY':
                   // 初始拓扑数据
                   if (data.nodes) {
@@ -487,7 +510,9 @@ export const useXClawStore = create<XClawState>((set, get) => {
               }
             },
             (connected) => set({ isConnected: connected }),
-            getToken() || undefined
+            getToken() || undefined,
+            // 公开动态频道：匿名访客也可订阅（内容与公开 REST 接口等价）
+            ['feed:public']
           );
           wsManager.connect();
         }

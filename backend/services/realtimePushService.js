@@ -10,6 +10,16 @@ const RATE_LIMIT_MSGS = parseInt(process.env.WS_MSG_RATE_LIMIT || '60', 10);
 const RATE_LIMIT_WINDOW_MS = parseInt(process.env.WS_MSG_RATE_WINDOW_MS || '10000', 10);
 const BROADCAST_CHANNEL = 'xclaw:ws:broadcast';
 
+// 公开频道：无需认证即可订阅（内容与公开 REST 接口等价，不含私密消息内容）。
+// 首页 Live Feed 依赖它向匿名访客展示网络动态；其余频道仍需认证。
+const PUBLIC_CHANNELS = new Set([
+  'system:heartbeat',
+  'nodes:events',
+  'tasks:events',
+  'alerts:events',
+  'feed:public',
+]);
+
 /**
  * RealtimePushService — 实时推送 WebSocket 服务
  * 路径: /ws (区别于现有的 agent WebSocket 无特定路径)
@@ -162,17 +172,27 @@ class RealtimePushService {
         this._authenticate(client, msg);
         break;
 
-      case 'subscribe':
-        if (!client.authenticated) {
-          this._send(client.ws, { type: 'error', message: 'Authentication required before subscribing' });
-          break;
+      case 'subscribe': {
+        if (!Array.isArray(msg.channels)) break;
+        // 公开频道对未认证客户端开放（与公开 REST 接口同等的可见性）；
+        // 私有频道（如 a2a:messages / monitor:metrics）仍要求先认证
+        const allowed = msg.channels.filter((ch) => client.authenticated || PUBLIC_CHANNELS.has(ch));
+        const denied = msg.channels.filter((ch) => !allowed.includes(ch));
+        allowed.forEach((ch) => client.subscriptions.add(ch));
+        if (allowed.length > 0) {
+          this._send(client.ws, { type: 'subscribed', channels: allowed, ...(denied.length ? { denied } : {}) });
+          logger.debug(`[RealtimePush] client ${clientId} subscribed to: ${allowed.join(', ')}`);
         }
-        if (Array.isArray(msg.channels)) {
-          msg.channels.forEach((ch) => client.subscriptions.add(ch));
-          this._send(client.ws, { type: 'subscribed', channels: msg.channels });
-          logger.debug(`[RealtimePush] client ${clientId} subscribed to: ${msg.channels.join(', ')}`);
+        if (denied.length > 0) {
+          this._send(client.ws, {
+            type: 'error',
+            message: allowed.length > 0
+              ? `Authentication required before subscribing to: ${denied.join(', ')}`
+              : 'Authentication required before subscribing',
+          });
         }
         break;
+      }
 
       case 'unsubscribe':
         if (Array.isArray(msg.channels)) {

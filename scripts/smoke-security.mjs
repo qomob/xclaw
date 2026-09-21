@@ -262,6 +262,15 @@ function openAgentSocket(agentId) {
   });
 }
 
+/** /ws 实时推送通道（首页 Live Feed 的数据源） */
+function openRealtimeSocket() {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(`${WS_BASE}/ws`);
+    ws.on('open', () => resolve(ws));
+    ws.on('error', reject);
+  });
+}
+
 function authSocket(ws, agent, keys) {
   return new Promise((resolve) => {
     const timestamp = Date.now().toString();
@@ -352,6 +361,56 @@ async function testBroadcastDelivery(a, b) {
   wsB.close();
 }
 
+// ── 10. 公开动态频道（首页 Live Feed 数据源） ──────────────
+async function testPublicFeed(agent) {
+  console.log('\n[10] 公开动态（feed:public）');
+  const frames = [];
+  const viewer = await openRealtimeSocket();
+  viewer.on('message', (raw) => {
+    try { frames.push(JSON.parse(raw.toString())); } catch { /* ignore */ }
+  });
+  viewer.send(JSON.stringify({ type: 'subscribe', channels: ['feed:public', 'a2a:messages', 'monitor:metrics'] }));
+  await new Promise(r => setTimeout(r, 1200));
+
+  const sub = frames.find(m => m.type === 'subscribed');
+  check('未认证可订阅公开频道 feed:public', !!sub?.channels?.includes('feed:public'),
+    JSON.stringify(sub));
+  check('私有频道对未认证客户端被拒绝',
+    !!sub?.denied?.includes('a2a:messages') && !!sub?.denied?.includes('monitor:metrics'),
+    JSON.stringify(sub?.denied));
+  check('服务端明确回报需要认证',
+    frames.some(m => m.type === 'error' && /Authentication required/.test(m.message || '')),
+    JSON.stringify(frames.filter(m => m.type === 'error')));
+
+  // 触发事件：新注册 Agent 应产生「注册」动态，连接 agent WS 应产生「上线」动态
+  frames.length = 0;
+  const freshKeys = generateKeyPair();
+  const freshPayload = { agent_name: `feed-smoke-${Date.now()}`, capabilities: 'feed-smoke', public_key: freshKeys.publicKey };
+  const regTs = Date.now().toString();
+  const regSig = crypto.sign(null, Buffer.from(`${regTs}:${JSON.stringify(freshPayload)}`), freshKeys.privateKey).toString('base64');
+  const regRes = await fetch(`${BASE}/v1/agents/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-agent-signature': regSig, 'x-agent-timestamp': regTs },
+    body: JSON.stringify(freshPayload),
+  });
+  const fresh = (await regRes.json()).data;
+  const freshWs = await openAgentSocket(fresh.agent_id);
+  const authTs = Date.now().toString();
+  const authSig = crypto.sign(null, Buffer.from(JSON.stringify({ agent_id: fresh.agent_id, timestamp: authTs })), freshKeys.privateKey).toString('base64');
+  freshWs.send(JSON.stringify({ type: 'AUTH', agent_id: fresh.agent_id, timestamp: authTs, signature: authSig }));
+  await new Promise(r => setTimeout(r, 2000));
+
+  const items = frames.filter(m => m.type === 'feed:public').map(m => m.data);
+  check('收到 Agent 注册公开动态', items.some(i => i.kind === 'agent' && i.sub === 'registered'),
+    JSON.stringify(items).slice(0, 200));
+  const leaked = items.some(i => i.content || i.payload || i.result || i.reason);
+  check('公开动态不含用户内容（content/payload/result/reason）', !leaked,
+    JSON.stringify(items).slice(0, 200));
+
+  freshWs.close();
+  viewer.close();
+}
+
 async function main() {
   console.log(`XClaw 安全回归冒烟 → ${BASE}`);
   const a = await createAgent(`smoke-a-${Date.now()}`);
@@ -365,6 +424,7 @@ async function main() {
   await testSandboxNotWithdrawable(b);
   await testWsKick(a);
   await testBroadcastDelivery(a, b);
+  await testPublicFeed(a);
   await testReconciliation();
 
   console.log(`\n结果: ${pass} 通过, ${fail} 失败`);
