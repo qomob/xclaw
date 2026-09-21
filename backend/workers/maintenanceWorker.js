@@ -5,6 +5,7 @@ import { ensureReputationTables, batchUpdateReputations } from '../services/repu
 import { decayRelationships } from '../services/relationshipService.js';
 import { applyTrustDecay } from '../services/socialGraphService.js';
 import { processVerificationDeadlines } from '../services/taskMarketService.js';
+import { runReconciliation } from '../services/reconciliationService.js';
 import logger from '../services/loggerService.js';
 
 const INSTANCE_ID = process.env.INSTANCE_ID || 'maintenance';
@@ -16,6 +17,7 @@ const INTERVALS = {
   decay: parseInt(process.env.MAINT_DECAY_INTERVAL || '3600000', 10),           // 60min
   cleanup: parseInt(process.env.MAINT_CLEANUP_INTERVAL || '86400000', 10),      // 24h
   verification: parseInt(process.env.VERIFICATION_PROCESS_INTERVAL || '60000', 10), // 1min
+  reconcile: parseInt(process.env.MAINT_RECONCILE_INTERVAL || '3600000', 10),   // 60min: 账本对账
 };
 
 async function acquireLock(task) {
@@ -68,6 +70,16 @@ async function runVerification() {
   }
 }
 
+async function runReconcile() {
+  const report = await runReconciliation();
+  if (!report.ok || report.issues.length > 0) {
+    logger.warn('[Maintenance] Reconciliation issues found', {
+      ok: report.ok,
+      issues: report.issues.map(i => ({ type: i.type, severity: i.severity, message: i.message })),
+    });
+  }
+}
+
 async function runCleanup() {
   const pool = getPostgres();
   const cleanup = async (sql, label) => {
@@ -117,11 +129,13 @@ async function main() {
   await runWithLock('decay', runDecay);
   await runWithLock('cleanup', runCleanup);
   await runWithLock('verification', runVerification);
+  await runWithLock('reconcile', runReconcile);
 
   setInterval(() => runWithLock('reputation', runReputation), INTERVALS.reputation);
   setInterval(() => runWithLock('decay', runDecay), INTERVALS.decay);
   setInterval(() => runWithLock('cleanup', runCleanup), INTERVALS.cleanup);
   setInterval(() => runWithLock('verification', runVerification), INTERVALS.verification);
+  setInterval(() => runWithLock('reconcile', runReconcile), INTERVALS.reconcile);
 }
 
 async function shutdown() {

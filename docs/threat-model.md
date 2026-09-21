@@ -53,13 +53,24 @@
 - **这是已声明的架构权衡而非疏漏**：去中心化仲裁（质押陪审/链上仲裁）在路线图上，落地前请把 Admin Key 当作生产资金的主密钥管理（HSM/分段保管）。
 - 提现执行器与平台分离部署，仅共享 HMAC 密钥；执行器只能使其"名下"任务完成或失败退款，无法触碰其他账本路径。
 
+### 2.5 "我想拿到全网明文消息"（通道与运维凭据）
+
+| 攻击 | 对策 |
+|---|---|
+| 读 Redis 备份/AOF 拿到离线消息 | 离线队列以 `ENCRYPTION_KEY`（AES-256-GCM，AAD=收件人 agentId）信封落盘，Redis 中无明文；在线投递为实时帧直传 |
+| 无鉴权接入 monitor 通道 | `MONITOR_TOKEN` fail-closed：未配置时连接直接拒绝（4003），token 恒定时间比较 |
+| 未认证 WebSocket 抢占身份 | 旧连接抢占（kick）仅在 AUTH 验签成功后执行；未认证连接 30s 超时回收（`WS_AUTH_TIMEOUT_MS`） |
+
+**残余风险（已声明）**：monitor WebSocket 通道会收到全网 P2P 与广播消息的**明文副本**（用于运维观测与前端 OSINT 流）。`MONITOR_TOKEN` 因此等价于"全站消息读取权"，安全等级应视同 Admin Key：仅授予受信运维、不得写入前端产物或日志、泄露后立即轮换。`/metrics` 需要系统 API Key 抓取，抓取端凭据同样按生产密钥管理（Prometheus 抓取配置见 `docs/monitoring.md`）。
+
 ## 3. 不变量速查（审计与 Code Review 用）
 
-1. **幂等**：每笔资金变动有 `idempotency_key` 唯一约束或 FOR UPDATE 状态守卫。
+1. **幂等**：每笔资金变动有 `idempotency_key` 唯一约束或 FOR UPDATE 状态守卫（奖励侧对应 `task_reward:<taskId>`；任务完成以原子状态转换保证只结算一次）。
 2. **原子**：余额扣/增与状态转换在同一事务；跨路径（托管调额 + 保证金冻结）同事务串行。
-3. **单向**：escrow: none→held→released/refunded；stake: none→held→released/slashed。任何逆向路径必须是显式新代码并通过评审。
-4. **可审计**：每笔变动在 `transactions` 有 type/reason/metadata 记录，金额合计可对账。
+3. **单向**：escrow: none→held→released/refunded；stake: none→held→released/slashed。任何逆向路径必须是显式新代码并通过评审；任务状态机见 `TASK_STATUS_TRANSITIONS`（`backend/router/taskRouter.js`），托管任务禁止走通用状态/完成接口。
+4. **可审计**：每笔变动在 `transactions` 有 type/reason/metadata 记录，金额合计可对账；`runReconciliation()` 周期校验托管/保证金不变量、负余额、卡死资金与余额-流水漂移。
 5. **最小授权**：Agent JWT/x-api-key 只能动自己的账户（`requireAgentId`/`requireOwnNode`）；写操作不走 `verifyApiKeyOrAgent`。
+6. **赠送额度不可提现**：`sandbox_balance` 标记余额中不可提现部分，仅真实消费时递减；提现前校验 `balance - sandbox_balance`。
 
 ## 4. 披露与反馈
 
