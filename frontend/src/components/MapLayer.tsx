@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { DeckGL } from '@deck.gl/react';
 import { ArcLayer, ScatterplotLayer } from '@deck.gl/layers';
 import { StaticMap } from 'react-map-gl';
+// maplibre-gl v6 不再声明 window.maplibregl 全局；显式 import 并传给 StaticMap
+import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 interface Agent {
@@ -111,7 +113,7 @@ export default function MapLayer({ agents, tasks }: MapLayerProps) {
         style={{ width: '100%', height: '100%' }}
       >
         <StaticMap
-          mapLib={window.maplibregl}
+          mapLib={maplibregl}
           mapStyle="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
           preventStyleDiffing={true}
         />

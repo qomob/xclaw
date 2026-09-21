@@ -4,6 +4,7 @@ import RealtimeProvider from './components/RealtimeProvider';
 import { useThemeStore } from './store/useThemeStore';
 import { getToken } from './utils/api';
 import AppShell from './components/layout/AppShell';
+import ErrorBoundary from './components/ErrorBoundary';
 import NetworkOverview from './pages/NetworkOverview';
 import 'tailwindcss/tailwind.css';
 
@@ -72,16 +73,16 @@ function App() {
         <BrowserRouter>
           <Routes>
             <Route element={<AppShell />}>
-              <Route path="/" element={<NetworkOverview />} />
-              <Route path="/agents" element={<ProtectedRoute><LazyPage><AgentCenter /></LazyPage></ProtectedRoute>} />
-              <Route path="/skills" element={<ProtectedRoute><LazyPage><SkillMarket /></LazyPage></ProtectedRoute>} />
-              <Route path="/tasks" element={<ProtectedRoute><LazyPage><TaskCenter /></LazyPage></ProtectedRoute>} />
-              <Route path="/finance" element={<ProtectedRoute><LazyPage><FinanceCenter /></LazyPage></ProtectedRoute>} />
-              <Route path="/social" element={<ProtectedRoute><LazyPage><SocialGraphPage /></LazyPage></ProtectedRoute>} />
-              <Route path="/protocols" element={<ProtectedRoute><LazyPage><ProtocolsPage /></LazyPage></ProtectedRoute>} />
-              <Route path="/security" element={<ProtectedRoute><LazyPage><SecurityPage /></LazyPage></ProtectedRoute>} />
-              <Route path="/admin" element={<ProtectedRoute><LazyPage><AdminPage /></LazyPage></ProtectedRoute>} />
-              <Route path="/more" element={<ProtectedRoute><LazyPage><MorePage /></LazyPage></ProtectedRoute>} />
+              <Route path="/" element={<ErrorBoundary><NetworkOverview /></ErrorBoundary>} />
+              <Route path="/agents" element={<ProtectedRoute><ErrorBoundary><LazyPage><AgentCenter /></LazyPage></ErrorBoundary></ProtectedRoute>} />
+              <Route path="/skills" element={<ProtectedRoute><ErrorBoundary><LazyPage><SkillMarket /></LazyPage></ErrorBoundary></ProtectedRoute>} />
+              <Route path="/tasks" element={<ProtectedRoute><ErrorBoundary><LazyPage><TaskCenter /></LazyPage></ErrorBoundary></ProtectedRoute>} />
+              <Route path="/finance" element={<ProtectedRoute><ErrorBoundary><LazyPage><FinanceCenter /></LazyPage></ErrorBoundary></ProtectedRoute>} />
+              <Route path="/social" element={<ProtectedRoute><ErrorBoundary><LazyPage><SocialGraphPage /></LazyPage></ErrorBoundary></ProtectedRoute>} />
+              <Route path="/protocols" element={<ProtectedRoute><ErrorBoundary><LazyPage><ProtocolsPage /></LazyPage></ErrorBoundary></ProtectedRoute>} />
+              <Route path="/security" element={<ProtectedRoute><ErrorBoundary><LazyPage><SecurityPage /></LazyPage></ErrorBoundary></ProtectedRoute>} />
+              <Route path="/admin" element={<ProtectedRoute><ErrorBoundary><LazyPage><AdminPage /></LazyPage></ErrorBoundary></ProtectedRoute>} />
+              <Route path="/more" element={<ProtectedRoute><ErrorBoundary><LazyPage><MorePage /></LazyPage></ErrorBoundary></ProtectedRoute>} />
             </Route>
           </Routes>
         </BrowserRouter>
