@@ -13,6 +13,9 @@
  *         仅在加载压缩纹理（.ktx/.basis 等 3D 资产）时触达；本应用只用 deck.gl 做地图/
  *         星系可视化，不加载纹理资产。上游尚未发布修复版本（通告范围 `*`），
  *         已通过 overrides 锁定 1.2.1（当前最新 1.x），待上游修复后移除豁免。
+ *   - GHSA-vfj7-8cjw-p6xm  braces 深层嵌套模式栈耗尽 DoS
+ *   背景：braces 由 tailwindcss → chokidar/micromatch 传递引入，仅存在于构建期
+ *         工具链，不会进入浏览器产物。3.0.3 已是最新版本，上游无修复版本可升。
  */
 
 import { execFileSync } from 'node:child_process';
@@ -24,6 +27,7 @@ const frontendDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 const ACCEPTED_ADVISORIES = new Set([
   'GHSA-w3rx-r6r6-pgpr',
   'GHSA-5p2g-fcmc-qvqq',
+  'GHSA-vfj7-8cjw-p6xm',
 ]);
 
 let raw;
