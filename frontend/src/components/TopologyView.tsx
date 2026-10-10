@@ -1,10 +1,8 @@
-import { useState, useMemo, useCallback } from 'react';
-import { DeckGL } from '@deck.gl/react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { ArcLayer, ScatterplotLayer } from '@deck.gl/layers';
-import { FlyToInterpolator } from '@deck.gl/core';
-import { Map as StaticMap } from '@vis.gl/react-maplibre';
 import { useXClawStore } from '../store/useXClawStore';
-import type { PickingInfo, MapViewState } from '@deck.gl/core';
+import type { PickingInfo } from '@deck.gl/core';
+import { useMaplibreDeck } from '../hooks/useMaplibreDeck';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { fetchGlobalStats } from '../utils/api';
 
@@ -65,13 +63,6 @@ export default function TopologyView() {
   const [activeTab, setActiveTab] = useState('WORLD');
   const [flyTo, setFlyTo] = useState<FlyToTarget | null>(null);
   const [hoveredTask, setHoveredTask] = useState<TaskArcData | null>(null);
-  const [userViewState, setUserViewState] = useState<MapViewState>({
-    longitude: 0,
-    latitude: 20,
-    zoom: 1.5,
-    pitch: 45,
-    bearing: 0,
-  });
 
   const agents = useXClawStore(state => state.agents);
   const tasks = useXClawStore(state => state.tasks);
@@ -80,18 +71,6 @@ export default function TopologyView() {
     setActiveTab(tab);
     setFlyTo(CONTINENTS[tab]);
   }, []);
-
-  const viewState = useMemo<MapViewState>(() => {
-    if (!flyTo) return userViewState;
-    return {
-      ...userViewState,
-      longitude: flyTo.longitude,
-      latitude: flyTo.latitude,
-      zoom: flyTo.zoom,
-      transitionDuration: 1500,
-      transitionInterpolator: new FlyToInterpolator(),
-    };
-  }, [flyTo, userViewState]);
 
   const agentMap = useMemo(() => {
     const map = new Map<string, { name: string; lng: number; lat: number; group: number; online: boolean }>();
@@ -184,6 +163,28 @@ export default function TopologyView() {
     globalOnline: globalStats?.agents?.online_agents ?? 0,
   }), [taskArcs, agents, globalStats]);
 
+  const getTooltip = useCallback((info: PickingInfo) => {
+    const obj = info.object as unknown as TaskArcData;
+    if (!obj) return null;
+    return {
+      html: `<div class="p-2 bg-slate-900 border border-cyan-500 text-cyan-400 text-xs font-mono rounded"><div class="font-bold text-cyan-300 mb-1">ROUTE</div><div>${obj.sourceName} → ${obj.targetName}</div></div>`
+    };
+  }, []);
+
+  const { containerRef, mapRef } = useMaplibreDeck({
+    center: [0, 20],
+    zoom: 1.5,
+    pitch: 45,
+    layers,
+    getTooltip,
+  });
+
+  useEffect(() => {
+    if (!flyTo) return;
+    mapRef.current?.flyTo({ center: [flyTo.longitude, flyTo.latitude], zoom: flyTo.zoom, duration: 1500 });
+    setFlyTo(null);
+  }, [flyTo, mapRef]);
+
   return (
     <div className="w-full h-full relative bg-[#0B0F19]">
       {agents.length === 0 && (
@@ -214,33 +215,7 @@ export default function TopologyView() {
         </div>
       </div>
 
-      <DeckGL
-        viewState={viewState}
-        controller={true}
-        onViewStateChange={({ viewState: vs }) => {
-          const v = vs as MapViewState;
-          setUserViewState({
-            longitude: v.longitude,
-            latitude: v.latitude,
-            zoom: v.zoom,
-            pitch: v.pitch,
-            bearing: v.bearing,
-          });
-          if (flyTo) setFlyTo(null);
-        }}
-        layers={layers}
-        style={{ width: '100%', height: '100%' }}
-        useDevicePixels={false}
-        getTooltip={(info: PickingInfo) => {
-          const obj = info.object as unknown as TaskArcData;
-          if (!obj) return null;
-          return {
-            html: `<div class="p-2 bg-slate-900 border border-cyan-500 text-cyan-400 text-xs font-mono rounded"><div class="font-bold text-cyan-300 mb-1">ROUTE</div><div>${obj.sourceName} → ${obj.targetName}</div></div>`
-          };
-        }}
-      >
-        <StaticMap style={{ width: '100%', height: '100%' }} mapStyle="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json" />
-      </DeckGL>
+      <div ref={containerRef} className="w-full h-full" />
 
       <div className="absolute bottom-2 md:bottom-4 left-2 md:left-4 z-20 flex flex-col gap-1">
         <div className="bg-slate-900/80 border border-cyan-500/30 p-1.5 md:p-2 rounded text-[12px] md:text-[11px] font-mono text-cyan-300 space-y-0.5">

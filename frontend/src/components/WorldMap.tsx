@@ -1,10 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { DeckGL } from '@deck.gl/react';
 import { ScatterplotLayer, LineLayer } from '@deck.gl/layers';
-import { FlyToInterpolator } from '@deck.gl/core';
-import { Map as StaticMap } from '@vis.gl/react-maplibre';
 import { useXClawStore } from '../store/useXClawStore';
 import { fetchAgentDetail, fetchAgentSkills, fetchAgentProfile } from '../utils/api';
+import { useMaplibreDeck } from '../hooks/useMaplibreDeck';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 const cyberpunkColors = [
@@ -71,14 +69,6 @@ interface RelationshipLine {
   targetName: string;
 }
 
-interface MapViewState {
-  longitude: number;
-  latitude: number;
-  zoom: number;
-  pitch: number;
-  bearing: number;
-}
-
 interface FlyToTarget {
   longitude: number;
   latitude: number;
@@ -100,13 +90,6 @@ export default function WorldMap({ flyTo, onFlyComplete, showEvents = false }: W
   const setSelectedAgentId = useXClawStore(state => state.setSelectedAgentId);
   const [animationTime, setAnimationTime] = useState(0);
   const [debugMode, setDebugMode] = useState(false);
-  const [userViewState, setUserViewState] = useState({
-    longitude: 0,
-    latitude: 20,
-    zoom: 1.5,
-    pitch: 45,
-    bearing: 0
-  });
 
   const [selectedNode, setSelectedNode] = useState<NodeData | null>(null);
   const [detail, setDetail] = useState<AgentDetail | null>(null);
@@ -173,19 +156,6 @@ export default function WorldMap({ flyTo, onFlyComplete, showEvents = false }: W
   useEffect(() => {
     runPrecisionTests();
   }, []);
-
-  const viewState = useMemo(() => {
-    if (!flyTo) return userViewState;
-    return {
-      ...userViewState,
-      longitude: flyTo.longitude,
-      latitude: flyTo.latitude,
-      zoom: flyTo.zoom,
-      transitionDuration: 1500,
-      transitionInterpolator: new FlyToInterpolator(),
-    };
-  }, [flyTo, userViewState]);
-  
   // 动画循环：使用 requestAnimationFrame 确保平滑
   useEffect(() => {
     let requestRef: number;
@@ -316,43 +286,36 @@ export default function WorldMap({ flyTo, onFlyComplete, showEvents = false }: W
       })
     ] : [])
   ], [nodeData, debugMode, animationTime, handleNodeClick, relLines, showEvents, eventData]);
-  
+
+  const getTooltip = useCallback((info: PickingInfo) => {
+    const object = info.object as NodeData;
+    return object && {
+      html: `<div class="p-2 bg-slate-900 border border-cyan-500 text-cyan-400 text-xs font-mono">
+              <div class="font-bold border-b border-cyan-800 mb-1 pb-1">${object.name}</div>
+              <div>ID: ${object.id}</div>
+              <div>LNG: ${object.position[0].toFixed(4)}</div>
+              <div>LAT: ${object.position[1].toFixed(4)}</div>
+            </div>`
+    };
+  }, []);
+
+  const { containerRef, mapRef } = useMaplibreDeck({
+    center: [0, 20],
+    zoom: 1.5,
+    pitch: 45,
+    layers,
+    getTooltip,
+  });
+
+  useEffect(() => {
+    if (!flyTo) return;
+    mapRef.current?.flyTo({ center: [flyTo.longitude, flyTo.latitude], zoom: flyTo.zoom, duration: 1500 });
+    onFlyComplete?.();
+  }, [flyTo, onFlyComplete, mapRef]);
+
   return (
     <div className="w-full h-full relative">
-      <DeckGL
-        viewState={viewState}
-        controller={true}
-        onViewStateChange={({ viewState: vs }) => {
-          const v = vs as MapViewState;
-          setUserViewState({
-            longitude: v.longitude,
-            latitude: v.latitude,
-            zoom: v.zoom,
-            pitch: v.pitch,
-            bearing: v.bearing,
-          });
-          onFlyComplete?.();
-        }}
-        layers={layers}
-        style={{ width: '100%', height: '100%' }}
-        useDevicePixels={false}
-        getTooltip={(info: PickingInfo) => {
-          const object = info.object as NodeData;
-          return object && {
-            html: `<div class="p-2 bg-slate-900 border border-cyan-500 text-cyan-400 text-xs font-mono">
-                    <div class="font-bold border-b border-cyan-800 mb-1 pb-1">${object.name}</div>
-                    <div>ID: ${object.id}</div>
-                    <div>LNG: ${object.position[0].toFixed(4)}</div>
-                    <div>LAT: ${object.position[1].toFixed(4)}</div>
-                  </div>`
-          };
-        }}
-      >
-        <StaticMap
-          style={{ width: '100%', height: '100%' }}
-          mapStyle="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
-        />
-      </DeckGL>
+      <div ref={containerRef} className="w-full h-full" />
 
       {/* 可视化调试工具 */}
       <div className="absolute bottom-2 md:bottom-4 left-2 md:left-4 z-20 flex flex-col gap-1 md:gap-2">
